@@ -1,0 +1,8 @@
+{"ts":"2026-05-13T03:00:00-05:00","agent":"chatgpt","event":"idea","summary":"User proposed Deja Vue as a Joker MCP project-local memory layer for coding agents."}
+{"ts":"2026-05-13T03:02:00-05:00","agent":"chatgpt","event":"architecture","summary":"Defined Deja Vue as repo-native memory that writes structured traces into `.joker/`."}
+{"ts":"2026-05-13T03:04:00-05:00","agent":"chatgpt","event":"layout","summary":"Proposed `.joker/` directory with deja-vue.md, timeline.jsonl, current_state.md, decisions.md, handoff.md, agent_sessions, and diffs."}
+{"ts":"2026-05-13T03:06:00-05:00","agent":"user","event":"clarification","summary":"User clarified that Deja Vue captures relevant git changes."}
+{"ts":"2026-05-13T03:08:00-05:00","agent":"chatgpt","event":"decision","summary":"Established that Deja Vue sits on top of git and records cognitive history, while git records mechanical history."}
+{"ts":"2026-05-13T03:10:00-05:00","agent":"chatgpt","event":"mvp","summary":"Outlined CLI/MCP commands: init, start, changed, decision, handoff, context."}
+{"ts":"2026-05-13T03:12:00-05:00","agent":"user","event":"test_request","summary":"User requested a Deja Vue capture for the current conversation."}
+{"ts":"2026-05-13T03:14:00-05:00","agent":"chatgpt","event":"capture","summary":"Generated first Deja Vue memory pack from conversation context."}
