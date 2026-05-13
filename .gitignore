@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+.dejavue/fts.db
+.dejavue/*.tmp
+
+# Stray config not part of dejavue (flag to maintainer internal session)
+seahorse-server.toml
