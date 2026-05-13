@@ -84,10 +84,10 @@ ships with the repo, requires zero infrastructure, and degrades gracefully when
 tools are absent. The format is the contract — other tools (Joker MCP, Cursor,
 Aider) can read `.dejavue/` directly.
 
-For the full design rationale — including the overlap with `.jagent/`, hook
-strategy, and the rejected-alternatives principle — see
-`foreman_perspective.md` in this repo. For the build spec and migration path,
-see `v0.1_scope.md`.
+For the full design rationale — including the overlap with adjacent memory
+tools, hook strategy, and the rejected-alternatives principle — see
+`docs/04-foreman-perspective.md`. For the build spec and migration path,
+see `docs/05-v0.1-scope.md`.
 
 
 ### Layer relationships
@@ -286,7 +286,7 @@ Deja Vue is the file format and reference CLI. Joker consumes dejavue. They are
 not bundled.
 
 Analogy: `.dejavue/` is to project memory what `.git/` is to history. Multiple
-tools sit on top of the same on-disk format. See `v0.1_scope.md` §Architecture
+tools sit on top of the same on-disk format. See `docs/05-v0.1-scope.md` §Architecture
 for the full ruling.
 
 | Version | Milestone |
@@ -302,7 +302,10 @@ for the full ruling.
 v0.1 — single-file Python CLI. FTS5-only recall. Not on PyPI.
 
 Design documents in repo:
-- `context.md` — original chatgpt spec
-- `continued.md` — evolved spec (semantic, boot packet, since/recall)
-- `foreman_perspective.md` — design rationale, overlap analysis, hook strategy
-- `v0.1_scope.md` — v0.1 build spec and architecture ruling
+- `docs/01-origin.md` — original conversation that produced the spec
+- `docs/02-evolution.md` — the spec's evolution (semantic, boot packet, since/recall)
+- `docs/03-example.md` — early bash demo
+- `docs/04-foreman-perspective.md` — design rationale, overlap analysis, hook strategy
+- `docs/05-v0.1-scope.md` — v0.1 build spec and architecture ruling
+- `CHANGELOG.md` — release notes
+- `CONTRIBUTING.md` — contribution guidelines
