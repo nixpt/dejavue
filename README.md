@@ -81,8 +81,9 @@ and developers rediscover those dead ends at full cost.
 
 Deja Vue fills that gap. It writes a plain-text event log (`.dejavue/`) that
 ships with the repo, requires zero infrastructure, and degrades gracefully when
-tools are absent. The format is the contract — other tools (Joker MCP, Cursor,
-Aider) can read `.dejavue/` directly.
+tools are absent. The format is the contract — other coding-agent tools
+(Cursor, Aider, opencode, claude-cli) can read `.dejavue/` directly, and
+richer MCP servers can consume it without dejavue having to depend on them.
 
 For the full design rationale — including the overlap with adjacent memory
 tools, hook strategy, and the rejected-alternatives principle — see
@@ -93,18 +94,18 @@ see `docs/05-v0.1-scope.md`.
 ### Layer relationships
 
 ```
-dejavue          — format + reference CLI (this tool)
-  .dejavue/      — on-disk format: timeline.jsonl + markdown docs + fts.db
-  dejavue CLI    — reference implementation, zero dependencies
+dejavue            — format + reference CLI (this tool)
+  .dejavue/        — on-disk format: timeline.jsonl + markdown docs + fts.db
+  dejavue CLI      — reference implementation, zero dependencies
 
-joker-mcp        — rich consumer (separate project, v0.3)
-  reads/writes .dejavue/ via thin shim tools
-  also maintains .jagent/ (milestones, phases, learning.db — superset)
+rich MCP servers   — consume .dejavue/ via thin shim tools (v0.3 work)
+  may also maintain their own richer per-repo planning state
+  (e.g. milestone / phase / learning indexes) as a superset
 
-other agents     — Cursor, Aider, opencode, claude-cli
+other coding agents — Cursor, Aider, opencode, claude-cli
   read .dejavue/ directly — the format is the open contract
 
-git              — mechanical history (commits, diffs)
+git                — mechanical history (commits, diffs)
   dejavue adds cognitive history on top
 ```
 
@@ -234,11 +235,13 @@ accumulate. This is the entire model.
 the above. The `since` command is the lookup tool — show me what changed since
 I last touched this repo (or since a specific agent's last session).
 
-**Multiple worktrees on different branches (the squadron pattern):** each
-worktree has its own checked-out `.dejavue/`. Agents accumulate events on
-their own branch. When the branches merge back, git would normally **conflict**
-on `timeline.jsonl` because both sides added unique lines and the default text
-merger can't see that append-only semantics make union safe.
+**Multiple worktrees on different branches (worktree-per-agent dispatch):**
+the workflow where each dispatched agent gets its own git worktree on its own
+task branch, and a coordinator merges those branches back into main in waves.
+Each worktree has its own checked-out `.dejavue/`. Agents accumulate events
+on their own branch. When the branches merge back, git would normally
+**conflict** on `timeline.jsonl` because both sides added unique lines and
+the default text merger can't see that append-only semantics make union safe.
 
 `.gitattributes` with `merge=union` fixes this: git keeps unique lines from
 both sides, no conflict, all events surface after merge. Without this,
@@ -262,39 +265,43 @@ on git 2.40+). You do not need to run `dejavue init` separately in each
 worktree.
 
 **Cross-repo:** out of scope. Each repo has its own `.dejavue/`. Cross-repo
-coordination is `.squad/` and `FOREMAN_STATE.md` territory.
+coordination is the job of a workspace-wide coordination layer, not per-repo
+memory.
 
 **Agent identity:** use a stable role name on `--agent` (e.g. `claude`,
-`sonnet`, `kiro`, `foreman`), not a model version. The role is what the
-next session looks up; model versions change beneath the role.
+`sonnet`, `reviewer`, `coordinator`), not a model version. The role is what
+the next session looks up; model versions change beneath the role.
 
 
 ## What dejavue is NOT
 
 - A replacement for git.
-- A replacement for `.jagent/` (Joker workflow planning and milestones).
+- A replacement for richer per-repo planning systems that maintain milestone /
+  phase / decision-tree state. Dejavue is the lightweight episodic layer
+  underneath those, not a substitute for them.
 - A vector database or embedding store. v0.2 will add optional semantic recall
-  via `--semantic` once the joker-mcp embedder is stable.
-- An MCP server. v0.3 will add `joker.dejavue.*` MCP tools as thin wrappers.
-- Cross-repo memory. Cross-repo coordination belongs in `.squad/` and
-  `FOREMAN_STATE.md`.
+  via `--semantic` once an external embedder backend is wired in.
+- An MCP server. v0.3 will add MCP tools as thin wrappers over the on-disk
+  format so MCP-aware agents can consume it without a separate file format.
+- Cross-repo memory. Cross-repo coordination belongs in a separate
+  workspace-wide coordination layer.
 
 
 ## Architecture and migration path
 
-Deja Vue is the file format and reference CLI. Joker consumes dejavue. They are
-not bundled.
+Deja Vue is the file format and reference CLI. Richer tools consume dejavue;
+dejavue does not bundle them.
 
 Analogy: `.dejavue/` is to project memory what `.git/` is to history. Multiple
-tools sit on top of the same on-disk format. See `docs/05-v0.1-scope.md` §Architecture
-for the full ruling.
+tools sit on top of the same on-disk format. See `docs/05-v0.1-scope.md`
+§Architecture for the full ruling.
 
 | Version | Milestone |
 |---|---|
 | v0.1 | Single-file Python CLI. FTS5-only recall. Zero infrastructure. |
-| v0.2 | `--semantic` flag calls joker-mcp embedder when present; FTS5 fallback when absent. |
-| v0.3 | `joker.dejavue.*` MCP tools. Claude Code `SessionStart`/`Stop` hook integration. |
-| v0.4 | `dejavue migrate-to-jagent` upgrade path for repos that graduate to the Joker workflow. |
+| v0.2 | `--semantic` flag uses an external embedder when configured; FTS5 fallback when absent. |
+| v0.3 | MCP tool wrappers for agent ecosystems. Editor / Claude Code session-hook integration. |
+| v0.4 | Upgrade path: export a `.dejavue/` into a richer per-repo planning system without losing history. |
 
 
 ## Status
