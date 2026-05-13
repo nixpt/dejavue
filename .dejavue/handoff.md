@@ -14,3 +14,7 @@ Read `.dejavue/handoff.md`, `.dejavue/state.md`, `.dejavue/decisions.md`, and `.
 
 ## 2026-05-13T16:33:02-05:00 — annotation
 Additional follow-up (2026-05-13, post-1078703 SKILL.md add): consider whether skills/dejavue-workflow/SKILL.md should be promoted via the package install path — e.g., add a 'dejavue install-skill' subcommand that symlinks the SKILL.md into ~/.claude/skills/dejavue-workflow/ as a convenience for Claude Code users; OR ship an INSTALL.md alongside dejavue.py with the manual one-liner. Low priority — v0.1.2/v0.2 milestones unchanged.
+
+
+## 2026-05-13T16:39:02-05:00 — annotation
+Per-crate scoping feature idea filed as design lead thread (2026-05-13) at private source workspace/PROJECT_THREADS.md → '💡 dejavue per-crate scoping for monorepos (--scope <crate> field)'. Proposed feature: add --scope dimension to start/decision/state/handoff + recall+since filters. Post-commit hook could auto-infer scope from changed-file paths via workspace Cargo.toml or .dejavue/config.toml mapping. Composable with --agent. Effort ~half-day. Triggers: multi-crate monorepo adopts dejavue at scale, OR v0.2 semantic work bundles scope as natural cousin. Doesn't block v0.1 roadmap.
