@@ -1,5 +1,5 @@
 # State
 
-Updated: 2026-05-13T04:11:47-05:00
+Updated: 2026-05-13T04:28:33-05:00
 
-v0.1 CLI complete: all 13 commands implemented in dejavue.py (~500 LoC). FTS5 recall with LIKE fallback. git post-commit hook installed. rejected_alternatives field on decision events. Dogfood .dejavue/ created in this repo.
+v0.1 SHIPPED internal session. 13 commands, 33/33 tests, README + concurrency hardening (merge=union .gitattributes). 3 commits on master: 95f0c19 → 176541e → 6aba3d7. Self-hosting verified.
