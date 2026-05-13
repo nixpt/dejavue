@@ -1,0 +1,11 @@
+# Append-only memory files: use git's union merge driver to keep all events
+# from both sides of a branch merge. Critical for worktree-based multi-agent
+# workflows (e.g. squadron pattern: ~/worktrees/<agent>/) where every agent
+# accumulates its own events on its own branch and the merge wave folds them
+# back into main without conflict.
+#
+# Without this, every wave merge conflicts on timeline.jsonl because both
+# branches added unique lines and git's default text merger can't tell that
+# append-only semantics make union safe.
+.dejavue/timeline.jsonl merge=union
+.dejavue/decisions.md   merge=union
