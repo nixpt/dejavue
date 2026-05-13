@@ -30,3 +30,24 @@ Rejected alternatives:
 - **Split into modules**: defeats single-file portability goal
 - **Add pyyaml/requests**: external deps violate 5-second setup guarantee
 
+
+## 2026-05-13T16:32:47-05:00 — Place agent-facing SKILL.md at skills/dejavue-workflow/SKILL.md, not at repo root or in docs/
+
+Reason:
+Three signals converge on this path: (1) Claude Code's auto-loading convention is <name>/SKILL.md so a downstream symlink ~/.claude/skills/dejavue-workflow/ → <repo>/skills/dejavue-workflow/ works without rename gymnastics; (2) 'skills/' is forward-compatible if dejavue ever grows a second skill (e.g. dejavue-evaluation), avoids retro-restructuring; (3) keeps the human-vs-agent separation crisp at repo root — README.md is for humans, skills/ is for agents. README's docs list gets a one-line pointer for discoverability.
+
+Rejected alternatives:
+- **SKILL.md at repo root**: discoverable but doesn't symlink cleanly to ~/.claude/skills/<name>/ without an enclosing directory rename; also blurs the human-vs-agent docs boundary at root
+- **docs/skill.md or docs/agents.md**: hides it among design rationale docs; lowercased convention doesn't match Claude Code's expectation of SKILL.md; agents have to grep for it
+- **AGENTS.md at root**: matches some ecosystems' conventions but loses the Claude Code SKILL.md format affordance (YAML frontmatter, auto-discoverability) — would force agents to translate
+
+
+## 2026-05-13T16:32:56-05:00 — Generalize SKILL.md content for public dejavue repo (no workspace-internal references)
+
+Reason:
+The skill was first authored under private source workspace/skill-creator/skills/dejavue-workflow/ with design lead/orchestration/private source workspace-specific cross-links and absolute local home paths. For the public dejavue repo it must stand alone: replace [[design lead-session-start]] / [[capture-before-redirect]] / [[agent-lifecycle]] cross-links (those skills don't exist outside the source workspace) with pointers to dejavue's own docs (README, docs/05-v0.1-scope.md, docs/04-design-perspective.md); drop private source workspace canonical-store references; replace 'install via orchestration tool symlink' with generic 'symlink dejavue.py into ~/.local/bin/'; add stable-role-name agent identity guidance pulled from README's Concurrency section. The two versions intentionally diverge on workspace specificity but stay in sync on dejavue protocol content.
+
+Rejected alternatives:
+- **Ship the workspace-internal version verbatim**: would leak nixpt/design lead/orchestration references into a public release the maintainer explicitly genericized last commit (ebf36db)
+- **Single canonical version in dejavue repo, private source workspace references via include**: dejavue is the substrate; making private source workspace depend on dejavue's SKILL.md for its own design lead cross-links inverts the dependency direction
+
