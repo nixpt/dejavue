@@ -6,6 +6,7 @@ __pycache__/
 # Tracked (NOT in gitignore): timeline.jsonl, state.md, decisions.md, handoff.md, references/
 # Ignored below: rebuildable indexes + per-checkout markers + locks
 .dejavue/fts.db
+.dejavue/embeddings.jsonl
 .dejavue/*.tmp
 .dejavue/.first-use
 .dejavue/ingested.lock

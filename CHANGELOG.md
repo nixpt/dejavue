@@ -5,6 +5,32 @@ format roughly follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project does not currently follow semver strictly because the on-disk
 format may evolve before v1.0.
 
+## [Unreleased]
+
+### Added
+
+- **`dejavue recall <q> --semantic`** — cosine-ranked semantic recall.
+  Embeds the query against an OpenAI-compatible `/v1/embeddings` endpoint
+  (default `http://localhost:11434/v1/embeddings`, model `nomic-embed-text`;
+  override via `DEJAVUE_EMBEDDER_URL` / `DEJAVUE_EMBEDDER_MODEL`).
+- **`.dejavue/embeddings.jsonl`** — hash-keyed vector cache, populated
+  lazily as `--semantic` recalls encounter events for the first time.
+  Stable across timeline reorderings/duplicates because the join key is
+  a content hash (sha256[:16]) of the timeline line. Gitignored
+  (rebuildable, model-specific) — treat as a local cache like `fts.db`.
+- **Graceful fallback.** When the embedder is unreachable, returns
+  non-200, or returns malformed JSON, `--semantic` prints one warning
+  line to stderr and proceeds with FTS5 keyword recall. Memory writes
+  never block on the embedder being up.
+
+### Notes
+
+- Stdlib only — `urllib.request` for the HTTP call, `hashlib` for
+  content-addressing, `math` for cosine. No new runtime dependencies.
+- `nomic-embed-text` (768-dim, `ollama pull nomic-embed-text`, ~274 MB)
+  is the verified default; any OpenAI-compat `/v1/embeddings` endpoint
+  works.
+
 ## [0.1.0] — 2026-05-13
 
 First productized release. Single-file Python 3 CLI, stdlib only, zero

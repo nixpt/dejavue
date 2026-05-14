@@ -189,25 +189,69 @@ Output sections: git delta (log + diff stat), timeline events (newest first),
 decisions made, state transitions, handoffs, top keywords.
 
 
+## Semantic recall (`--semantic`)
+
+`dejavue recall <query> --semantic` cosine-ranks events by meaning instead of
+keyword overlap. Default endpoint is an OpenAI-compatible `/v1/embeddings`
+URL — works against ollama out of the box (`ollama pull nomic-embed-text`,
+no further config needed).
+
+```bash
+# Default: hits ollama on localhost
+dejavue recall "rate limiter design tradeoffs" --semantic
+
+# Override via env (any /v1/embeddings-compatible endpoint):
+DEJAVUE_EMBEDDER_URL=https://api.openai.com/v1/embeddings \
+DEJAVUE_EMBEDDER_MODEL=text-embedding-3-small \
+  dejavue recall "rate limiter design tradeoffs" --semantic
+```
+
+**Lazy caching.** The first time a timeline event is seen during a semantic
+recall, dejavue embeds its summary and appends a row to
+`.dejavue/embeddings.jsonl`. Subsequent recalls hit the cache. The cache is
+keyed by a content hash of the timeline line, so reorderings, duplicate
+ingest runs, and worktree merges do not produce phantom entries.
+
+**Graceful fallback.** If the embedder URL is unreachable, returns 4xx, or
+returns malformed JSON, dejavue prints one warning line to stderr and falls
+through to the FTS5 keyword path. Memory writes never block on the embedder
+being up — this is a design invariant.
+
+**`.dejavue/embeddings.jsonl` is gitignored.** It is rebuildable from
+`timeline.jsonl` plus a working embedder, and different agents on the same
+repo may legitimately use different models (different vector spaces should
+not mix). Treat it like `fts.db` — local cache, not part of the canonical
+on-disk format.
+
+Reference forms:
+
+```
+dejavue recall "<query>"             # FTS5 keyword (default)
+dejavue recall "<query>" --semantic  # cosine-ranked semantic
+```
+
+
 ## File layout
 
 ```
 .dejavue/
-  timeline.jsonl    # append-only event log — commit this
-  state.md          # current state snapshot — commit this
-  decisions.md      # append-only architectural decisions — commit this
-  handoff.md        # latest handoff — commit this
-  references/       # hand-written reference cards (optional) — commit these
-  fts.db            # sqlite FTS5 index — do NOT commit (rebuildable)
-  ingested.lock     # ingest marker — do NOT commit (per-checkout)
-  .first-use        # worthiness-gate-shown marker — do NOT commit (per-user)
-  .locks/           # file locks for concurrent ops — do NOT commit
+  timeline.jsonl     # append-only event log — commit this
+  state.md           # current state snapshot — commit this
+  decisions.md       # append-only architectural decisions — commit this
+  handoff.md         # latest handoff — commit this
+  references/        # hand-written reference cards (optional) — commit these
+  fts.db             # sqlite FTS5 index — do NOT commit (rebuildable)
+  embeddings.jsonl   # semantic-recall vector cache — do NOT commit (rebuildable, model-specific)
+  ingested.lock      # ingest marker — do NOT commit (per-checkout)
+  .first-use         # worthiness-gate-shown marker — do NOT commit (per-user)
+  .locks/            # file locks for concurrent ops — do NOT commit
 ```
 
 Add to `.gitignore`:
 
 ```
 .dejavue/fts.db
+.dejavue/embeddings.jsonl
 .dejavue/*.tmp
 .dejavue/.first-use
 .dejavue/ingested.lock
