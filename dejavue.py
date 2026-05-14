@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
+import math
+import os
 import re
 import sqlite3
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -15,10 +20,17 @@ DECISIONS = DEJAVUE_DIR / "decisions.md"
 HANDOFF = DEJAVUE_DIR / "handoff.md"
 REFERENCES = DEJAVUE_DIR / "references"
 FTS_DB = DEJAVUE_DIR / "fts.db"
+EMBEDDINGS = DEJAVUE_DIR / "embeddings.jsonl"
 INGESTED_LOCK = DEJAVUE_DIR / "ingested.lock"
 FIRST_USE = DEJAVUE_DIR / ".first-use"
 
 HAS_FTS5 = None  # probed lazily on first db open
+
+# Semantic recall (v0.2). Pointed at an OpenAI-compatible /v1/embeddings endpoint
+# by default; works against ollama out of the box. Override per-repo via env vars.
+DEFAULT_EMBEDDER_URL = "http://localhost:11434/v1/embeddings"
+DEFAULT_EMBEDDER_MODEL = "nomic-embed-text"
+EMBEDDER_TIMEOUT_S = 5.0
 
 
 def now():
@@ -561,13 +573,185 @@ def cmd_ingest(args):
     print(f"Ingested {len(ingested)} sources into timeline.")
 
 
+# ── Semantic recall (v0.2) ────────────────────────────────────────────────────
+# The format is the contract: `.dejavue/embeddings.jsonl` is append-only, one
+# row per embedded timeline event, keyed by a content hash of the timeline
+# line. Hash-keying means reorderings/duplicates are safe and re-running recall
+# never produces a different cache shape for the same data.
+
+def _line_hash(line: str) -> str:
+    return hashlib.sha256(line.encode("utf-8")).hexdigest()[:16]
+
+
+def _embedder_url() -> str:
+    return os.environ.get("DEJAVUE_EMBEDDER_URL", DEFAULT_EMBEDDER_URL)
+
+
+def _embedder_model() -> str:
+    return os.environ.get("DEJAVUE_EMBEDDER_MODEL", DEFAULT_EMBEDDER_MODEL)
+
+
+def _embed_one(text):
+    """POST an OpenAI-compatible /v1/embeddings request. Returns vec or None on any failure."""
+    if not text:
+        return None
+    body = json.dumps({"model": _embedder_model(), "input": text}).encode("utf-8")
+    req = urllib.request.Request(
+        _embedder_url(),
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=EMBEDDER_TIMEOUT_S) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
+        return None
+    except json.JSONDecodeError:
+        return None
+    try:
+        vec = payload["data"][0]["embedding"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    if not isinstance(vec, list) or not vec:
+        return None
+    return [float(x) for x in vec]
+
+
+def _read_embeddings_cache():
+    """Return {hash: vec} from .dejavue/embeddings.jsonl. Missing file → empty dict."""
+    if not EMBEDDINGS.exists():
+        return {}
+    out = {}
+    for line in EMBEDDINGS.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        h = row.get("hash")
+        vec = row.get("vec")
+        if isinstance(h, str) and isinstance(vec, list):
+            out[h] = vec
+    return out
+
+
+def _append_embedding(h, vec, model):
+    DEJAVUE_DIR.mkdir(exist_ok=True)
+    row = {"hash": h, "model": model, "dims": len(vec), "vec": vec}
+    with EMBEDDINGS.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _cosine(a, b):
+    if len(a) != len(b) or not a:
+        return 0.0
+    dot = 0.0
+    na = 0.0
+    nb = 0.0
+    for x, y in zip(a, b):
+        dot += x * y
+        na += x * x
+        nb += y * y
+    denom = math.sqrt(na) * math.sqrt(nb)
+    if denom < 1e-12:
+        return 0.0
+    return dot / denom
+
+
+def _semantic_text_for(event):
+    """Pick the best text to embed for a timeline event. summary > title+reason > content."""
+    if event.get("summary"):
+        return event["summary"]
+    # Decision events have title + reason
+    if event.get("event") == "decision":
+        bits = [event.get("title", ""), event.get("reason", "")]
+        joined = " — ".join(b for b in bits if b)
+        if joined:
+            return joined
+    if event.get("content"):
+        return event["content"]
+    return None
+
+
+def _semantic_recall(query, limit=10):
+    """Embed query, lazily fill cache, cosine-rank events. Returns list of (score, event, ts, source) or None on embedder failure."""
+    q_vec = _embed_one(query)
+    if q_vec is None:
+        return None  # caller falls back to FTS5
+
+    # Load timeline lines (raw, for hashing) + parsed events in lockstep.
+    if not TIMELINE.exists():
+        return []
+    raw_lines = []
+    events = []
+    for line in TIMELINE.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
+        raw_lines.append(stripped)
+        events.append(parsed)
+
+    cache = _read_embeddings_cache()
+    model = _embedder_model()
+
+    scored = []
+    for raw, evt in zip(raw_lines, events):
+        h = _line_hash(raw)
+        vec = cache.get(h)
+        if vec is None:
+            text = _semantic_text_for(evt)
+            if text is None:
+                continue
+            vec = _embed_one(text)
+            if vec is None:
+                # Embedder went down mid-fill; skip this event but keep going.
+                continue
+            _append_embedding(h, vec, model)
+            cache[h] = vec
+        scored.append((_cosine(q_vec, vec), evt))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return scored[:limit]
+
+
 def cmd_recall(args):
     global HAS_FTS5
     maybe_show_worthiness()
-    if fts_needs_rebuild():
-        rebuild_fts()
 
     query = args.query
+
+    # Semantic path (opt-in via --semantic). Falls through to FTS5 on embedder failure.
+    if getattr(args, "semantic", False):
+        results = _semantic_recall(query)
+        if results is None:
+            print(
+                f"WARNING: semantic embedder at {_embedder_url()} unavailable; falling back to FTS5 keyword recall.",
+                file=sys.stderr,
+            )
+        elif not results:
+            print(f"No semantic results for '{query}'.")
+            return
+        else:
+            print(f"Semantic recall results for '{query}' (model: {_embedder_model()}):\n")
+            for score, evt in results:
+                ts = (evt.get("ts") or "")[:19] or "(no ts)"
+                event_kind = evt.get("event", "event")
+                source = evt.get("agent") or evt.get("source") or "?"
+                text = _semantic_text_for(evt) or ""
+                snippet = (text[:120] + "…") if len(text) > 120 else text
+                print(f"  [score={score:.3f}] [{ts}] {event_kind} ({source})")
+                print(f"    {snippet}\n")
+            return
+
+    if fts_needs_rebuild():
+        rebuild_fts()
     conn = open_db()
 
     if HAS_FTS5:
@@ -746,8 +930,20 @@ def main():
     p.add_argument("--force", action="store_true", help="Re-run even if ingested.lock exists.")
     p.set_defaults(func=cmd_ingest)
 
-    p = sub.add_parser("recall", help="FTS5 keyword search over timeline + docs.")
+    p = sub.add_parser("recall", help="Keyword (FTS5) or semantic search over timeline + docs.")
     p.add_argument("query")
+    p.add_argument(
+        "--semantic",
+        action="store_true",
+        help=(
+            "Cosine-rank events against the query using an external embedder "
+            "(set DEJAVUE_EMBEDDER_URL, default http://localhost:11434/v1/embeddings; "
+            "DEJAVUE_EMBEDDER_MODEL, default nomic-embed-text). "
+            "Lazy: events get embedded into .dejavue/embeddings.jsonl the first time "
+            "they're seen during recall. Falls back to FTS5 keyword search when the "
+            "embedder is unavailable."
+        ),
+    )
     p.set_defaults(func=cmd_recall)
 
     p = sub.add_parser("worthiness", help="Print the worthiness gate (capture/skip table).")

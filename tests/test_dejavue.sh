@@ -629,6 +629,56 @@ test_recall_like_branch_exists() {
     }
 }
 
+# 25a. recall --semantic flag is registered in argparse
+test_recall_semantic_flag_present() {
+    local out
+    out="$(dv recall --help 2>&1)"
+    assert_contains "recall help mentions --semantic" "$out" "--semantic"
+    assert_contains "recall help mentions DEJAVUE_EMBEDDER_URL" "$out" "DEJAVUE_EMBEDDER_URL"
+}
+
+# 25b. --semantic falls back to FTS5 with a warning when embedder is unreachable
+test_recall_semantic_falls_back_when_embedder_down() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+
+    dv init >/dev/null 2>&1
+    dv start --goal "FTS5 recall semfallback_xyz test" >/dev/null 2>&1
+
+    local out
+    # Point at a guaranteed-unreachable URL (port 1 is always refused).
+    out="$(DEJAVUE_EMBEDDER_URL=http://127.0.0.1:1/v1/embeddings dv recall semfallback_xyz --semantic 2>&1)"
+    assert_contains "semantic fallback warning printed" "$out" "embedder"
+    assert_contains "semantic fallback warning printed" "$out" "falling back to FTS5"
+    # After the warning, the FTS5 path should still find the seeded event.
+    assert_contains "semantic fallback finds FTS5 result" "$out" "semfallback_xyz"
+    # No embeddings.jsonl should be written when the query embed call fails.
+    if [[ -f ".dejavue/embeddings.jsonl" ]]; then
+        echo "  ASSERT FAIL: embeddings.jsonl should not exist after embedder failure" >&2
+        return 1
+    fi
+
+    cd /
+    rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 25c. Semantic helpers are present in the source — hash-keyed cache + cosine
+test_recall_semantic_helpers_present() {
+    grep -q '_line_hash' "$DEJAVUE" || {
+        echo "  ASSERT FAIL: _line_hash helper not found in dejavue.py" >&2
+        return 1
+    }
+    grep -q '_cosine' "$DEJAVUE" || {
+        echo "  ASSERT FAIL: _cosine helper not found in dejavue.py" >&2
+        return 1
+    }
+    grep -q 'embeddings.jsonl' "$DEJAVUE" || {
+        echo "  ASSERT FAIL: embeddings.jsonl cache path not found in dejavue.py" >&2
+        return 1
+    }
+}
+
 # 26. worthiness prints CAPTURE and SKIP strings
 test_worthiness_prints_table() {
     local out
@@ -802,6 +852,9 @@ main() {
     run_test "23 ingest --force re-runs"                    test_ingest_force_reruns
     run_test "24 recall returns FTS5 results"               test_recall_returns_results
     run_test "25 recall LIKE branch reachable in source"    test_recall_like_branch_exists
+    run_test "25a recall --semantic flag in argparse"        test_recall_semantic_flag_present
+    run_test "25b --semantic falls back to FTS5 on failure"  test_recall_semantic_falls_back_when_embedder_down
+    run_test "25c semantic helpers present in source"        test_recall_semantic_helpers_present
     run_test "26 worthiness prints CAPTURE/SKIP table"      test_worthiness_prints_table
     run_test "27 get state/handoff/decisions print content" test_get_known_docs
     run_test "28 get references/nonexistent says not exist" test_get_nonexistent_reference
