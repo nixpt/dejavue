@@ -293,8 +293,15 @@ def cmd_changed(args):
         # last line of --stat is summary ("N files changed…"), use it
         stat_summary = diff_stat[-1] if diff_stat else ""
         commit_msg = git_run("git", "log", "-1", "--format=%s", sha)
+        # `git show --name-only` silently emits nothing for merge commits (default
+        # `--diff-merges=off` suppresses combined diff). Use `git diff-tree` with
+        # `-m --first-parent` to handle merges (show what came in via the merge)
+        # plus `--root` to handle initial commits (no parent to diff against).
         touched = [
-            l for l in git_run("git", "show", "--name-only", "--format=", sha).splitlines() if l
+            l for l in git_run(
+                "git", "diff-tree", "--no-commit-id", "-r", "--name-only",
+                "-m", "--first-parent", "--root", sha,
+            ).splitlines() if l
         ]
         branch = git_run("git", "rev-parse", "--abbrev-ref", "HEAD")
         short = sha[:7]

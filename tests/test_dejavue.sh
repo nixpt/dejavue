@@ -401,6 +401,40 @@ test_changed_auto_commit() {
     rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 9a. changed --auto --commit <merge-sha> captures files from a merge commit.
+#     Regression for: `git show --name-only --format=` silently emits NOTHING for
+#     merge commits (default --diff-merges=off), so dejavue's post-commit hook
+#     dropped every merge entirely — quantified at ~70% capture loss in
+#     multi-agent projects where foreman lands work via merge commits.
+test_changed_auto_commit_merge() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+
+    dv init >/dev/null 2>&1
+
+    # Build a merge: master with x.txt, branch adds y.txt, merge back.
+    printf 'x\n' > x.txt
+    git -C "$TEST_DIR" add x.txt
+    git -C "$TEST_DIR" commit -q -m "base"
+    git -C "$TEST_DIR" checkout -q -b feature
+    printf 'y\n' > y.txt
+    git -C "$TEST_DIR" add y.txt
+    git -C "$TEST_DIR" commit -q -m "add y on feature"
+    git -C "$TEST_DIR" checkout -q master 2>/dev/null || git -C "$TEST_DIR" checkout -q main
+    git -C "$TEST_DIR" merge --no-ff -q -m "merge feature" feature
+    sha="$(git -C "$TEST_DIR" rev-parse HEAD)"
+
+    local out
+    out="$(dv changed --auto --commit "$sha" 2>&1)"
+    # Pre-fix: this said "0 file_changed events". Post-fix: 1 (y.txt via first parent).
+    assert_contains "captures merge files" "$out" "1 file_changed events"
+    assert_event_recorded "y.txt recorded from merge" ".dejavue/timeline.jsonl" "path" "y.txt"
+
+    cd /
+    rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # 10. post-commit hook fires after git commit: timeline grows by N file_changed events
 test_post_commit_hook_fires() {
     TEST_DIR="$(setup_repo)"
@@ -964,6 +998,7 @@ main() {
     run_test "07 start records session_start with goal"     test_start_records_session_start
     run_test "08 changed PATH --summary records event"      test_changed_manual_records_event
     run_test "09 changed --auto --commit per-file events"   test_changed_auto_commit
+    run_test "09a changed --auto --commit captures merge files" test_changed_auto_commit_merge
     run_test "10 post-commit hook fires on git commit"      test_post_commit_hook_fires
     run_test "11 decision records event + decisions.md"     test_decision_records_event_and_doc
     run_test "12 decision --rejected captures alternatives" test_decision_rejected_alternatives
