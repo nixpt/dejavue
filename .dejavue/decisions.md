@@ -71,3 +71,13 @@ Rejected alternatives:
 - **Single channel = clone-time only**: most users won't clone the repo, they'll pip install — they'd never see the skill
 - **Single channel = install-time only**: contributors working IN the dejavue repo wouldn't get the skill via their session-start; cloning a .dejavue-equipped third-party repo is the discovery moment for them
 
+
+## 2026-05-15T02:21:41-05:00 — Use diff-tree -m --first-parent --root for merge-commit capture
+
+Reason:
+git show --name-only and even audit's recommended git diff-tree --no-commit-id -r --name-only silently emit nothing on merge commits (default --diff-merges=off). Real-world impact: ~70% capture loss in multi-agent projects per opencode's Khukuri audit. -m --first-parent shows what came in via the merge; --root handles initial commits.
+
+Rejected alternatives:
+- **git diff --name-only HEAD~1..HEAD**: works for merges but fails for root commits (no HEAD~1) and is two commands worth of parsing
+- **audit's git diff-tree --no-commit-id -r --name-only HEAD verbatim**: empirically broken — verified empty output on merge commit before adopting the fix
+
