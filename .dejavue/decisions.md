@@ -81,3 +81,13 @@ Rejected alternatives:
 - **git diff --name-only HEAD~1..HEAD**: works for merges but fails for root commits (no HEAD~1) and is two commands worth of parsing
 - **audit's git diff-tree --no-commit-id -r --name-only HEAD verbatim**: empirically broken — verified empty output on merge commit before adopting the fix
 
+
+## 2026-05-15T02:31:02-05:00 — Ship ROADMAP.md as canonical version tracker
+
+Reason:
+Captain s168 directive — dejavue needs an in-repo roadmap so contributors and adopters can see shipped vs in-flight vs candidate scope at a glance. CHANGELOG covers per-release detail; ROADMAP.md is the wide-angle view.
+
+Rejected alternatives:
+- **leave as GitHub Issues/Projects**: works for collaboration but loses the offline/portable invariant — anyone cloning the repo should see roadmap in-tree
+- **embed roadmap inside README**: makes README too long; README is the marketing/install doc, ROADMAP is the architecture/planning doc, they want different audiences
+
