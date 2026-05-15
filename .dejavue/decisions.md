@@ -51,3 +51,23 @@ Rejected alternatives:
 - **Ship the workspace-internal version verbatim**: would leak nixpt/foreman/squadron references into a public release the maintainer explicitly genericized last commit (ebf36db)
 - **Single canonical version in dejavue repo, workspace-meta references via include**: dejavue is the substrate; making workspace-meta depend on dejavue's SKILL.md for its own foreman cross-links inverts the dependency direction
 
+
+## 2026-05-15T00:14:00-05:00 — Skill canonical source = dejavue repo (Option A)
+
+Reason:
+The dejavue project owns its own docs. Edit-once-propagate-everywhere via symlink chain. dejavue-repo skills/ is single source; .claude/skills/ relative-symlinks for in-repo Claude Code auto-discovery; workspace-meta/skill-creator/skills/dejavue* and ~/.claude/skills/dejavue* are absolute symlinks pointing into the dejavue repo. Closes drift between previously-divergent workspace-internal version (in skill-creator/) and the public-adapted version (in dejavue-repo/skills/dejavue-workflow/).
+
+Rejected alternatives:
+- **Option B (sync UP to skill-creator, treat workspace-meta as authoring source)**: manual sync overhead, drift will recur on every wording fix, the project ends up not owning its own docs
+- **Option C (two intentional versions, one workspace-internal + one public)**: 2x maintenance for any wording fix, dishonest about which is canonical, no obvious win
+
+
+## 2026-05-15T00:14:00-05:00 — Skills reach agents via TWO channels: clone-time + install-time
+
+Reason:
+Captain s166: 'when a user installs dejavue, the skill is copied to claude or their choice of agents.' Two complementary delivery vectors: (1) clone-time — .claude/skills/ ships INSIDE the repo, any Claude Code session opening the repo auto-discovers; works for cloners/contributors. (2) install-time — when user runs pip install dejavue (future), a dejavue install-skill subcommand or post-install hook detects their agent system and installs the skill there; works for end-users who only invoke the CLI. Channel 1 done s166; channel 2 specced in workspace-meta FOREMAN_THREADS dejavue-maturation-arc sub-bullet 5.
+
+Rejected alternatives:
+- **Single channel = clone-time only**: most users won't clone the repo, they'll pip install — they'd never see the skill
+- **Single channel = install-time only**: contributors working IN the dejavue repo wouldn't get the skill via their session-start; cloning a .dejavue-equipped third-party repo is the discovery moment for them
+
