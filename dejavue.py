@@ -203,6 +203,14 @@ def cmd_init(args):
         else:
             _write_hook(hook_path, marker)
             print(f"Installed post-commit hook at {hook_path}")
+
+        # .gitattributes — install merge=union for append-only files.
+        # Critical for worktree-per-agent / multi-branch workflows: without
+        # it, every wave merge conflicts on timeline.jsonl + decisions.md
+        # because both branches added unique lines and git's default text
+        # merger can't see that append-only semantics make union safe.
+        # See README §Concurrency.
+        _install_gitattributes(force=args.force)
     else:
         print("WARNING: not inside a git repo; skipping hook install.")
 
@@ -224,6 +232,47 @@ def _write_hook(hook_path, marker):
     )
     hook_path.write_text(script, encoding="utf-8")
     hook_path.chmod(0o755)
+
+
+# .gitattributes lines we own. Both files are append-only by contract;
+# merge=union keeps unique lines from both sides on a branch merge.
+_GITATTR_LINES = (
+    ".dejavue/timeline.jsonl merge=union",
+    ".dejavue/decisions.md   merge=union",
+)
+_GITATTR_MARKER = "# dejavue: append-only files use git's union merge driver"
+
+
+def _install_gitattributes(force=False):
+    """Append our merge=union directives to .gitattributes if absent.
+
+    Idempotent: if our marker is already present, do nothing. If a non-dejavue
+    .gitattributes exists and our lines are absent, append (with marker) — this
+    is safe because gitattributes is line-based and our patterns only match
+    paths under .dejavue/. With force=True, also re-append even if marker
+    present (effectively ensures the lines are at the bottom).
+    """
+    path = Path(".gitattributes")
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+
+    if _GITATTR_MARKER in existing and not force:
+        return  # already installed
+
+    # Detect if our exact lines are already there (under any marker, e.g. a
+    # user who copied them from the README before running init).
+    already_have_lines = all(line in existing for line in _GITATTR_LINES)
+    if already_have_lines and not force:
+        return
+
+    block = ["", _GITATTR_MARKER, *_GITATTR_LINES, ""]
+    # Avoid blank-line spam: if existing ends in a newline, our leading "" is fine.
+    sep = "" if existing.endswith("\n") or existing == "" else "\n"
+    new_content = existing + sep + "\n".join(block) + "\n"
+    path.write_text(new_content, encoding="utf-8")
+    if existing == "":
+        print(f"Installed .gitattributes with {len(_GITATTR_LINES)} merge=union directives.")
+    else:
+        print(f"Appended {len(_GITATTR_LINES)} merge=union directives to existing .gitattributes.")
 
 
 def cmd_start(args):
@@ -329,9 +378,10 @@ def cmd_state(args):
 def cmd_handoff(args):
     maybe_show_worthiness()
     ts = now()
+    next_section = args.next[0] if len(args.next) == 1 else "\n".join(f"- {item}" for item in args.next)
     HANDOFF.write_text(
         f"# Handoff\n\nUpdated: {ts}\n\n## Summary\n{args.summary}\n\n"
-        f"## Next Steps\n{args.next}\n\n## Boot Instructions\n"
+        f"## Next Steps\n{next_section}\n\n## Boot Instructions\n"
         "Read `.dejavue/handoff.md`, `.dejavue/state.md`, `.dejavue/decisions.md`,"
         " and `.dejavue/timeline.jsonl` before making changes.\n",
         encoding="utf-8",
@@ -914,7 +964,7 @@ def main():
 
     p = sub.add_parser("handoff", help="Write handoff.md.")
     p.add_argument("--summary", required=True)
-    p.add_argument("--next", required=True)
+    p.add_argument("--next", action="append", required=True, help="Repeatable; each occurrence becomes a bullet in handoff.md.")
     p.add_argument("--agent", default="unknown")
     p.set_defaults(func=cmd_handoff)
 
