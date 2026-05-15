@@ -228,6 +228,105 @@ test_init_no_force_warns_on_existing_hook() {
 }
 
 # 6. init outside a git repo prints warning and still creates .dejavue/
+test_init_writes_gitattributes() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+
+    dv init >/dev/null 2>&1
+
+    assert_file_exists ".gitattributes" ".gitattributes"
+    local content
+    content="$(cat .gitattributes)"
+    assert_contains "marker present" "$content" "dejavue: append-only files"
+    assert_contains "timeline.jsonl directive" "$content" ".dejavue/timeline.jsonl merge=union"
+    assert_contains "decisions.md directive" "$content" ".dejavue/decisions.md   merge=union"
+
+    cd /
+    rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+test_init_gitattributes_idempotent() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+
+    dv init >/dev/null 2>&1
+    local before_lines
+    before_lines="$(wc -l < .gitattributes)"
+    dv init >/dev/null 2>&1
+    local after_lines
+    after_lines="$(wc -l < .gitattributes)"
+
+    assert_eq ".gitattributes line count unchanged after re-init" "$after_lines" "$before_lines"
+
+    cd /
+    rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+test_init_gitattributes_appends_to_existing() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+
+    printf '*.bin binary\n*.lock -diff\n' > .gitattributes
+    dv init >/dev/null 2>&1
+
+    local content
+    content="$(cat .gitattributes)"
+    assert_contains "preserves user *.bin line" "$content" "*.bin binary"
+    assert_contains "preserves user *.lock line" "$content" "*.lock -diff"
+    assert_contains "appends our marker" "$content" "dejavue: append-only files"
+    assert_contains "appends timeline directive" "$content" ".dejavue/timeline.jsonl merge=union"
+
+    cd /
+    rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+test_init_gitattributes_branch_merge_no_conflict() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    # Disable post-commit hook so smoke loop doesn't keep dirtying timeline.jsonl
+    git config core.hooksPath /dev/null
+
+    dv init >/dev/null 2>&1
+    git add -A && git commit -q -m "dv init"
+    local default_branch
+    default_branch="$(git symbolic-ref --short HEAD)"
+
+    git checkout -qb branch-a
+    dv decision "A picks foo" --reason "branch a says foo" --agent userA >/dev/null
+    git add -A && git commit -q -m "branch a decision"
+
+    git checkout -q "$default_branch"
+    git checkout -qb branch-b
+    dv decision "B picks bar" --reason "branch b says bar" --agent userB >/dev/null
+    git add -A && git commit -q -m "branch b decision"
+
+    git checkout -q "$default_branch"
+    git merge -q --no-edit branch-a
+    # The real test: this merge would conflict on timeline.jsonl + decisions.md
+    # WITHOUT merge=union. With merge=union (which init now installs), it's clean.
+    git merge -q --no-edit branch-b
+
+    local decisions_content timeline_decision_count
+    decisions_content="$(cat .dejavue/decisions.md)"
+    assert_contains "merged decisions.md has A's title" "$decisions_content" "A picks foo"
+    assert_contains "merged decisions.md has B's title" "$decisions_content" "B picks bar"
+
+    timeline_decision_count="$(grep -c 'decision_title' .dejavue/timeline.jsonl || true)"
+    assert_eq "merged timeline.jsonl has both decision events" "$timeline_decision_count" "2"
+
+    if grep -qE '^(<<<<<<< |======= |>>>>>>> )' .dejavue/timeline.jsonl .dejavue/decisions.md; then
+        echo "  ASSERT FAIL: conflict markers present after merge — merge=union not honored" >&2
+        return 1
+    fi
+
+    cd /
+    rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 test_init_outside_git_repo() {
     TEST_DIR="$(mktemp -d)"
     trap 'rm -rf "$TEST_DIR"' EXIT
@@ -423,6 +522,31 @@ test_handoff_writes_handoff_md() {
     assert_contains "next in handoff.md" "$hcontent" "Write README"
 
     assert_event_recorded "handoff event" ".dejavue/timeline.jsonl" "event" "handoff"
+
+    cd /
+    rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 14a. handoff with multiple --next renders as bullet list
+test_handoff_multiple_next_renders_bullets() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+
+    dv init >/dev/null 2>&1
+    dv handoff --summary "Multi-next test" \
+        --next "First step" \
+        --next "Second step" \
+        --next "Third step" >/dev/null 2>&1
+
+    local hcontent
+    hcontent="$(cat .dejavue/handoff.md)"
+    assert_contains "first next preserved" "$hcontent" "First step"
+    assert_contains "second next preserved" "$hcontent" "Second step"
+    assert_contains "third next preserved" "$hcontent" "Third step"
+    assert_contains "first rendered as bullet" "$hcontent" "- First step"
+    assert_contains "second rendered as bullet" "$hcontent" "- Second step"
+    assert_contains "third rendered as bullet" "$hcontent" "- Third step"
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT
@@ -833,6 +957,10 @@ main() {
     run_test "04 init --force overwrites existing hook"     test_init_force_overwrites_hook
     run_test "05 init warns without --force on alien hook"  test_init_no_force_warns_on_existing_hook
     run_test "06 init outside git repo still creates dir"   test_init_outside_git_repo
+    run_test "06a init writes .gitattributes merge=union"    test_init_writes_gitattributes
+    run_test "06b init .gitattributes is idempotent"         test_init_gitattributes_idempotent
+    run_test "06c init appends to pre-existing .gitattrs"    test_init_gitattributes_appends_to_existing
+    run_test "06d branch-merge clean with merge=union"       test_init_gitattributes_branch_merge_no_conflict
     run_test "07 start records session_start with goal"     test_start_records_session_start
     run_test "08 changed PATH --summary records event"      test_changed_manual_records_event
     run_test "09 changed --auto --commit per-file events"   test_changed_auto_commit
@@ -841,6 +969,7 @@ main() {
     run_test "12 decision --rejected captures alternatives" test_decision_rejected_alternatives
     run_test "13 state overwrites state.md + event"         test_state_overwrites_state_md
     run_test "14 handoff writes handoff.md + event"         test_handoff_writes_handoff_md
+    run_test "14a handoff multiple --next renders bullets"  test_handoff_multiple_next_renders_bullets
     run_test "15 context prints all sections"               test_context_prints_all_sections
     run_test "16 since DATE form"                           test_since_date_form
     run_test "17 since COMMIT form"                         test_since_commit_form
