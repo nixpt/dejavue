@@ -355,6 +355,8 @@ def cmd_decision(args):
             if ra["reason"]:
                 entry += f": {ra['reason']}"
             entry += "\n"
+    if args.outcome:
+        entry += f"\nOutcome:\n{args.outcome}\n"
     entry += "\n"
     with DECISIONS.open("a", encoding="utf-8") as f:
         f.write(entry)
@@ -366,6 +368,7 @@ def cmd_decision(args):
         "decision_reason": args.reason,
         "summary": f"Decision: {args.title}",
         "rejected_alternatives": rejected,
+        "outcome": args.outcome or "",
     })
     print(f"Decision recorded: {args.title}")
 
@@ -961,6 +964,8 @@ def main():
     p.add_argument("--reason", required=True)
     p.add_argument("--rejected", action="append", default=[], metavar="OPTION",
                    help="Rejected alternative (repeatable). Format: 'option: reason'")
+    p.add_argument("--outcome", default=None,
+                   help="What shipped / current state (optional; omit for timeless doctrine entries).")
     p.add_argument("--agent", default="unknown")
     p.set_defaults(func=cmd_decision)
 
