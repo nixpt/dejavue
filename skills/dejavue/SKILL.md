@@ -51,6 +51,11 @@ reminder and the command quick-reference.
 | `dejavue roster` | Agent activity summary — who worked here and when |
 | `dejavue config {list,get,set,unset}` | Manage per-repo `.dejavue/config` values |
 | `dejavue install-skill [--dir]` | Install SKILL.md to `~/.claude/skills/` (or custom dir) |
+| `dejavue stats` | Timeline statistics: counts by type, agent, date range |
+| `dejavue export --format {json,md}` | Export full memory snapshot |
+| `dejavue reference {create,list,update,view}` | Manage `.dejavue/references/` cards |
+| `dejavue link <sha>` | Show dejavue events recorded for a git commit |
+| `dejavue search "<query>"` | Alias for `recall` (same flags) |
 | `dejavue version` | Print the installed version |
 
 If the CLI isn't on PATH but the repo has a copy at `dejavue.py`:

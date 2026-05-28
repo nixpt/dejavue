@@ -154,6 +154,11 @@ git                — mechanical history (commits, diffs)
 | `dejavue config {list,get KEY,set KEY VAL,unset KEY}` | Manage per-repo `.dejavue/config`. |
 | `dejavue install-skill [--dir PATH]` | Install SKILL.md to `~/.claude/skills/` (or `--dir`). |
 | `dejavue worthiness` | Print the capture/skip table as a reminder. |
+| `dejavue stats` | Event statistics: counts by type (with bar chart), by agent, date range. |
+| `dejavue export --format {json,md}` | Export full memory snapshot as JSON or Markdown. |
+| `dejavue reference {create,list,update,view}` | Manage `.dejavue/references/` cards via CLI. |
+| `dejavue link <sha>` | Show dejavue events recorded for a git commit SHA. |
+| `dejavue search QUERY [--semantic] [--limit N]` | Alias for `recall` (discoverable name). |
 | `dejavue version` | Print installed version. |
 
 Each command accepts `--help`. See `dejavue --help` for the full flag list.
@@ -374,12 +379,13 @@ tools sit on top of the same on-disk format. See `docs/05-v0.1-scope.md`
 | v0.2 | `--semantic` flag via external embedder; FTS5 fallback. |
 | v1.0 | Format stable. 20 commands: ambient agent-id, staleness warnings, pre-push hook, codebase map, `status`, `log`, `blame`, `note`. |
 | v1.1 | 25 commands: `check`, `archive`, `roster`, `config`, `install-skill`, embedder circuit breaker. |
-| v1.2+ | MCP tool wrappers, tiered embedder chain, `dejavue promote`. |
+| v1.2 | 31 commands: richer event types, `stats`, `export`, `reference`, `link`, `search`, tiered embedder auto-detect. |
+| v1.3+ | MCP tool wrappers, ONNX local embedder, `dejavue diff`, `dejavue promote`. |
 
 
 ## Status
 
-v1.1.0 — single-file Python CLI. 25 commands. 71/71 tests. Format stable. Not on PyPI.
+v1.2.0 — single-file Python CLI. 31 commands. 88/88 tests. Format stable. Not on PyPI.
 
 Design documents in repo:
 - `docs/01-origin.md` — original conversation that produced the spec

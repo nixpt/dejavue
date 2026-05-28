@@ -14,7 +14,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 DEJAVUE_DIR = Path(".dejavue")
 TIMELINE = DEJAVUE_DIR / "timeline.jsonl"
@@ -30,11 +30,16 @@ EMBEDDER_CIRCUIT = DEJAVUE_DIR / "embedder_circuit.json"
 
 HAS_FTS5 = None  # probed lazily on first db open
 
-# Semantic recall (v0.2). Pointed at an OpenAI-compatible /v1/embeddings endpoint
-# by default; works against ollama out of the box. Override per-repo via env vars.
+# Semantic recall (v0.2+). DEJAVUE_EMBEDDER_URL="auto" (or unset) tries ollama
+# first, then OpenAI (if OPENAI_API_KEY is set), then disables embedding.
+# Set DEJAVUE_EMBEDDER_URL to a full URL to pin a specific endpoint.
 DEFAULT_EMBEDDER_URL = "http://localhost:11434/v1/embeddings"
 DEFAULT_EMBEDDER_MODEL = "nomic-embed-text"
 EMBEDDER_TIMEOUT_S = 5.0
+
+# Valid event sub-types for decision/note commands (stored as "event_type" field).
+DECISION_TYPES = {"decision", "blocker", "claim", "question", "experiment", "checkpoint"}
+NOTE_TYPES     = {"note", "blocker", "claim", "question", "observation"}
 
 # flock support (POSIX only; graceful no-op on Windows)
 try:
@@ -506,6 +511,10 @@ def cmd_changed(args):
 def cmd_decision(args):
     maybe_show_worthiness()
     ts = now()
+    event_type = getattr(args, "event_type", "decision") or "decision"
+    if event_type not in DECISION_TYPES:
+        print(f"Unknown --type '{event_type}'. Valid: {', '.join(sorted(DECISION_TYPES))}")
+        return
     rejected = []
     if args.rejected:
         for r in args.rejected:
@@ -515,7 +524,8 @@ def cmd_decision(args):
                 opt, reason = r, ""
             rejected.append({"option": opt, "reason": reason})
 
-    entry = f"\n## {ts} — {args.title}\n\nReason:\n{args.reason}\n"
+    type_label = f"[{event_type.upper()}] " if event_type != "decision" else ""
+    entry = f"\n## {ts} — {type_label}{args.title}\n\nReason:\n{args.reason}\n"
     if rejected:
         entry += "\nRejected alternatives:\n"
         for ra in rejected:
@@ -532,13 +542,14 @@ def cmd_decision(args):
     append_event({
         "agent": resolve_agent(args.agent),
         "event": "decision",
+        "event_type": event_type,
         "decision_title": args.title,
         "decision_reason": args.reason,
-        "summary": f"Decision: {args.title}",
+        "summary": f"{event_type.capitalize()}: {args.title}",
         "rejected_alternatives": rejected,
         "outcome": args.outcome or "",
     })
-    print(f"Decision recorded: {args.title}")
+    print(f"{event_type.capitalize()} recorded: {args.title}")
 
 
 def cmd_state(args):
@@ -600,8 +611,9 @@ def cmd_context(args):
                 print()
 
     if TIMELINE.exists():
-        print("--- recent timeline (last 10) ---\n")
-        lines = TIMELINE.read_text(encoding="utf-8").splitlines()[-10:]
+        n = getattr(args, "n", 10) or 10
+        print(f"--- recent timeline (last {n}) ---\n")
+        lines = TIMELINE.read_text(encoding="utf-8").splitlines()[-n:]
         for line in lines:
             try:
                 ev = json.loads(line)
@@ -1125,13 +1137,18 @@ def cmd_blame(args):
 def cmd_note(args):
     """Lightweight timestamped note, between annotate and decision."""
     maybe_show_worthiness()
+    event_type = getattr(args, "event_type", "note") or "note"
+    if event_type not in NOTE_TYPES:
+        print(f"Unknown --type '{event_type}'. Valid: {', '.join(sorted(NOTE_TYPES))}")
+        return
     append_event({
         "agent": resolve_agent(args.agent),
         "event": "note",
+        "event_type": event_type,
         "summary": args.text,
         "tag": args.tag or "",
     })
-    print("Note recorded.")
+    print(f"{event_type.capitalize()} recorded.")
 
 
 def cmd_since(args):
@@ -1492,25 +1509,63 @@ def _line_hash(line: str) -> str:
 
 
 def _embedder_url() -> str:
-    return os.environ.get("DEJAVUE_EMBEDDER_URL", DEFAULT_EMBEDDER_URL)
+    val = os.environ.get("DEJAVUE_EMBEDDER_URL", "")
+    if val and val != "auto":
+        return val
+    cfg = _load_config()
+    if cfg.get("embedder_url") and cfg["embedder_url"] != "auto":
+        return cfg["embedder_url"]
+    # Auto-detect: try ollama, then OpenAI, then ""
+    return _auto_detect_embedder_url() or DEFAULT_EMBEDDER_URL
 
 
 def _embedder_model() -> str:
-    return os.environ.get("DEJAVUE_EMBEDDER_MODEL", DEFAULT_EMBEDDER_MODEL)
+    val = os.environ.get("DEJAVUE_EMBEDDER_MODEL", "")
+    if val:
+        return val
+    cfg = _load_config()
+    return cfg.get("embedder_model", "") or DEFAULT_EMBEDDER_MODEL
+
+
+def _auto_detect_embedder_url() -> str:
+    """Return the first available embedder URL, or "" if none reachable."""
+    # 1. Ollama (local)
+    ollama_url = "http://localhost:11434/v1/embeddings"
+    try:
+        req = urllib.request.Request(
+            "http://localhost:11434/api/version",
+            method="GET",
+        )
+        with urllib.request.urlopen(req, timeout=1.0):
+            return ollama_url
+    except Exception:
+        pass
+    # 2. OpenAI (if key available)
+    if os.environ.get("OPENAI_API_KEY"):
+        return "https://api.openai.com/v1/embeddings"
+    return ""
 
 
 def _embed_one(text):
     """POST an OpenAI-compatible /v1/embeddings request. Returns vec or None on any failure.
-    Respects the circuit breaker — returns None immediately when the circuit is open."""
+    Respects the circuit breaker — returns None immediately when the circuit is open.
+    Automatically sets Authorization header when endpoint is OpenAI."""
     if not text:
         return None
     if _circuit_open():
         return None
-    body = json.dumps({"model": _embedder_model(), "input": text}).encode("utf-8")
+    url = _embedder_url()
+    model = _embedder_model()
+    body = json.dumps({"model": model, "input": text}).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    if "openai.com" in url:
+        api_key = os.environ.get("OPENAI_API_KEY", "")
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
     req = urllib.request.Request(
-        _embedder_url(),
+        url,
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     try:
@@ -1534,9 +1589,13 @@ def _embed_one(text):
     return [float(x) for x in vec]
 
 
-def _read_embeddings_cache():
+def _read_embeddings_cache(model_filter=None):
+    """Return {hash: vec} from embeddings.jsonl.
+    If model_filter is given, only return entries matching that model
+    (prevents silently using stale vectors when the model changes)."""
     if not EMBEDDINGS.exists():
         return {}
+    active_model = model_filter or _embedder_model()
     out = {}
     for line in EMBEDDINGS.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -1548,8 +1607,11 @@ def _read_embeddings_cache():
             continue
         h = row.get("hash")
         vec = row.get("vec")
+        row_model = row.get("model", "")
+        # Accept entries with matching model or no model field (legacy)
         if isinstance(h, str) and isinstance(vec, list):
-            out[h] = vec
+            if not row_model or row_model == active_model:
+                out[h] = vec
     return out
 
 
@@ -1695,6 +1757,231 @@ def cmd_recall(args):
         print(f"    {snippet}\n")
 
 
+def cmd_stats(args):
+    """Timeline statistics: event counts by type and by agent, date range."""
+    events = _load_events()
+    if not events:
+        print("No events in timeline.")
+        return
+
+    dates = [ev.get("ts", "")[:10] for ev in events if ev.get("ts")]
+    by_type = {}
+    by_agent = {}
+    by_etype = {}  # event_type field (decision sub-types)
+    by_tag = {}
+
+    for ev in events:
+        t = ev.get("event", "?")
+        by_type[t] = by_type.get(t, 0) + 1
+        a = ev.get("agent") or "unknown"
+        by_agent[a] = by_agent.get(a, 0) + 1
+        et = ev.get("event_type", "")
+        if et and et not in (t, ""):
+            by_etype[et] = by_etype.get(et, 0) + 1
+        tag = ev.get("tag", "")
+        if tag:
+            by_tag[tag] = by_tag.get(tag, 0) + 1
+
+    print("Timeline statistics:\n")
+    print(f"  Total events : {len(events)}")
+    if dates:
+        print(f"  Date range   : {min(dates)} – {max(dates)}")
+    if TIMELINE.exists():
+        size_kb = TIMELINE.stat().st_size // 1024
+        print(f"  File size    : {size_kb} KB")
+
+    print("\n  By event type:")
+    for t, count in sorted(by_type.items(), key=lambda x: -x[1]):
+        bar = "█" * min(count, 40)
+        print(f"    {t:<20} {count:>4}  {bar}")
+
+    if by_etype:
+        print("\n  By sub-type (event_type field):")
+        for et, count in sorted(by_etype.items(), key=lambda x: -x[1]):
+            print(f"    {et:<20} {count:>4}")
+
+    print("\n  By agent:")
+    for a, count in sorted(by_agent.items(), key=lambda x: -x[1]):
+        print(f"    {a:<20} {count:>4}")
+
+    if by_tag:
+        print("\n  By tag:")
+        for tag, count in sorted(by_tag.items(), key=lambda x: -x[1]):
+            print(f"    #{tag:<19} {count:>4}")
+
+
+def cmd_export(args):
+    """Export dejavue memory as JSON or Markdown."""
+    fmt = getattr(args, "format", "json") or "json"
+
+    events = _load_events()
+    state_text = STATE.read_text(encoding="utf-8") if STATE.exists() else ""
+    decisions_text = DECISIONS.read_text(encoding="utf-8") if DECISIONS.exists() else ""
+    handoff_text = HANDOFF.read_text(encoding="utf-8") if HANDOFF.exists() else ""
+
+    refs = {}
+    if REFERENCES.exists():
+        for ref in sorted(REFERENCES.glob("*.md")):
+            refs[ref.name] = ref.read_text(encoding="utf-8")
+
+    if fmt == "json":
+        data = {
+            "dejavue_version": VERSION,
+            "exported_at": now(),
+            "state": state_text,
+            "handoff": handoff_text,
+            "decisions": decisions_text,
+            "references": refs,
+            "events": events,
+        }
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+
+    elif fmt == "md":
+        out = [f"# Dejavue Memory Export\n\n_Exported {now()} by dejavue {VERSION}_\n"]
+
+        if handoff_text:
+            out.append(f"\n---\n\n{handoff_text}")
+        if state_text:
+            out.append(f"\n---\n\n{state_text}")
+        if decisions_text:
+            out.append(f"\n---\n\n{decisions_text}")
+        for name, content in refs.items():
+            out.append(f"\n---\n\n<!-- reference: {name} -->\n\n{content}")
+        if events:
+            out.append("\n---\n\n## Timeline\n\n")
+            for ev in events:
+                ts = (ev.get("ts") or "")[:19]
+                kind = ev.get("event", "")
+                agent = ev.get("agent", "")
+                summary = ev.get("summary", "")
+                out.append(f"- `{ts}` **{kind}** ({agent}) — {summary}\n")
+        print("".join(out))
+
+    else:
+        print(f"Unknown format '{fmt}'. Valid: json, md")
+        sys.exit(1)
+
+
+def cmd_reference(args):
+    """Manage reference cards in .dejavue/references/."""
+    REFERENCES.mkdir(exist_ok=True)
+    action = args.action
+
+    if action == "list":
+        refs = sorted(REFERENCES.glob("*.md"))
+        if not refs:
+            print(f"No reference cards in {REFERENCES}")
+            print("Create one with: dejavue reference create <name>")
+            return
+        for ref in refs:
+            first = next((l.lstrip("# ").strip() for l in ref.read_text(encoding="utf-8").splitlines() if l.strip()), ref.stem)
+            print(f"  {ref.stem:<20}  {first[:60]}")
+
+    elif action == "create":
+        name = args.name
+        if not name.endswith(".md"):
+            name += ".md"
+        path = REFERENCES / name
+        if path.exists() and not getattr(args, "force", False):
+            print(f"{path} already exists. Use --force to overwrite.")
+            return
+        title = getattr(args, "title", None) or args.name.replace("-", " ").replace("_", " ").title()
+        if getattr(args, "content", None):
+            path.write_text(args.content, encoding="utf-8")
+        else:
+            template = getattr(args, "template", "default")
+            if template == "api":
+                body = (
+                    f"# {title}\n\n"
+                    "<!-- API reference card -->\n\n"
+                    "## Endpoint\n\n`METHOD /path`\n\n"
+                    "## Parameters\n\n| Name | Type | Required | Description |\n|---|---|---|---|\n\n"
+                    "## Example\n\n```\n\n```\n\n"
+                    "## Notes\n\n"
+                )
+            elif template == "design":
+                body = (
+                    f"# {title}\n\n"
+                    "<!-- Design reference card -->\n\n"
+                    "## Overview\n\n\n\n"
+                    "## Key invariants\n\n- \n\n"
+                    "## Interfaces\n\n\n\n"
+                    "## Why this design\n\n"
+                )
+            else:  # default
+                body = (
+                    f"# {title}\n\n"
+                    "<!-- Reference card: fill in and commit -->\n\n\n"
+                )
+            path.write_text(body, encoding="utf-8")
+        append_event({
+            "agent": resolve_agent(getattr(args, "agent", None)),
+            "event": "reference_created",
+            "summary": f"Created reference card: {args.name}",
+            "path": str(path),
+        })
+        print(f"Created {path}")
+
+    elif action == "update":
+        name = args.name
+        if not name.endswith(".md"):
+            name += ".md"
+        path = REFERENCES / name
+        if not path.exists():
+            print(f"{path} does not exist. Create it first: dejavue reference create {args.name}")
+            return
+        content = getattr(args, "content", None)
+        if content is None:
+            print("Provide --content TEXT to update the reference card.")
+            return
+        path.write_text(content, encoding="utf-8")
+        append_event({
+            "agent": resolve_agent(getattr(args, "agent", None)),
+            "event": "reference_updated",
+            "summary": f"Updated reference card: {args.name}",
+            "path": str(path),
+        })
+        print(f"Updated {path}")
+
+    elif action == "view":
+        name = args.name
+        if not name.endswith(".md"):
+            name += ".md"
+        path = REFERENCES / name
+        if not path.exists():
+            print(f"{path} does not exist.")
+            return
+        print(path.read_text(encoding="utf-8"))
+
+
+def cmd_link(args):
+    """Show dejavue events associated with a git commit SHA."""
+    sha = args.sha
+    short = sha[:7]
+    events = _load_events()
+
+    related = [ev for ev in events if
+               ev.get("commit", "")[:7] == short or
+               short in ev.get("summary", "") or
+               short in ev.get("decision_reason", "")]
+
+    if not related:
+        print(f"No dejavue events recorded for commit {short}.")
+        print(f"(Events are captured by the post-commit hook — run `dejavue init` to install it.)")
+        return
+
+    print(f"Dejavue events for commit {short}:\n")
+    for ev in related:
+        ts = (ev.get("ts") or "")[:19]
+        kind = ev.get("event", "")
+        agent = ev.get("agent", "")
+        summary = ev.get("summary", "")
+        print(f"  [{ts}] {kind} ({agent})")
+        if summary:
+            print(f"    {summary}")
+        print()
+
+
 def cmd_worthiness(args):
     print_worthiness()
 
@@ -1814,13 +2101,16 @@ def main():
     p.add_argument("--commit", default=None, help="Commit SHA (used with --auto).")
     p.set_defaults(func=cmd_changed)
 
-    p = sub.add_parser("decision", help="Record architectural decision.")
+    p = sub.add_parser("decision", help="Record architectural decision (or blocker/claim/question/experiment).")
     p.add_argument("title")
     p.add_argument("--reason", required=True)
     p.add_argument("--rejected", action="append", default=[], metavar="OPTION",
                    help="Rejected alternative (repeatable). Format: 'option: reason'")
     p.add_argument("--outcome", default=None,
                    help="What shipped / current state (optional).")
+    p.add_argument("--type", dest="event_type", default="decision",
+                   choices=sorted(DECISION_TYPES),
+                   help="Event sub-type (default: decision).")
     p.add_argument("--agent", default=None)
     p.set_defaults(func=cmd_decision)
 
@@ -1836,9 +2126,11 @@ def main():
     p.add_argument("--agent", default=None)
     p.set_defaults(func=cmd_handoff)
 
-    p = sub.add_parser("context", help="Print all .md files + last 10 timeline entries.")
+    p = sub.add_parser("context", help="Print all .md files + last N timeline entries.")
     p.add_argument("--check-stale", action="store_true", dest="check_stale",
                    help="Only print staleness warnings (used by pre-push hook).")
+    p.add_argument("-n", type=int, default=10, metavar="N",
+                   help="Number of recent events to show (default 10).")
     p.set_defaults(func=cmd_context)
 
     p = sub.add_parser("status", help="One-line health view: agent, last decision, open next-steps.")
@@ -1888,9 +2180,12 @@ def main():
     p.add_argument("path")
     p.set_defaults(func=cmd_blame)
 
-    p = sub.add_parser("note", help="Record a lightweight timestamped note.")
+    p = sub.add_parser("note", help="Record a lightweight timestamped note (or observation/claim/question).")
     p.add_argument("text")
     p.add_argument("--tag", default=None, help="Optional tag for filtering.")
+    p.add_argument("--type", dest="event_type", default="note",
+                   choices=sorted(NOTE_TYPES),
+                   help="Event sub-type (default: note).")
     p.add_argument("--agent", default=None)
     p.set_defaults(func=cmd_note)
 
@@ -1938,6 +2233,44 @@ def main():
     p.add_argument("doc")
     p.add_argument("note")
     p.set_defaults(func=cmd_annotate)
+
+    p = sub.add_parser("stats", help="Timeline statistics: counts by type, by agent, date range.")
+    p.set_defaults(func=cmd_stats)
+
+    p = sub.add_parser("export", help="Export dejavue memory as JSON or Markdown.")
+    p.add_argument("--format", choices=["json", "md"], default="json",
+                   help="Output format (default: json).")
+    p.set_defaults(func=cmd_export)
+
+    p = sub.add_parser("reference", help="Manage reference cards in .dejavue/references/.")
+    ref_sub = p.add_subparsers(dest="action", required=True)
+
+    rs = ref_sub.add_parser("list", help="List all reference cards.")
+    rs = ref_sub.add_parser("create", help="Create a new reference card.")
+    rs.add_argument("name", help="Card name (becomes references/<name>.md).")
+    rs.add_argument("--title", default=None, help="Title text (defaults to name).")
+    rs.add_argument("--content", default=None, help="Card content (overrides template).")
+    rs.add_argument("--template", choices=["default", "api", "design"], default="default")
+    rs.add_argument("--force", action="store_true")
+    rs.add_argument("--agent", default=None)
+    rs = ref_sub.add_parser("update", help="Overwrite a reference card's content.")
+    rs.add_argument("name")
+    rs.add_argument("--content", required=True)
+    rs.add_argument("--agent", default=None)
+    rs = ref_sub.add_parser("view", help="Print a reference card.")
+    rs.add_argument("name")
+    p.set_defaults(func=cmd_reference)
+
+    p = sub.add_parser("link", help="Show dejavue events recorded for a git commit SHA.")
+    p.add_argument("sha", help="Git commit SHA or short SHA.")
+    p.set_defaults(func=cmd_link)
+
+    # 'search' is a discoverable alias for 'recall'
+    p = sub.add_parser("search", help="Alias for recall — keyword search over all artifacts.")
+    p.add_argument("query")
+    p.add_argument("--limit", type=int, default=10, metavar="N")
+    p.add_argument("--semantic", action="store_true")
+    p.set_defaults(func=cmd_recall)
 
     args = parser.parse_args()
     args.func(args)
