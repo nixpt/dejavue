@@ -967,11 +967,232 @@ test_annotate_unknown_doc() {
     rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# ── v1.0 new-feature tests ─────────────────────────────────────────────────────
+
+test_version_prints_version() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    out="$(dv version)"
+    assert_contains "version output" "$out" "dejavue 1.0.0"
+}
+
+test_init_creates_prepush_hook() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    git_dir="$(git rev-parse --git-dir)"
+    assert_file_exists "pre-push hook" "$git_dir/hooks/pre-push"
+    hook_content="$(cat "$git_dir/hooks/pre-push")"
+    assert_contains "pre-push marker" "$hook_content" "dejavue pre-push"
+}
+
+test_init_creates_gitignore() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    assert_file_exists "gitignore" ".gitignore"
+    content="$(cat .gitignore)"
+    assert_contains "fts.db ignored" "$content" ".dejavue/fts.db"
+    assert_contains "locks ignored" "$content" ".dejavue/.locks/"
+}
+
+test_init_map_scaffolds_map_md() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init --map >/dev/null 2>&1
+    assert_file_exists "map.md" ".dejavue/references/map.md"
+    content="$(cat .dejavue/references/map.md)"
+    assert_contains "map has header" "$content" "Codebase Map"
+    assert_contains "map has layout section" "$content" "Top-level layout"
+    assert_contains "map has invariants section" "$content" "Design invariants"
+}
+
+test_init_ingest_auto_ingests() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    echo "# Test README" > README.md
+    git add README.md && git commit -q -m "add readme" 2>/dev/null || true
+    dv init --ingest >/dev/null 2>&1
+    assert_file_exists "ingested lock" ".dejavue/ingested.lock"
+}
+
+test_agent_identity_from_env() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    AGENT_NAME=testbot dv start --goal "test env agent" >/dev/null 2>&1
+    events="$(cat .dejavue/timeline.jsonl)"
+    assert_contains "AGENT_NAME used" "$events" '"testbot"'
+}
+
+test_agent_identity_explicit_overrides_env() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    AGENT_NAME=envbot dv start --agent explicitbot --goal "test" >/dev/null 2>&1
+    events="$(cat .dejavue/timeline.jsonl)"
+    assert_contains "explicit agent wins" "$events" '"explicitbot"'
+    assert_not_contains "env agent suppressed" "$events" '"envbot"'
+}
+
+test_context_shows_staleness_warnings() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    # state.md is a stub after init
+    out="$(dv context 2>&1)"
+    assert_contains "stub warning" "$out" "stub"
+}
+
+test_context_check_stale_prints_to_stderr() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    stderr_out="$(dv context --check-stale 2>&1 >/dev/null)"
+    assert_contains "check-stale warning" "$stderr_out" "state"
+}
+
+test_context_lists_references_when_present() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    mkdir -p .dejavue/references
+    echo "# Architecture Overview" > .dejavue/references/arch.md
+    out="$(dv context 2>&1)"
+    assert_contains "references section" "$out" "references"
+    assert_contains "reference file listed" "$out" "arch.md"
+}
+
+test_status_basic_output() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv start --agent claude --goal "test status" >/dev/null 2>&1
+    out="$(dv status 2>&1)"
+    assert_contains "status shows agent" "$out" "claude"
+    assert_contains "status shows events" "$out" "Events"
+}
+
+test_status_shows_last_decision() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "Use FTS5" --reason "fast stdlib" --agent claude >/dev/null 2>&1
+    out="$(dv status 2>&1)"
+    assert_contains "status shows decision" "$out" "Use FTS5"
+}
+
+test_log_basic() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv start --agent claude --goal "test log" >/dev/null 2>&1
+    dv decision "test decision" --reason "just testing" >/dev/null 2>&1
+    out="$(dv log 2>&1)"
+    assert_contains "log shows events" "$out" "session_start"
+    assert_contains "log shows decision" "$out" "decision"
+}
+
+test_log_oneline() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv start --agent claude --goal "test log oneline" >/dev/null 2>&1
+    out="$(dv log --oneline 2>&1)"
+    assert_contains "oneline has event type" "$out" "session_start"
+}
+
+test_log_type_filter() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv start --agent claude --goal "test" >/dev/null 2>&1
+    dv decision "arch decision" --reason "testing" >/dev/null 2>&1
+    out="$(dv log --type decision 2>&1)"
+    assert_contains "filtered log shows decision" "$out" "decision"
+    assert_not_contains "filtered log hides start" "$out" "session_start"
+}
+
+test_blame_finds_relevant_events() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "Add parser module" --reason "need argument parsing for parser.py" >/dev/null 2>&1
+    out="$(dv blame parser.py 2>&1)"
+    assert_contains "blame finds decision" "$out" "Add parser module"
+}
+
+test_blame_no_results() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    out="$(dv blame nonexistent_totally_absent_file.xyz 2>&1)"
+    assert_contains "blame no results" "$out" "No events found"
+}
+
+test_note_records_event() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv note "quick thought about the API design" --tag api >/dev/null 2>&1
+    events="$(cat .dejavue/timeline.jsonl)"
+    assert_contains "note event recorded" "$events" '"note"'
+    assert_contains "note text in timeline" "$events" "quick thought about the API design"
+    assert_contains "note tag in timeline" "$events" '"api"'
+}
+
+test_ingest_generate_map() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    # Create a Python project marker
+    echo '[project]
+name = "myapp"' > pyproject.toml
+    dv ingest --force --generate-map >/dev/null 2>&1
+    assert_file_exists "map.md generated" ".dejavue/references/map.md"
+    content="$(cat .dejavue/references/map.md)"
+    assert_contains "map has header" "$content" "Codebase Map"
+    assert_contains "map mentions python" "$content" "Python"
+}
+
+test_decision_outcome_flag() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "Use JSONL format" \
+        --reason "append-only, merge-friendly" \
+        --outcome "Shipped in v0.1, working well" >/dev/null 2>&1
+    doc="$(cat .dejavue/decisions.md)"
+    assert_contains "outcome in decisions.md" "$doc" "Shipped in v0.1"
+    events="$(cat .dejavue/timeline.jsonl)"
+    assert_contains "outcome in timeline" "$events" "Shipped in v0.1"
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
     echo "========================================"
-    echo "  dejavue v0.1 integration test suite"
+    echo "  dejavue v1.0.0 integration test suite"
     echo "========================================"
     echo ""
     echo "  dejavue: $DEJAVUE"
@@ -1027,6 +1248,26 @@ main() {
     run_test "31 list --type events shows only events"      test_list_type_events
     run_test "32 annotate handoff appends note"             test_annotate_handoff
     run_test "33 annotate unknown doc prints Unknown doc"   test_annotate_unknown_doc
+    run_test "34 version prints 1.0.0"                      test_version_prints_version
+    run_test "35 init creates pre-push hook"                test_init_creates_prepush_hook
+    run_test "36 init appends gitignore entries"            test_init_creates_gitignore
+    run_test "37 init --map scaffolds map.md"               test_init_map_scaffolds_map_md
+    run_test "38 init --ingest auto-ingests on init"        test_init_ingest_auto_ingests
+    run_test "39 agent identity from AGENT_NAME env"        test_agent_identity_from_env
+    run_test "40 explicit --agent overrides env"            test_agent_identity_explicit_overrides_env
+    run_test "41 context shows staleness warning for stub"  test_context_shows_staleness_warnings
+    run_test "42 context --check-stale warns on stderr"     test_context_check_stale_prints_to_stderr
+    run_test "43 context lists references/ when populated"  test_context_lists_references_when_present
+    run_test "44 status shows agent and event count"        test_status_basic_output
+    run_test "45 status shows last decision"                test_status_shows_last_decision
+    run_test "46 log shows events"                          test_log_basic
+    run_test "47 log --oneline is compact"                  test_log_oneline
+    run_test "48 log --type filters event type"             test_log_type_filter
+    run_test "49 blame finds events for file path"          test_blame_finds_relevant_events
+    run_test "50 blame reports no-results gracefully"       test_blame_no_results
+    run_test "51 note records event with tag"               test_note_records_event
+    run_test "52 ingest --generate-map creates map.md"      test_ingest_generate_map
+    run_test "53 decision --outcome stored in doc+timeline" test_decision_outcome_flag
 
     echo ""
     echo "========================================"

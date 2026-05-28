@@ -32,16 +32,21 @@ reminder and the command quick-reference.
 
 | Command | What |
 |---|---|
-| `dejavue context` | Boot packet — handoff + state + decisions + last 10 events. Run on arrival. |
+| `dejavue context` | Boot packet — handoff + state + decisions + references + last 10 events + staleness warnings. Run on arrival. |
+| `dejavue status` | One-liner health: agent, event count, last decision, open next-steps. |
 | `dejavue start --agent <n> --goal <g>` | Mark a session start (enables `since --agent`) |
 | `dejavue decision "<title>" --reason <r> --rejected "<alt>: <why>"` | Capture an architectural decision + rejected alternatives |
 | `dejavue state --summary <s>` | Overwrite state.md — "what's true right now" |
 | `dejavue handoff --summary <s> --next <n>` | Structured next-session brief |
-| `dejavue annotate {state,handoff,decisions} "<note>"` | Lightweight timestamped note, no rewrite |
+| `dejavue note "<text>" --tag <t>` | Lightweight timestamped note (between annotate and decision) |
+| `dejavue annotate {state,handoff,decisions} "<note>"` | Append timestamped note to a doc without rewriting it |
 | `dejavue since <date\|commit\|--agent>` | Temporal delta — "what changed since…" |
-| `dejavue recall "<query>"` | FTS5 keyword search across all artifacts |
+| `dejavue log [--since] [--agent] [--type] [--oneline]` | Formatted timeline view with filters |
+| `dejavue blame <file>` | "Why does this file exist?" — decisions + events mentioning the path |
+| `dejavue recall "<query>"` | FTS5 keyword (or `--semantic` cosine) search across all artifacts |
 | `dejavue get {state,handoff,decisions,...}` | Direct fetch when you know what you want |
 | `dejavue worthiness` | The capture/skip gate — print when unsure what to record |
+| `dejavue version` | Print the installed version |
 
 If the CLI isn't on PATH but the repo has a copy at `dejavue.py`:
 
