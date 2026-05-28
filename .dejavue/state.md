@@ -1,5 +1,5 @@
 # State
 
-Updated: 2026-05-28T00:16:44-05:00
+Updated: 2026-05-28T00:32:10-05:00
 
-v1.2.0 released. 31 commands: added --type on decision/note, stats, export, reference {create/list/update/view}, link, search, context -n, tiered embedder auto-detect, model-aware embedding cache. 88/88 tests.
+v1.3.0 released. 36 commands: diff, timeline, check --fix, tag {list,filter}, note-commit (git notes), event_type in FTS5, since shows notes. 100/100 tests.

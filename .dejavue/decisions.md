@@ -128,3 +128,12 @@ Rejected alternatives:
 Outcome:
 v1.2.0 tagged. 31 commands, 88/88 tests.
 
+
+## 2026-05-28T00:32:10-05:00 — v1.3.0 scope: diff + timeline + check-fix + tag + note-commit + event_type FTS
+
+Reason:
+Natural v1.3 wave: comparison (diff), visualization (timeline), operations (check --fix), organization (tag list/filter), git integration (note-commit via git notes), and search improvements (event_type in FTS, since shows notes). All independently valuable; coherent as 'deepen the tool rather than widen it' wave.
+
+Outcome:
+v1.3.0 tagged. 36 commands, 100/100 tests.
+

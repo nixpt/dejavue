@@ -82,13 +82,24 @@ Test gate achieved: 62/62 (was ≥50/50 target).
 - Tiered embedder auto-detect (ollama → OpenAI → FTS5 fallback)
 - Model-aware embedding cache (stale vectors from old model ignored)
 
-## 🔮 v1.3 candidates
+## ✅ v1.3.0 — depth + git integration wave (2026-05-28)
+
+36 commands, 100/100 tests.
+
+- `diff <from> [<to>]` — compare memory between two refs (dates or commits); unified diff of state.md/decisions.md + event window
+- `timeline [--by day/week/month] [--agent]` — ASCII bar chart of activity over time
+- `check --fix` — auto-repair: install missing hooks, .gitattributes, .gitignore, rebuild stale FTS
+- `tag {list, filter <tag>}` — list unique tags with counts; filter events by tag
+- `note-commit <sha>` — write git note linking commit to last dejavue event (`git notes append`)
+- `link` now reads git notes written by `note-commit`
+- `event_type` field indexed in FTS5 — `recall blocker` finds `--type blocker` events
+- `since` now shows a Notes section (notes in time window with tag + sub-type labels)
+
+## 🔮 v1.4 candidates
 
 ### High impact
 
-- **Commit-msg `Dejavue-Event:` trailer** (deferred from v0.3) — safe design
-  via `git notes` (metadata outside the commit, no SHA change) rather than
-  `interpret-trailers` (amend-from-hook loop risk).
+- **`dejavue diff --format patch`** — emit a machine-readable patch of decisions delta; useful for CI "what decisions changed in this PR?"
 - **`dejavue diff <from> [<to>]`** — compare dejavue state (decisions, state.md
   content) between two refs/dates. The "what changed in project memory between
   these two points?" view.
