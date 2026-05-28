@@ -1,12 +1,25 @@
 # Dejavue Roadmap
 
 Shipped vs in-flight vs future. For per-release details see `CHANGELOG.md`.
-For the design source-of-truth on the v0.3 wave see the references at the
-bottom.
 
 ---
 
 ## ✅ Shipped
+
+### v1.0.0 — stable release (2026-05-27)
+
+On-disk format frozen. 20 commands, 62/62 tests.
+
+**New commands:** `version`, `status`, `log` (+ --since/--agent/--type/--oneline),
+`blame`, `note`.
+
+**v0.3 wave (capture discipline + map):**
+- Ambient agent identity (AGENT_NAME / CLAUDE_CLI / GIT_AUTHOR_NAME / config file)
+- `context` staleness warnings + pre-push hook safety net
+- `init --ingest`, `init --map`, `ingest --generate-map`
+- `fcntl.flock` concurrent safety on FTS rebuild + ingest
+- Per-repo `.dejavue/config` defaults file
+- `.gitignore` entries installed by `dejavue init`
 
 ### v0.1 — first release (2026-05-13, internal session)
 
@@ -33,62 +46,54 @@ fallback. No new runtime deps (`urllib.request`).
 
 ---
 
-## 🚧 v0.3 — capture discipline + codebase map (in flight)
+## ✅ v0.3 — capture discipline + codebase map (shipped as v1.0.0)
 
-Driven by the external agent audit (`.workspace/teams/engineering/dejavue-assessment.md`
-in design lead's workspace) and the codebase-map spec
-(`projects/incubator/dejavue-map-spec.md`). Both authored by external agent under
-the engineering team.
+Phases 1-7 shipped in the v1.0.0 wave. Phase 6 (commit-msg
+`Dejavue-Event:` trailer via `git interpret-trailers`) deferred to v1.1 —
+the amend-from-hook pattern risks infinite loops and needs a safer design.
 
-Phased so each lands as a single logical commit:
-
-| Phase | Feature | Audit/spec ref |
-|-------|---------|----------------|
-| 1 | Ambient agent identity (`AGENT_NAME` / `CLAUDE_CLI` / `GIT_AUTHOR_NAME` resolver, replaces `default="unknown"`) | Audit §3 / Layer 3 |
-| 2 | `dejavue context` staleness warnings (state.md age, handoff stub, missing map.md) | Audit §4 / Layer 4 |
-| 3 | `dejavue init --ingest` (auto-backfill at init — audit tool-style backfill is the common case) | Audit §2 |
-| 4 | Codebase-map MVP: `dejavue init --map` scaffolds `references/`, `dejavue context` lists references, SKILL.md teaches discovery | Map spec Phases 2 + 4 + 5 |
-| 5 | Pre-push hook (secondary safety net — catches `--no-verify`, `--amend`, rebase, GitHub merges) | Audit §196 / Layer 1 |
-| 6 | Commit-msg `Dejavue-Event:` trailer (reverse git-link via `git interpret-trailers`) | Audit §198 + §456-476 (orchestration pattern §1) |
-| 7 | `dejavue ingest --generate-map` (lang-aware auto-population: Rust / Python / JS / Go) | Map spec §242-255 / Phase 3 |
-| 8 | Version bump → `0.3.0`, CHANGELOG entry, dogfood capture | — |
-
-Test gate: ≥50/50 pass (42 existing + ≥14 new from Phases 1-7).
+Test gate achieved: 62/62 (was ≥50/50 target).
 
 ---
 
-## 🔮 v0.4 candidates
+## 🔮 v1.1 candidates
 
-Pulled from the audit's wishlist (§70-93) + orchestration-pattern portability
-(§452-625) + memory core pattern portability (§629-855). Listed by impact-
-per-LoC; maintainer prioritizes for actual v0.4 scope when v0.3 settles.
+Items from the original v0.4 wishlist not yet shipped, plus the one deferred
+v0.3 phase. Listed by impact-per-LoC.
 
 ### High impact
 
-- **`dejavue blame <file>`** — "why does this file exist?" Surfaces decisions + state touching that path. ~30 LoC.
-- **`dejavue status`** — git-status-style one-liner ("active agent, last decision, handoff summary, open next-steps"). ~25 LoC.
-- **`dejavue log`** — formatted timeline view (oneline, --since, --agent). ~40 LoC.
-- **Tiered embedder fallback chain** (memory core port §634-657) — Local ONNX → Ollama → cloud API → FTS5. Backends return `None` rather than raising. ~80 LoC.
-- **Concurrent-safety locking** (audit §52) — `flock(2)` around fts.db rebuilds + ingest. v0.1.2 / v0.4 priority depending on maintainer choice.
+- **Commit-msg `Dejavue-Event:` trailer** (deferred from v0.3) — reverse
+  git-link via `git interpret-trailers`. Needs a safe design that avoids
+  amend-from-hook infinite loops.
+- **Tiered embedder fallback chain** — Local ONNX → Ollama → cloud API →
+  FTS5. Backends return `None` rather than raising. ~80 LoC.
+- **Embedding staleness tracking** — current cache key is content-hash only;
+  needs `(source_commit, source_path, content_hash)` triple. ~25 LoC.
+- **Circuit breaker for embedder reliability** — 5-minute cooldown after 3
+  consecutive failures. ~50 LoC.
 
 ### Medium impact
 
-- **Per-repo `.dejavue/config.toml`** (memory core port §744-771) — agent identity default, embedder URL, hook toggles, recall defaults. Optional file; absent = current behavior. ~40 LoC.
-- **`dejavue note <text> --tag <tag>`** (orchestration port §504-524) — lightweight fact storage between "nothing" and full `decision`. ~40 LoC.
-- **Embedding staleness tracking** (audit §84) — current cache key is content-hash only; needs `(source_commit, source_path, content_hash)` triple. ~25 LoC.
-- **Richer event-type taxonomy** (audit §716-741 + orchestration port §566-580) — domain field + new types (`blocker`, `claim`, `question`, `experiment`, `checkpoint`). ~30 LoC schema + recall filter.
-- **Circuit breaker for embedder reliability** (memory core port §659-685) — stop hammering a downed embedder; 5-minute cooldown after 3 failures. ~50 LoC.
+- **`dejavue archive --before <date>`** — timeline compaction for long-running
+  repos (1yr+ of `file_changed` events).
+- **`dejavue check`** — git-fsck equivalent: JSONL validity, FTS freshness,
+  cross-reference consistency.
+- **Richer event-type taxonomy** — domain field + new types (`blocker`,
+  `claim`, `question`, `experiment`, `checkpoint`). Recall filter support.
+- **`dejavue install-skill`** — auto-install the dejavue SKILL.md into the
+  user's agent system (Claude Code, Cursor, etc.) on first use.
+- **Reference frontmatter + templates** — structured metadata on
+  `references/*.md`; `dejavue reference --type api --name <foo>` scaffolds
+  from template.
 
 ### Lower impact / longer horizon
 
-- **`dejavue archive --before <date>`** (audit §86) — timeline compaction for 1yr+ repos.
-- **`dejavue check`** (audit §88) — git-fsck-equivalent: JSONL validity, FTS freshness, cross-reference consistency.
-- **`dejavue promote --to planning`** (audit §92) — concrete graduation path; spec before code.
-- **`dejavue install-skill`** (audit §62) — auto-install agent-system skills on dejavue install.
-- **`dejavue roster`** (orchestration port §597-612) — derive agent-activity timeline.
-- **First-use wizard** (audit §82) — 3-question init prompt to seed richer initial state.
-- **Multi-language project detection** (audit §90) — annotate `file_changed` events with lang/ecosystem context (Cargo.toml / package.json / pyproject.toml).
-- **Reference frontmatter + templates** (orchestration port §479-502 + §583-595) — structured metadata on `references/*.md`; `dejavue reference --type api --name <foo>` scaffolds from template.
+- **`dejavue roster`** — agent-activity timeline derived from `session_start`
+  events.
+- **First-use wizard** — 3-question init prompt to seed richer initial state.
+- **`dejavue promote --to planning`** — concrete graduation path to a richer
+  per-repo memory system; spec before code.
 
 ### MCP-only (separate horizon, memory-service ecosystem)
 
