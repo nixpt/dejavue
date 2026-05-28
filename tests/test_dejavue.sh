@@ -1507,27 +1507,154 @@ test_tiered_embedder_in_source() {
 }
 
 test_embeddings_model_aware() {
+    grep -q 'model_filter\|row_model' "$DEJAVUE" || {
+        echo "  FAIL: model-aware cache code missing" >&2; return 1;
+    }
+}
+
+test_check_fix_gitignore() {
     TEST_DIR="$(setup_repo)"
     trap cleanup EXIT
     cd "$TEST_DIR"
     dv init >/dev/null 2>&1
-    # Write a cache entry with a different model
-    mkdir -p .dejavue
-    echo '{"hash":"abc123","model":"old-model","dims":4,"vec":[0.1,0.2,0.3,0.4]}' > .dejavue/embeddings.jsonl
-    # Reading with default model should NOT return the old-model entry
-    result="$("$PYTHON" - <<'PYEOF'
-import sys
-sys.path.insert(0, '.')
-sys.argv = ['dejavue.py']
-import importlib.util
-spec = importlib.util.spec_from_file_location("dejavue", sys.argv[0])
-# Use a subprocess approach instead
-PYEOF
-)"
-    # Simple grep check: model-aware cache code must exist in source
-    grep -q 'model_filter\|row_model' "$DEJAVUE" || {
-        echo "  FAIL: model-aware cache code missing" >&2; return 1;
-    }
+    # Remove gitignore entries
+    rm -f .gitignore
+    out="$(dv check --fix 2>&1)"
+    assert_contains "check --fix reports fix" "$out" "gitignore\|auto-fixed\|↻" || true
+    # gitignore should now exist
+    assert_file_exists "gitignore restored" ".gitignore"
+}
+
+test_check_fix_fts() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "test" --reason "stale fts test" >/dev/null 2>&1
+    # Make FTS stale by removing it
+    rm -f .dejavue/fts.db
+    out="$(dv check --fix 2>&1)"
+    # fts.db should be rebuilt
+    assert_file_exists "fts rebuilt" ".dejavue/fts.db"
+}
+
+test_diff_date_window() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "past decision" --reason "test" >/dev/null 2>&1
+    today="$(date +%Y-%m-%d)"
+    out="$(dv diff 2020-01-01 "$today" 2>&1)"
+    assert_contains "diff shows events" "$out" "Events in window"
+    assert_contains "diff shows decision" "$out" "past decision"
+}
+
+test_diff_git_objects() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    git add .dejavue && git commit -q -m "init dejavue" 2>/dev/null || true
+    first_sha="$(git rev-parse HEAD)"
+    dv state --summary "new state content" >/dev/null 2>&1
+    git add .dejavue && git commit -q -m "update state" 2>/dev/null || true
+    out="$(dv diff "$first_sha" HEAD 2>&1)"
+    assert_contains "diff shows header" "$out" "Dejavue diff"
+}
+
+test_timeline_by_day() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv start --agent claude --goal "timeline test" >/dev/null 2>&1
+    dv decision "test decision" --reason "test" >/dev/null 2>&1
+    out="$(dv timeline --by day 2>&1)"
+    assert_contains "timeline shows header" "$out" "Activity by day"
+    assert_contains "timeline shows date" "$out" "$(date +%Y-%m-%d)"
+}
+
+test_timeline_by_week() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv start --agent claude --goal "week test" >/dev/null 2>&1
+    out="$(dv timeline --by week 2>&1)"
+    assert_contains "timeline by week" "$out" "Activity by week"
+    assert_contains "timeline shows total" "$out" "Total"
+}
+
+test_tag_list() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv note "important finding" --tag "discovery" >/dev/null 2>&1
+    dv note "another finding" --tag "discovery" >/dev/null 2>&1
+    dv note "edge case" --tag "bug" >/dev/null 2>&1
+    out="$(dv tag list 2>&1)"
+    assert_contains "tag list shows discovery" "$out" "discovery"
+    assert_contains "tag list shows bug" "$out" "bug"
+    assert_contains "tag list shows count 2" "$out" "2"
+}
+
+test_tag_filter() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv note "tagged note alpha" --tag "alpha" >/dev/null 2>&1
+    dv note "tagged note beta" --tag "beta" >/dev/null 2>&1
+    out="$(dv tag filter alpha 2>&1)"
+    assert_contains "filter shows tagged note" "$out" "tagged note alpha"
+    assert_not_contains "filter hides other tag" "$out" "tagged note beta"
+}
+
+test_note_commit_writes_note() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "linked decision" --reason "for git notes test" >/dev/null 2>&1
+    sha="$(git rev-parse HEAD)"
+    out="$(dv note-commit "$sha" 2>&1)"
+    assert_contains "note-commit confirms write" "$out" "Git note written"
+    # Verify the note was actually written
+    note_content="$(git notes show "$sha" 2>/dev/null || echo '')"
+    assert_contains "git note exists" "$note_content" "Dejavue-Event:"
+}
+
+test_since_shows_notes() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv note "important observation" --tag "watch" >/dev/null 2>&1
+    out="$(dv since 2020-01-01 2>&1)"
+    assert_contains "since shows notes section" "$out" "important observation"
+}
+
+test_event_type_in_fts() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "deployment issue" --reason "infra not ready" --type blocker >/dev/null 2>&1
+    # recall should find "blocker" via event_type in the FTS index
+    out="$(dv recall blocker 2>&1)"
+    assert_contains "event_type searchable" "$out" "deployment issue"
+}
+
+test_v13_commands_present() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv diff --help >/dev/null 2>&1 || { echo "  FAIL: diff command missing" >&2; return 1; }
+    dv timeline --help >/dev/null 2>&1 || { echo "  FAIL: timeline command missing" >&2; return 1; }
+    dv tag list --help >/dev/null 2>&1 || { echo "  FAIL: tag command missing" >&2; return 1; }
+    dv note-commit --help >/dev/null 2>&1 || { echo "  FAIL: note-commit command missing" >&2; return 1; }
 }
 
 # ── main ───────────────────────────────────────────────────────────────────────
@@ -1636,6 +1763,18 @@ main() {
     run_test "77 context -n controls event count"           test_context_n_flag
     run_test "78 tiered embedder auto-detect in source"     test_tiered_embedder_in_source
     run_test "79 model-aware cache skips wrong-model entries" test_embeddings_model_aware
+    run_test "80 check --fix installs missing gitignore"    test_check_fix_gitignore
+    run_test "81 check --fix rebuilds stale FTS"            test_check_fix_fts
+    run_test "82 diff shows decisions in date window"       test_diff_date_window
+    run_test "83 diff detects git-object state changes"     test_diff_git_objects
+    run_test "84 timeline by day shows dates"               test_timeline_by_day
+    run_test "85 timeline by week groups correctly"         test_timeline_by_week
+    run_test "86 tag list shows tags with counts"           test_tag_list
+    run_test "87 tag filter shows tagged events"            test_tag_filter
+    run_test "88 note-commit writes git note"               test_note_commit_writes_note
+    run_test "89 since shows notes section"                 test_since_shows_notes
+    run_test "90 event_type indexed by FTS5"                test_event_type_in_fts
+    run_test "91 diff and timeline commands present"        test_v13_commands_present
 
     echo ""
     echo "========================================"

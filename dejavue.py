@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import contextlib
+import difflib
 import hashlib
 import json
 import math
@@ -14,7 +15,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 
 DEJAVUE_DIR = Path(".dejavue")
 TIMELINE = DEJAVUE_DIR / "timeline.jsonl"
@@ -246,6 +247,7 @@ def rebuild_fts():
                         ev.get("decision_reason", ev.get("reason", "")),
                         ev.get("tag", ""),
                         ev.get("content", ""),
+                        ev.get("event_type", ""),  # enables recall "blocker"/"question"/etc.
                     ]
                     text = " ".join(p for p in parts if p)
                     rows.append((ev.get("ts", ""), ev.get("event", ""), text, "timeline.jsonl"))
@@ -683,17 +685,28 @@ def cmd_status(args):
 
 
 def cmd_check(args):
-    """Health check: JSONL validity, hook installation, gitattributes, FTS freshness."""
+    """Health check: JSONL validity, hook installation, gitattributes, FTS freshness.
+    Pass --fix to auto-repair hooks, .gitattributes, .gitignore, and stale FTS."""
     ok = True
+    fix = getattr(args, "fix", False)
+    fixed = []
 
-    def _report(status, label, detail=""):
+    def _report(status, label, detail="", fix_fn=None):
         nonlocal ok
         sym = {"PASS": "✓", "WARN": "⚠", "FAIL": "✗"}.get(status, "?")
+        if fix and fix_fn and status in ("WARN", "FAIL"):
+            try:
+                fix_fn()
+                fixed.append(label)
+                sym = "↻"
+                detail = "auto-fixed"
+            except Exception as e:
+                detail = f"fix failed: {e}"
         line = f"  {sym} {label}"
         if detail:
             line += f"  — {detail}"
         print(line)
-        if status == "FAIL":
+        if status == "FAIL" and sym != "↻":
             ok = False
 
     print(f"dejavue check — {DEJAVUE_DIR}\n")
@@ -737,16 +750,21 @@ def cmd_check(args):
         git_dir = Path(git_dir_raw)
         script_path = str(Path(sys.argv[0]).resolve())
 
-        for hook_name, marker in [("post-commit", "dejavue auto-capture"), ("pre-push", "dejavue pre-push")]:
+        for hook_name, hmarker, write_fn in [
+            ("post-commit", "dejavue auto-capture", lambda p: _write_hook(p, "#!/usr/bin/env bash\n# dejavue auto-capture")),
+            ("pre-push",    "dejavue pre-push",     lambda p: _write_prepush_hook(p, "#!/usr/bin/env bash\n# dejavue pre-push")),
+        ]:
             hook_path = git_dir / "hooks" / hook_name
             if not hook_path.exists():
-                _report("WARN", f"{hook_name} hook", "not installed — run: dejavue init")
+                _report("WARN", f"{hook_name} hook", "not installed — run: dejavue init",
+                        fix_fn=lambda p=hook_path, fn=write_fn: fn(p))
             else:
                 content = hook_path.read_text(encoding="utf-8")
-                if marker not in content:
+                if hmarker not in content:
                     _report("WARN", f"{hook_name} hook", "exists but not a dejavue hook")
                 elif script_path not in content:
-                    _report("WARN", f"{hook_name} hook", f"points to a different dejavue path (expected {script_path})")
+                    _report("WARN", f"{hook_name} hook", f"points to a different dejavue path (expected {script_path})",
+                            fix_fn=lambda p=hook_path, fn=write_fn: fn(p))
                 else:
                     _report("PASS", f"{hook_name} hook")
     else:
@@ -759,23 +777,27 @@ def cmd_check(args):
     elif ga.exists() and all(line in ga.read_text(encoding="utf-8") for line in _GITATTR_LINES):
         _report("PASS", ".gitattributes merge=union", "entries present (no marker)")
     else:
-        _report("WARN", ".gitattributes", "merge=union not configured — run: dejavue init")
+        _report("WARN", ".gitattributes", "merge=union not configured — run: dejavue init",
+                fix_fn=lambda: _install_gitattributes())
 
     # .gitignore
     gi = Path(".gitignore")
     if gi.exists() and _GITIGNORE_MARKER in gi.read_text(encoding="utf-8"):
         _report("PASS", ".gitignore entries")
     else:
-        _report("WARN", ".gitignore", "dejavue entries missing — run: dejavue init")
+        _report("WARN", ".gitignore", "dejavue entries missing — run: dejavue init",
+                fix_fn=_install_gitignore)
 
     # FTS
     if FTS_DB.exists():
         if fts_needs_rebuild():
-            _report("WARN", "fts.db", "stale — will rebuild on next recall")
+            _report("WARN", "fts.db", "stale — will rebuild on next recall",
+                    fix_fn=rebuild_fts)
         else:
             _report("PASS", "fts.db", "up to date")
     else:
-        _report("WARN", "fts.db", "not yet built — will build on first recall")
+        _report("WARN", "fts.db", "not yet built — will build on first recall",
+                fix_fn=rebuild_fts)
 
     # references/map.md
     map_file = REFERENCES / "map.md"
@@ -787,6 +809,8 @@ def cmd_check(args):
         _report("WARN", "references/", "directory not created")
 
     print()
+    if fixed:
+        print(f"Auto-fixed {len(fixed)} item(s): {', '.join(fixed)}")
     if ok:
         print("All checks passed.")
     else:
@@ -1239,6 +1263,15 @@ def cmd_since(args):
             print(f"  [{ev.get('ts','')}] {ev.get('summary','')}")
     else:
         print("  (none)")
+
+    notes_in_window = [ev for ev in window if ev.get("event") == "note"]
+    if notes_in_window:
+        print(f"\nNotes ({len(notes_in_window)}):")
+        for ev in notes_in_window:
+            ts = (ev.get("ts") or "")[:19]
+            tag = f" #{ev['tag']}" if ev.get("tag") else ""
+            etype = f" [{ev['event_type']}]" if ev.get("event_type") and ev["event_type"] != "note" else ""
+            print(f"  [{ts}]{etype}{tag} {ev.get('summary','')}")
 
     stopwords = {"the","a","an","and","or","of","to","in","is","it","for","with","on","at","by","was"}
     freq = {}
@@ -1955,7 +1988,8 @@ def cmd_reference(args):
 
 
 def cmd_link(args):
-    """Show dejavue events associated with a git commit SHA."""
+    """Show dejavue events associated with a git commit SHA.
+    Also reads git notes written by 'dejavue note-commit'."""
     sha = args.sha
     short = sha[:7]
     events = _load_events()
@@ -1965,9 +1999,14 @@ def cmd_link(args):
                short in ev.get("summary", "") or
                short in ev.get("decision_reason", "")]
 
-    if not related:
+    # Check git notes for additional links
+    git_notes = git_run("git", "notes", "show", sha)
+    dejavue_notes = [l for l in git_notes.splitlines() if l.startswith("Dejavue-Event:")]
+
+    if not related and not dejavue_notes:
         print(f"No dejavue events recorded for commit {short}.")
-        print(f"(Events are captured by the post-commit hook — run `dejavue init` to install it.)")
+        print("(Events are captured by the post-commit hook — run `dejavue init` to install it.)")
+        print("(Manually link with: dejavue note-commit <sha>)")
         return
 
     print(f"Dejavue events for commit {short}:\n")
@@ -1980,6 +2019,223 @@ def cmd_link(args):
         if summary:
             print(f"    {summary}")
         print()
+    if dejavue_notes:
+        print("  (from git notes)")
+        for n in dejavue_notes:
+            print(f"    {n}")
+
+
+def _ref_to_ts(ref):
+    """Resolve a ref (ISO date or commit hash) to an ISO timestamp string, or None."""
+    if re.match(r"^\d{4}-\d{2}-\d{2}", ref):
+        return ref
+    ts_raw = git_run("git", "log", "-1", "--format=%aI", ref)
+    return ts_raw if ts_raw else None
+
+
+def _git_show_file(ref, path):
+    """Return content of path at git ref, or None if not found."""
+    try:
+        return subprocess.check_output(
+            ["git", "show", f"{ref}:{path}"],
+            text=True, stderr=subprocess.DEVNULL
+        )
+    except subprocess.CalledProcessError:
+        return None
+
+
+def cmd_diff(args):
+    """Compare dejavue memory between two refs (dates, commit hashes, or git tags)."""
+    from_ref = args.from_ref
+    to_ref   = getattr(args, "to_ref", None) or "HEAD"
+
+    # Try resolving as timestamps first (for event-level diff)
+    from_ts = _ref_to_ts(from_ref)
+    to_ts   = _ref_to_ts(to_ref) if to_ref != "HEAD" else now()
+
+    print(f"Dejavue diff  {from_ref}  →  {to_ref}\n")
+
+    # ── git-object diff of state.md and decisions.md ──
+    for filepath, label in [(".dejavue/state.md", "state.md"),
+                             (".dejavue/decisions.md", "decisions.md")]:
+        before = _git_show_file(from_ref, filepath)
+        after  = _git_show_file(to_ref if to_ref != "HEAD" else "HEAD", filepath)
+
+        if before is None and after is None:
+            continue
+        if before == after:
+            print(f"  {label}: no change")
+            continue
+
+        before_lines = (before or "").splitlines(keepends=True)
+        after_lines  = (after  or "").splitlines(keepends=True)
+        delta = list(difflib.unified_diff(
+            before_lines, after_lines,
+            fromfile=f"a/{label}", tofile=f"b/{label}",
+            lineterm="",
+        ))
+        if delta:
+            print(f"--- {label} diff ---")
+            for line in delta[:60]:  # cap at 60 lines to avoid wall of text
+                print(line)
+            if len(delta) > 60:
+                print(f"  … ({len(delta) - 60} more lines)")
+            print()
+
+    # ── event diff (decisions added between the two timestamps) ──
+    if from_ts:
+        events = _load_events()
+        # Pad bare dates to include the full day on both ends
+        from_cmp = (from_ts[:10] + "T00:00:00") if len(from_ts) <= 10 else from_ts[:19]
+        to_cmp   = (to_ts[:10]   + "T23:59:59") if len(to_ts)   <= 10 else to_ts[:19]
+        window = [ev for ev in events if from_cmp <= ev.get("ts", "") <= to_cmp]
+        new_decisions = [ev for ev in window if ev.get("event") == "decision"]
+        new_notes     = [ev for ev in window if ev.get("event") == "note"]
+        new_states    = [ev for ev in window if ev.get("event") == "state_update"]
+
+        print(f"Events in window: {len(window)} total")
+        if new_decisions:
+            print(f"\nDecisions added ({len(new_decisions)}):")
+            for ev in new_decisions:
+                ts = (ev.get("ts") or "")[:10]
+                etype = ev.get("event_type", "decision")
+                label = f"[{etype.upper()}] " if etype != "decision" else ""
+                print(f"  {ts}  {label}{ev.get('decision_title','')}")
+        if new_notes:
+            print(f"\nNotes added ({len(new_notes)}):")
+            for ev in new_notes:
+                ts = (ev.get("ts") or "")[:10]
+                tag = f" #{ev['tag']}" if ev.get("tag") else ""
+                print(f"  {ts}{tag}  {ev.get('summary','')}")
+        if new_states:
+            print(f"\nState updates ({len(new_states)}):")
+            for ev in new_states:
+                ts = (ev.get("ts") or "")[:10]
+                print(f"  {ts}  {ev.get('summary','')[:80]}")
+
+
+def cmd_timeline(args):
+    """ASCII activity chart — events per day/week/month."""
+    events = _load_events()
+    if not events:
+        print("No events in timeline.")
+        return
+
+    by = getattr(args, "by", "week") or "week"
+    agent_filter = getattr(args, "agent", None)
+
+    if agent_filter:
+        events = [ev for ev in events if ev.get("agent") == agent_filter]
+
+    # Group events by period
+    buckets = {}
+    for ev in events:
+        ts = ev.get("ts", "")
+        if not ts:
+            continue
+        if by == "day":
+            key = ts[:10]
+        elif by == "month":
+            key = ts[:7]
+        else:  # week — Monday of the ISO week
+            try:
+                d = datetime.fromisoformat(ts[:10])
+                week_start = (d - __import__("datetime").timedelta(days=d.weekday())).strftime("%Y-%m-%d")
+                key = week_start
+            except ValueError:
+                key = ts[:10]
+        buckets[key] = buckets.get(key, 0) + 1
+
+    if not buckets:
+        print("No dated events found.")
+        return
+
+    max_count = max(buckets.values())
+    bar_width  = 40
+    label_w    = 12 if by == "week" else (7 if by == "month" else 10)
+
+    period_label = {"day": "Date", "week": "Week", "month": "Month"}.get(by, "Period")
+    print(f"Activity by {by}  (each █ ≈ {max(1, max_count // bar_width)} events)\n")
+    print(f"  {period_label:<{label_w}}  {'':40}  Events")
+    print(f"  {'─'*label_w}  {'─'*40}  {'─'*6}")
+
+    for key in sorted(buckets):
+        count = buckets[key]
+        bar_len = max(1, round(count * bar_width / max_count))
+        bar = "█" * bar_len
+        print(f"  {key:<{label_w}}  {bar:<40}  {count}")
+
+    total = sum(buckets.values())
+    print(f"\n  Total: {total} events across {len(buckets)} {by}s")
+
+
+def cmd_tag(args):
+    """List all tags in the timeline, or filter events by tag."""
+    events = _load_events()
+    action = getattr(args, "action", "list")
+
+    if action == "list":
+        tag_counts = {}
+        for ev in events:
+            t = ev.get("tag", "")
+            if t:
+                tag_counts[t] = tag_counts.get(t, 0) + 1
+        if not tag_counts:
+            print("No tags recorded yet.")
+            print("Add tags with: dejavue note '<text>' --tag <tag>")
+            return
+        print(f"Tags ({len(tag_counts)}):\n")
+        for tag, count in sorted(tag_counts.items(), key=lambda x: -x[1]):
+            print(f"  #{tag:<20} {count:>4} event{'s' if count != 1 else ''}")
+
+    elif action == "filter":
+        tag = args.tag
+        matched = [ev for ev in events if ev.get("tag") == tag]
+        if not matched:
+            print(f"No events with tag '#{tag}'.")
+            return
+        print(f"Events tagged #{tag} ({len(matched)}):\n")
+        for ev in matched:
+            ts = (ev.get("ts") or "")[:19]
+            kind = ev.get("event", "")
+            summary = ev.get("summary", "")
+            print(f"  [{ts}] {kind}  {summary}")
+
+
+def cmd_note_commit(args):
+    """Write a git note on a commit linking it to the most recent dejavue event.
+    Uses 'git notes' — metadata stored outside the commit object, SHA is unchanged."""
+    sha = args.sha
+
+    # Resolve short SHA to full
+    full_sha = git_run("git", "rev-parse", "--verify", sha)
+    if not full_sha:
+        print(f"Cannot resolve '{sha}' as a git commit.")
+        return
+
+    # Find the most recent event (or the closest file_changed for this sha)
+    events = _load_events()
+    short = sha[:7]
+    for_commit = [ev for ev in events if ev.get("commit", "")[:7] == short]
+    latest = for_commit[-1] if for_commit else (events[-1] if events else None)
+
+    if not latest:
+        print("No dejavue events found — nothing to link.")
+        return
+
+    ts = (latest.get("ts") or "")[:19]
+    summary = latest.get("summary", "")[:100]
+    note_text = f"Dejavue-Event: {ts} | {summary}"
+
+    try:
+        subprocess.check_call(
+            ["git", "notes", "append", "-m", note_text, full_sha],
+            stderr=subprocess.DEVNULL,
+        )
+        print(f"Git note written to {short}: {note_text}")
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to write git note: {e}")
+        print("Ensure 'git notes' is available (git ≥ 2.0).")
 
 
 def cmd_worthiness(args):
@@ -2137,6 +2393,8 @@ def main():
     p.set_defaults(func=cmd_status)
 
     p = sub.add_parser("check", help="Health check: JSONL validity, hook status, .gitattributes, FTS freshness.")
+    p.add_argument("--fix", action="store_true",
+                   help="Auto-repair: install missing hooks, add .gitattributes/.gitignore entries, rebuild stale FTS.")
     p.set_defaults(func=cmd_check)
 
     p = sub.add_parser("archive", help="Compact the timeline by collapsing old file_changed events.")
@@ -2271,6 +2529,29 @@ def main():
     p.add_argument("--limit", type=int, default=10, metavar="N")
     p.add_argument("--semantic", action="store_true")
     p.set_defaults(func=cmd_recall)
+
+    p = sub.add_parser("diff", help="Compare dejavue memory between two refs (dates or commits).")
+    p.add_argument("from_ref", metavar="FROM", help="Start ref: ISO date (2026-05-13), commit hash, or git tag.")
+    p.add_argument("to_ref",   metavar="TO",   nargs="?", default="HEAD",
+                   help="End ref (default: HEAD).")
+    p.set_defaults(func=cmd_diff)
+
+    p = sub.add_parser("timeline", help="ASCII activity chart of events over time.")
+    p.add_argument("--by", choices=["day", "week", "month"], default="week",
+                   help="Bucket granularity (default: week).")
+    p.add_argument("--agent", default=None, help="Filter by agent name.")
+    p.set_defaults(func=cmd_timeline)
+
+    p = sub.add_parser("tag", help="List tags or filter events by tag.")
+    tag_sub = p.add_subparsers(dest="action", required=True)
+    tag_sub.add_parser("list", help="List all tags with counts.")
+    ts2 = tag_sub.add_parser("filter", help="Show events with a specific tag.")
+    ts2.add_argument("tag")
+    p.set_defaults(func=cmd_tag)
+
+    p = sub.add_parser("note-commit", help="Write a git note on a commit linking it to the last dejavue event.")
+    p.add_argument("sha", help="Commit SHA or short SHA.")
+    p.set_defaults(func=cmd_note_commit)
 
     args = parser.parse_args()
     args.func(args)
