@@ -91,3 +91,16 @@ Rejected alternatives:
 - **leave as GitHub Issues/Projects**: works for collaboration but loses the offline/portable invariant — anyone cloning the repo should see roadmap in-tree
 - **embed roadmap inside README**: makes README too long; README is the marketing/install doc, ROADMAP is the architecture/planning doc, they want different audiences
 
+
+## 2026-05-27T23:40:44-05:00 — v1.0.0 scope: v0.3 wave + 5 new commands
+
+Reason:
+v0.3 phases (ambient-agent-identity, staleness-warnings, init-flags, pre-push-hook, ingest-generate-map, flock, per-repo-config, gitignore) + version/status/log/blame/note commands + test expansion 33→62 = v1.0.0 feature-complete. Format declared stable.
+
+Rejected alternatives:
+- **ship v0.3 only, call it 0.3.0**: format already stable enough for 1.0; adding 5 high-value commands in the same pass costs little and avoids a follow-up release
+- **defer Phase-6 commit-msg trailer**: amend-from-hook risks infinite loop without safer design; capture in ROADMAP as v1.1 candidate
+
+Outcome:
+v1.0.0 tagged. 20 commands, 62/62 tests, stdlib-only, format stable.
+

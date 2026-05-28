@@ -1,12 +1,13 @@
 # Handoff
 
-Updated: 2026-05-15T00:14:01-05:00
+Updated: 2026-05-27T23:40:54-05:00
 
 ## Summary
-Option A canonical-source restructure landed (commit 2c06219, pushed). Skill chain verified end-to-end. Foreman-side benchmark (arniko-core vs bliss-engine) and external evidence (everything-claude-code repo) folded into workspace-meta FOREMAN_THREADS dejavue-maturation-arc entry with 5 concrete public-release sub-bullets and positioning anchor.
+v1.0.0 shipped: 20 commands, 62/62 tests, format declared stable. All v0.3 phases done (Phase 6 deferred to v1.1 — amend-from-hook loop risk).
 
 ## Next Steps
-Public-release-prep session (multi-session arc, captain-named: 'mature dejavue, give to the world'). 5 concrete sub-bullets in workspace-meta/FOREMAN_THREADS.md dejavue-maturation entry: (1) --agent discipline default-on (mirror s164 agent-msg fix: read AGENT_NAME env, error if unset on decision/state/handoff). (2) Provenance at init (dejavue init --origin/--extracted-from). (3) Commit-event linkage (auto-trailer or commit_landed event). (4) Cross-repo motivation in references/origin.md convention. (5) Install-time skill channel (dejavue install-skill subcommand). Plus broader items: README rewrite (workspace-internal to public), pip install path + tagged release, OSS license + CONTRIBUTING, multi-language hook (today Cargo-aware), positioning doc informed by amp's substitution matrix. Trigger: amp's substitution matrix lands AND captain commits/discards the s162 untracked exosphere .dejavue/ scaffold.
+- Tag v1.0.0 on GitHub (git tag v1.0.0 && git push origin v1.0.0)
+- v1.1 candidates: commit-msg Dejavue-Event trailer (safe design needed), tiered embedder fallback, dejavue archive, dejavue check
 
 ## Boot Instructions
 Read `.dejavue/handoff.md`, `.dejavue/state.md`, `.dejavue/decisions.md`, and `.dejavue/timeline.jsonl` before making changes.

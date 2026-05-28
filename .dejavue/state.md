@@ -1,5 +1,5 @@
 # State
 
-Updated: 2026-05-15T02:21:53-05:00
+Updated: 2026-05-27T23:40:54-05:00
 
-Merge-commit capture bug fixed; +1 regression test (09a); 42/42 green. Dispatch package shape (hook fix + agent ambient + staleness + references/map.md) pending captain read of opencode audit + dejavue-map-spec.md.
+v1.0.0 released. 20 commands (version/status/log/blame/note added), v0.3 wave complete (ambient-agent-id, staleness warnings, init --ingest/--map, pre-push hook, ingest --generate-map, flock, per-repo config, gitignore). 62/62 tests green. Format stable.
