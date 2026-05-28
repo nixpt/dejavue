@@ -5,6 +5,52 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 **The on-disk format is stable as of v1.0.0.** `.dejavue/` files written by
 any v1.x release can be read by any later v1.x release without migration.
 
+## [1.2.0] — 2026-05-28
+
+31 commands, 88/88 tests.
+
+### Added
+
+- **Richer event sub-types** — `dejavue decision` gains `--type {decision,
+  blocker,claim,question,experiment,checkpoint}` (default `decision`). Stored as
+  `event_type` field in the timeline; `[BLOCKER]`-style prefix appears in
+  `decisions.md`. `dejavue note` gains `--type {note,blocker,claim,question,
+  observation}`. Both types work with `dejavue log --type` filtering.
+- **`dejavue stats`** — timeline statistics: total events, date range, file
+  size, counts by event type (with mini bar chart), by event sub-type, by
+  agent, and by tag. ~50 LoC.
+- **`dejavue export --format {json,md}`** — export all memory (state, handoff,
+  decisions, references, full event list) as structured JSON or a single
+  Markdown document. Useful for sharing context or archiving a project's
+  memory snapshot.
+- **`dejavue reference {create,list,update,view}`** — manage reference cards
+  in `.dejavue/references/` through the CLI. `create` supports `--template
+  {default,api,design}` to scaffold the right structure; `update --content`
+  overwrites; `view` prints. Creation events are recorded in the timeline.
+- **`dejavue link <sha>`** — show all dejavue events recorded for a git commit
+  SHA. Surfaces `file_changed` events captured by the post-commit hook plus
+  any decision/note that mentions the short SHA. The reverse-lookup complement
+  to `dejavue blame <file>`.
+- **`dejavue search`** — discoverable alias for `recall` (same flags:
+  `--semantic`, `--limit N`). Matches the mental model of "search my memory".
+- **`dejavue context -n N`** — control how many recent timeline events the
+  boot packet shows (default 10).
+- **Tiered embedder auto-detection** — when `DEJAVUE_EMBEDDER_URL` is unset
+  or `"auto"`, the embedder tier tries: (1) local Ollama (`localhost:11434`
+  liveness probe), (2) OpenAI API (if `OPENAI_API_KEY` is set), (3) FTS5
+  fallback. OpenAI calls include the `Authorization: Bearer` header
+  automatically. Previously a fixed default URL was always used.
+- **Model-aware embedding cache** — `embeddings.jsonl` entries now filter by
+  model name. Stale vectors from a previously-configured model are ignored
+  (not returned) when the active model changes. Legacy entries without a
+  `model` field continue to be accepted.
+
+### Changed
+
+- Test suite: 71 → 88 (88/88 green).
+- `dejavue decision` output line now says "Blocker recorded: …" / "Question
+  recorded: …" when `--type` is non-default, matching the sub-type label.
+
 ## [1.1.0] — 2026-05-28
 
 25 commands, 71/71 tests.
