@@ -46,6 +46,11 @@ reminder and the command quick-reference.
 | `dejavue recall "<query>"` | FTS5 keyword (or `--semantic` cosine) search across all artifacts |
 | `dejavue get {state,handoff,decisions,...}` | Direct fetch when you know what you want |
 | `dejavue worthiness` | The capture/skip gate — print when unsure what to record |
+| `dejavue check` | Health check — JSONL validity, hooks, .gitattributes, FTS freshness |
+| `dejavue archive --before <date>` | Compact timeline (drops old file_changed, keeps decisions) |
+| `dejavue roster` | Agent activity summary — who worked here and when |
+| `dejavue config {list,get,set,unset}` | Manage per-repo `.dejavue/config` values |
+| `dejavue install-skill [--dir]` | Install SKILL.md to `~/.claude/skills/` (or custom dir) |
 | `dejavue version` | Print the installed version |
 
 If the CLI isn't on PATH but the repo has a copy at `dejavue.py`:

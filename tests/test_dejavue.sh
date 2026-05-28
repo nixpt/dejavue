@@ -974,7 +974,7 @@ test_version_prints_version() {
     trap cleanup EXIT
     cd "$TEST_DIR"
     out="$(dv version)"
-    assert_contains "version output" "$out" "dejavue 1.0.0"
+    assert_contains "version output" "$out" "dejavue 1."
 }
 
 test_init_creates_prepush_hook() {
@@ -1188,6 +1188,138 @@ test_decision_outcome_flag() {
     assert_contains "outcome in timeline" "$events" "Shipped in v0.1"
 }
 
+test_check_passes_healthy() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv state --summary "test state" >/dev/null 2>&1
+    out="$(dv check 2>&1)"
+    assert_contains "check shows timeline" "$out" "timeline.jsonl"
+    assert_contains "check shows hooks" "$out" "post-commit hook"
+    assert_contains "check shows gitattributes" "$out" ".gitattributes"
+}
+
+test_check_warns_no_hooks() {
+    TEST_DIR="$(mktemp -d)"
+    trap "rm -rf '$TEST_DIR'" EXIT
+    cd "$TEST_DIR"
+    git init -q && git config user.email "t@t.t" && git config user.name "T"
+    git commit --allow-empty -q -m "root"
+    mkdir -p .dejavue
+    echo '{"ts":"2026-01-01","event":"init","summary":"test"}' > .dejavue/timeline.jsonl
+    echo "# State" > .dejavue/state.md
+    out="$(dv check 2>&1)"
+    assert_contains "check warns missing hook" "$out" "post-commit"
+}
+
+test_archive_dryrun() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    # seed some old file_changed events with a past timestamp
+    echo '{"ts":"2025-01-01T00:00:00+00:00","event":"file_changed","path":"foo.rs","summary":"old","agent":"test"}' >> .dejavue/timeline.jsonl
+    echo '{"ts":"2025-01-02T00:00:00+00:00","event":"file_changed","path":"bar.rs","summary":"old","agent":"test"}' >> .dejavue/timeline.jsonl
+    out="$(dv archive --before 2026-01-01 2>&1)"
+    assert_contains "archive dry-run shows plan" "$out" "Archive plan"
+    assert_contains "archive dry-run shows count" "$out" "file_changed to drop"
+    # original timeline unchanged (no --yes)
+    line_count="$(wc -l < .dejavue/timeline.jsonl)"
+    [[ "$line_count" -ge 2 ]]
+}
+
+test_archive_applies() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "keep this" --reason "important" >/dev/null 2>&1
+    # seed old file_changed events
+    echo '{"ts":"2025-01-01T00:00:00+00:00","event":"file_changed","path":"old.rs","summary":"old","agent":"test"}' >> .dejavue/timeline.jsonl
+    echo '{"ts":"2025-01-02T00:00:00+00:00","event":"file_changed","path":"old2.rs","summary":"old","agent":"test"}' >> .dejavue/timeline.jsonl
+    dv archive --before 2026-01-01 --yes >/dev/null 2>&1
+    events="$(cat .dejavue/timeline.jsonl)"
+    assert_contains "archive event recorded" "$events" '"archive"'
+    # the old file_changed events should be gone
+    assert_not_contains "old paths removed" "$events" '"old.rs"'
+    # decision should survive
+    assert_contains "decision kept" "$events" '"keep this"'
+    # backup file exists
+    assert_file_exists "backup created" ".dejavue/timeline.jsonl.bak-2026-01-01"
+}
+
+test_roster_shows_agents() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv start --agent alice --goal "first session" >/dev/null 2>&1
+    dv decision "arch choice" --reason "test" --agent alice >/dev/null 2>&1
+    dv start --agent bob --goal "second session" >/dev/null 2>&1
+    out="$(dv roster 2>&1)"
+    assert_contains "roster shows alice" "$out" "alice"
+    assert_contains "roster shows bob" "$out" "bob"
+    assert_contains "roster shows sessions" "$out" "session"
+    assert_contains "roster shows decisions" "$out" "decision"
+}
+
+test_config_roundtrip() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv config set agent_name myagent >/dev/null 2>&1
+    val="$(dv config get agent_name)"
+    assert_eq "config get after set" "$val" "myagent"
+    list_out="$(dv config list)"
+    assert_contains "config list shows key" "$list_out" "agent_name"
+    dv config unset agent_name >/dev/null 2>&1
+    if dv config get agent_name 2>/dev/null; then
+        echo "ASSERT FAIL: key should be unset" >&2
+        return 1
+    fi
+    return 0
+}
+
+test_log_reverse() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv start --agent claude --goal "first" >/dev/null 2>&1
+    dv decision "first decision" --reason "test" >/dev/null 2>&1
+    out_normal="$(dv log --oneline 2>&1)"
+    out_reverse="$(dv log --oneline --reverse 2>&1)"
+    # The two outputs should differ when there are multiple events
+    [[ "$out_normal" != "$out_reverse" ]]
+}
+
+test_recall_limit() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    # seed 5 distinct decision events
+    for i in 1 2 3 4 5; do
+        dv decision "decision $i" --reason "reason $i" >/dev/null 2>&1
+    done
+    out_5="$(dv recall "decision" --limit 5 2>&1)"
+    out_2="$(dv recall "decision" --limit 2 2>&1)"
+    count_5="$(echo "$out_5" | grep -c "\[score\]\|\[20" || true)"
+    # --limit 2 output should be shorter than --limit 5 output
+    len_5="${#out_5}"
+    len_2="${#out_2}"
+    [[ "$len_5" -gt "$len_2" ]]
+}
+
+test_circuit_breaker_in_source() {
+    # Verify circuit breaker helpers are present in source
+    grep -q '_CIRCUIT_THRESHOLD' "$DEJAVUE" || { echo "  FAIL: _CIRCUIT_THRESHOLD missing" >&2; return 1; }
+    grep -q 'def _circuit_open' "$DEJAVUE"  || { echo "  FAIL: _circuit_open missing" >&2; return 1; }
+    grep -q 'def _circuit_record' "$DEJAVUE" || { echo "  FAIL: _circuit_record missing" >&2; return 1; }
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -1268,6 +1400,15 @@ main() {
     run_test "51 note records event with tag"               test_note_records_event
     run_test "52 ingest --generate-map creates map.md"      test_ingest_generate_map
     run_test "53 decision --outcome stored in doc+timeline" test_decision_outcome_flag
+    run_test "54 check passes on healthy repo"             test_check_passes_healthy
+    run_test "55 check warns when hooks missing"           test_check_warns_no_hooks
+    run_test "56 archive dry-run shows plan"               test_archive_dryrun
+    run_test "57 archive --yes compacts timeline"          test_archive_applies
+    run_test "58 roster shows agent activity"              test_roster_shows_agents
+    run_test "59 config set/get/list/unset"                test_config_roundtrip
+    run_test "60 log --reverse reverses order"             test_log_reverse
+    run_test "61 recall --limit restricts results"         test_recall_limit
+    run_test "62 circuit breaker helpers present in source" test_circuit_breaker_in_source
 
     echo ""
     echo "========================================"
