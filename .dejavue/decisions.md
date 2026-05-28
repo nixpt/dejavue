@@ -104,3 +104,15 @@ Rejected alternatives:
 Outcome:
 v1.0.0 tagged. 20 commands, 62/62 tests, stdlib-only, format stable.
 
+
+## 2026-05-28T00:08:18-05:00 — v1.1.0 scope: check/archive/roster/config/install-skill + circuit breaker
+
+Reason:
+Natural next batch after v1.0: operational health (check, archive), collaboration (roster), ergonomics (config CLI, install-skill), reliability (circuit breaker). All implement cleanly in single file; test count 62→71.
+
+Rejected alternatives:
+- **ship circuit breaker alone as v1.0.1 patch**: too small; better to batch with the operational commands
+
+Outcome:
+v1.1.0 tagged. 25 commands, 71/71 tests.
+

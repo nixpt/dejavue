@@ -28,7 +28,7 @@ git clone https://github.com/nixpt/dejavue
 ln -s "$PWD/dejavue/dejavue.py" ~/.local/bin/dejavue
 ```
 
-No `pip install` in v0.1 — single file is by design. PyPI packaging is v0.2.
+No `pip install` required — single file is by design.
 
 
 ## Quickstart
@@ -112,24 +112,51 @@ git                — mechanical history (commits, diffs)
 
 ## Commands
 
+**Session lifecycle**
+
 | Command | Description |
 |---|---|
-| `dejavue init` | Create `.dejavue/`, scaffold files, install git post-commit hook. |
+| `dejavue init [--ingest] [--map]` | Create `.dejavue/`, install post-commit + pre-push hooks, add `.gitattributes` + `.gitignore`. |
 | `dejavue start --goal TEXT` | Record session start with intent. Foundation for `since --agent`. |
-| `dejavue changed PATH --summary TEXT` | Record file change event manually. |
-| `dejavue decision TITLE --reason TEXT` | Append architectural decision to `decisions.md` and timeline. |
 | `dejavue state --summary TEXT` | Overwrite `state.md` with current snapshot. |
 | `dejavue handoff --summary TEXT --next TEXT` | Write `handoff.md` for the next session. |
-| `dejavue context` | Print all four `.md` files and the last 10 timeline entries. |
+
+**Capture**
+
+| Command | Description |
+|---|---|
+| `dejavue decision TITLE --reason TEXT [--rejected "opt: why"] [--outcome TEXT]` | Append architectural decision to `decisions.md` and timeline. |
+| `dejavue note TEXT [--tag TAG]` | Lightweight timestamped note between `annotate` and `decision`. |
+| `dejavue annotate <doc> "note"` | Append a timestamped note to a doc without rewriting it. |
+| `dejavue changed PATH --summary TEXT` | Record file change event manually (post-commit hook does this automatically). |
+
+**Recall + exploration**
+
+| Command | Description |
+|---|---|
+| `dejavue context` | Boot packet — handoff + state + decisions + references + last 10 events + staleness warnings. |
+| `dejavue status` | One-liner health: agent, event count, last decision, open next-steps. |
 | `dejavue since <ref>` | Delta since a date, commit hash, or agent's last session. **Killer command.** |
-| `dejavue ingest` | Scrape `.claude/`, `CHANGELOG.md`, ADRs, and git log into timeline. One-shot. |
-| `dejavue recall QUERY` | FTS5 keyword search over all events, decisions, state, handoff, and references. |
-| `dejavue worthiness` | Print the capture/skip table as a reminder. |
+| `dejavue log [--since] [--agent] [--type] [--oneline] [--reverse]` | Formatted timeline view with filters. |
+| `dejavue blame <file>` | "Why does this file exist?" — decisions and events mentioning the path. |
+| `dejavue recall QUERY [--semantic] [--limit N]` | FTS5 keyword (or cosine semantic) search over all artifacts. |
 | `dejavue get <doc>` | Direct fetch of `state`, `handoff`, `decisions`, or `references/<name>`. |
 | `dejavue list [--type events\|decisions\|references]` | List available artifacts with paths. |
-| `dejavue annotate <doc> "note"` | Append a timestamped note to a doc without rewriting it. |
+| `dejavue roster` | Agent activity summary — who worked here and when. |
 
-Each command accepts `--help`. See `dejavue.py --help` for the full flag list.
+**Operations**
+
+| Command | Description |
+|---|---|
+| `dejavue check` | Health check: JSONL validity, hook status, `.gitattributes`, FTS freshness. |
+| `dejavue ingest [--generate-map]` | Scrape `.claude/`, `CHANGELOG.md`, ADRs, and git log. `--generate-map` auto-populates `references/map.md`. |
+| `dejavue archive --before DATE [--yes]` | Compact timeline by dropping old `file_changed` events (dry-run without `--yes`). |
+| `dejavue config {list,get KEY,set KEY VAL,unset KEY}` | Manage per-repo `.dejavue/config`. |
+| `dejavue install-skill [--dir PATH]` | Install SKILL.md to `~/.claude/skills/` (or `--dir`). |
+| `dejavue worthiness` | Print the capture/skip table as a reminder. |
+| `dejavue version` | Print installed version. |
+
+Each command accepts `--help`. See `dejavue --help` for the full flag list.
 
 
 ## Worthiness
@@ -300,8 +327,9 @@ correct.
 **Multiple agents in the same working tree at the same instant (rare):** JSONL
 appends are POSIX-atomic up to PIPE_BUF (~4KB) with `O_APPEND`. fts.db
 rebuilds and `ingest` scrapes are not atomic; running two of these
-concurrently in the same directory can corrupt state. v0.1.2 will add file
-locking; for v0.1, just don't do this on purpose.
+concurrently in the same directory can corrupt state. `fcntl.flock` advisory
+locking is applied to FTS rebuilds and ingest (v1.0+); JSONL appends are
+POSIX-atomic. The rare true-concurrent case is still best avoided.
 
 **Git hook in worktrees:** `dejavue init` installs the post-commit hook in
 the main repo's `.git/hooks/`. Git worktrees inherit it by default (verified
@@ -323,10 +351,10 @@ the next session looks up; model versions change beneath the role.
 - A replacement for richer per-repo planning systems that maintain milestone /
   phase / decision-tree state. Dejavue is the lightweight episodic layer
   underneath those, not a substitute for them.
-- A vector database or embedding store. v0.2 will add optional semantic recall
-  via `--semantic` once an external embedder backend is wired in.
-- An MCP server. v0.3 will add MCP tools as thin wrappers over the on-disk
-  format so MCP-aware agents can consume it without a separate file format.
+- A vector database or embedding store. `--semantic` recall is available via
+  any OpenAI-compatible `/v1/embeddings` endpoint (optional, graceful fallback).
+- An MCP server. MCP tool wrappers are on the roadmap but not yet shipped;
+  the format is the open contract any MCP server can consume.
 - Cross-repo memory. Cross-repo coordination belongs in a separate
   workspace-wide coordination layer.
 
@@ -343,14 +371,15 @@ tools sit on top of the same on-disk format. See `docs/05-v0.1-scope.md`
 | Version | Milestone |
 |---|---|
 | v0.1 | Single-file Python CLI. FTS5-only recall. Zero infrastructure. |
-| v0.2 | `--semantic` flag uses an external embedder when configured; FTS5 fallback when absent. |
-| v0.3 | MCP tool wrappers for agent ecosystems. Editor / Claude Code session-hook integration. |
-| v0.4 | Upgrade path: export a `.dejavue/` into a richer per-repo planning system without losing history. |
+| v0.2 | `--semantic` flag via external embedder; FTS5 fallback. |
+| v1.0 | Format stable. 20 commands: ambient agent-id, staleness warnings, pre-push hook, codebase map, `status`, `log`, `blame`, `note`. |
+| v1.1 | 25 commands: `check`, `archive`, `roster`, `config`, `install-skill`, embedder circuit breaker. |
+| v1.2+ | MCP tool wrappers, tiered embedder chain, `dejavue promote`. |
 
 
 ## Status
 
-v0.1 — single-file Python CLI. FTS5-only recall. Not on PyPI.
+v1.1.0 — single-file Python CLI. 25 commands. 71/71 tests. Format stable. Not on PyPI.
 
 Design documents in repo:
 - `docs/01-origin.md` — original conversation that produced the spec

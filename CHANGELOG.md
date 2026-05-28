@@ -5,6 +5,47 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 **The on-disk format is stable as of v1.0.0.** `.dejavue/` files written by
 any v1.x release can be read by any later v1.x release without migration.
 
+## [1.1.0] — 2026-05-28
+
+25 commands, 71/71 tests.
+
+### Added
+
+- **`dejavue check`** — git-fsck-style health check. Reports PASS/WARN/FAIL
+  for: JSONL validity, core docs (state.md, decisions.md, handoff.md), hook
+  installation + path correctness (post-commit + pre-push), `.gitattributes`
+  merge=union, `.gitignore` entries, FTS freshness, `references/map.md`.
+- **`dejavue archive --before <YYYY-MM-DD>`** — timeline compaction. Drops
+  `file_changed` events older than the cutoff; preserves decisions, state
+  updates, handoffs, and all other event types. Dry-run by default;
+  `--yes` applies. Backup written to `timeline.jsonl.bak-<date>` before
+  modification.
+- **`dejavue roster`** — agent activity summary: first/last active date,
+  session count, decision count, note count, handoff count per agent.
+  Sorted by most-recent activity.
+- **`dejavue config {list,get,set,unset}`** — manage per-repo
+  `.dejavue/config` through the CLI rather than hand-editing. `config set
+  agent_name mybot`, `config get agent_name`, `config list`, `config unset`.
+- **`dejavue install-skill`** — auto-install `skills/dejavue/` and
+  `skills/dejavue-workflow/` to the user's agent skills directory
+  (`~/.claude/skills/` by default). Pass `--dir` to target a different
+  location; `--force` to overwrite existing symlinks.
+- **`dejavue log --reverse`** — show oldest events first.
+- **`dejavue recall --limit N`** — cap results (default 10). Works for both
+  FTS5 and `--semantic` recall.
+- **Embedder circuit breaker** — after 3 consecutive failures the circuit
+  opens; `_embed_one` returns `None` immediately without hitting the endpoint
+  for 5 minutes. Resets on first success. State in
+  `.dejavue/embedder_circuit.json` (gitignored, local-only).
+
+### Changed
+
+- `.gitignore` entries now also cover `embedder_circuit.json` and
+  `timeline.jsonl.bak-*` (archive backups).
+- `dejavue log` now defaults to newest-first (unchanged) with `--reverse`
+  for oldest-first.
+- Test suite: 62 → 71 (71/71 green).
+
 ## [1.0.0] — 2026-05-27
 
 Format declared stable. 20 commands, 62/62 tests.
