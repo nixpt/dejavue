@@ -56,10 +56,22 @@ Test gate achieved: 62/62 (was ≥50/50 target).
 
 ---
 
-## 🔮 v1.1 candidates
+## ✅ v1.1.0 — operational + reliability wave (2026-05-28)
 
-Items from the original v0.4 wishlist not yet shipped, plus the one deferred
-v0.3 phase. Listed by impact-per-LoC.
+25 commands, 71/71 tests.
+
+- `check` — git-fsck health check (JSONL, hooks, .gitattributes, .gitignore, FTS, map.md)
+- `archive --before <date>` — timeline compaction (drops old file_changed, preserves decisions)
+- `roster` — agent activity summary (first/last seen, session/decision/note counts)
+- `config {list,get,set,unset}` — manage .dejavue/config through the CLI
+- `install-skill` — auto-install SKILL.md to ~/.claude/skills/ (or --dir)
+- `log --reverse` flag; `recall --limit N` flag
+- Embedder circuit breaker (3 failures → 5-min cooldown; state in embedder_circuit.json)
+
+## 🔮 v1.2 candidates
+
+Items from the original wishlist not yet shipped, plus the one deferred v0.3
+phase. Listed by impact-per-LoC.
 
 ### High impact
 

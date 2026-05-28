@@ -14,7 +14,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 DEJAVUE_DIR = Path(".dejavue")
 TIMELINE = DEJAVUE_DIR / "timeline.jsonl"
@@ -26,6 +26,7 @@ FTS_DB = DEJAVUE_DIR / "fts.db"
 EMBEDDINGS = DEJAVUE_DIR / "embeddings.jsonl"
 INGESTED_LOCK = DEJAVUE_DIR / "ingested.lock"
 FIRST_USE = DEJAVUE_DIR / ".first-use"
+EMBEDDER_CIRCUIT = DEJAVUE_DIR / "embedder_circuit.json"
 
 HAS_FTS5 = None  # probed lazily on first db open
 
@@ -403,6 +404,8 @@ _GITIGNORE_ENTRIES = (
     ".dejavue/ingested.lock",
     ".dejavue/.locks/",
     ".dejavue/embeddings.jsonl",
+    ".dejavue/embedder_circuit.json",
+    ".dejavue/timeline.jsonl.bak-*",
 )
 _GITIGNORE_MARKER = "# dejavue: local-only artifacts"
 
@@ -667,6 +670,360 @@ def cmd_status(args):
             print(f"  ⚠  {w}")
 
 
+def cmd_check(args):
+    """Health check: JSONL validity, hook installation, gitattributes, FTS freshness."""
+    ok = True
+
+    def _report(status, label, detail=""):
+        nonlocal ok
+        sym = {"PASS": "✓", "WARN": "⚠", "FAIL": "✗"}.get(status, "?")
+        line = f"  {sym} {label}"
+        if detail:
+            line += f"  — {detail}"
+        print(line)
+        if status == "FAIL":
+            ok = False
+
+    print(f"dejavue check — {DEJAVUE_DIR}\n")
+
+    # .dejavue/ exists
+    if not DEJAVUE_DIR.exists():
+        _report("FAIL", ".dejavue/ directory", "missing — run: dejavue init")
+        return
+
+    # JSONL validity
+    if TIMELINE.exists():
+        bad = 0
+        total = 0
+        for i, line in enumerate(TIMELINE.read_text(encoding="utf-8").splitlines(), 1):
+            if not line.strip():
+                continue
+            total += 1
+            try:
+                json.loads(line)
+            except json.JSONDecodeError:
+                bad += 1
+        if bad:
+            _report("FAIL", f"timeline.jsonl ({total} lines)", f"{bad} invalid JSON line(s)")
+        else:
+            _report("PASS", f"timeline.jsonl ({total} lines)")
+    else:
+        _report("WARN", "timeline.jsonl", "not yet created")
+
+    # Core docs
+    for path, label in [(STATE, "state.md"), (DECISIONS, "decisions.md"), (HANDOFF, "handoff.md")]:
+        if not path.exists():
+            _report("WARN", label, "missing")
+        elif label == "state.md" and "No state recorded yet" in path.read_text(encoding="utf-8"):
+            _report("WARN", label, "default stub — update with: dejavue state --summary '...'")
+        else:
+            _report("PASS", label)
+
+    # hooks
+    git_dir_raw = git_run("git", "rev-parse", "--git-dir")
+    if git_dir_raw:
+        git_dir = Path(git_dir_raw)
+        script_path = str(Path(sys.argv[0]).resolve())
+
+        for hook_name, marker in [("post-commit", "dejavue auto-capture"), ("pre-push", "dejavue pre-push")]:
+            hook_path = git_dir / "hooks" / hook_name
+            if not hook_path.exists():
+                _report("WARN", f"{hook_name} hook", "not installed — run: dejavue init")
+            else:
+                content = hook_path.read_text(encoding="utf-8")
+                if marker not in content:
+                    _report("WARN", f"{hook_name} hook", "exists but not a dejavue hook")
+                elif script_path not in content:
+                    _report("WARN", f"{hook_name} hook", f"points to a different dejavue path (expected {script_path})")
+                else:
+                    _report("PASS", f"{hook_name} hook")
+    else:
+        _report("WARN", "git hooks", "not in a git repo")
+
+    # .gitattributes
+    ga = Path(".gitattributes")
+    if ga.exists() and _GITATTR_MARKER in ga.read_text(encoding="utf-8"):
+        _report("PASS", ".gitattributes merge=union")
+    elif ga.exists() and all(line in ga.read_text(encoding="utf-8") for line in _GITATTR_LINES):
+        _report("PASS", ".gitattributes merge=union", "entries present (no marker)")
+    else:
+        _report("WARN", ".gitattributes", "merge=union not configured — run: dejavue init")
+
+    # .gitignore
+    gi = Path(".gitignore")
+    if gi.exists() and _GITIGNORE_MARKER in gi.read_text(encoding="utf-8"):
+        _report("PASS", ".gitignore entries")
+    else:
+        _report("WARN", ".gitignore", "dejavue entries missing — run: dejavue init")
+
+    # FTS
+    if FTS_DB.exists():
+        if fts_needs_rebuild():
+            _report("WARN", "fts.db", "stale — will rebuild on next recall")
+        else:
+            _report("PASS", "fts.db", "up to date")
+    else:
+        _report("WARN", "fts.db", "not yet built — will build on first recall")
+
+    # references/map.md
+    map_file = REFERENCES / "map.md"
+    if map_file.exists():
+        _report("PASS", "references/map.md")
+    elif REFERENCES.exists():
+        _report("WARN", "references/map.md", "missing — run: dejavue init --map or ingest --generate-map")
+    else:
+        _report("WARN", "references/", "directory not created")
+
+    print()
+    if ok:
+        print("All checks passed.")
+    else:
+        print("Some checks failed — see above.")
+    return 0 if ok else 1
+
+
+def cmd_archive(args):
+    """Compact the timeline by collapsing file_changed events older than a date."""
+    if not TIMELINE.exists():
+        print("No timeline found.")
+        return
+
+    cutoff = args.before
+    if not re.match(r"^\d{4}-\d{2}-\d{2}", cutoff):
+        print(f"Invalid date format '{cutoff}'. Use YYYY-MM-DD.")
+        return
+
+    events = _load_events()
+    before = [ev for ev in events if ev.get("ts", "") < cutoff]
+    after  = [ev for ev in events if ev.get("ts", "") >= cutoff]
+
+    # Within 'before': keep non-file_changed events; summarise file_changed ones
+    keep_before = [ev for ev in before if ev.get("event") != "file_changed"]
+    dropped_fc  = [ev for ev in before if ev.get("event") == "file_changed"]
+
+    total_before = len(before)
+    kept_before  = len(keep_before)
+
+    if not dropped_fc:
+        print(f"Nothing to archive — no file_changed events before {cutoff}.")
+        return
+
+    if not args.yes:
+        print(f"Archive plan:")
+        print(f"  Events before {cutoff} : {total_before}")
+        print(f"  file_changed to drop  : {len(dropped_fc)}")
+        print(f"  Other events to keep  : {kept_before}")
+        print(f"  Events after {cutoff}  : {len(after)}")
+        print()
+        print("Re-run with --yes to apply.")
+        return
+
+    # Inject a summary compaction event
+    summary_event = {
+        "ts": now(),
+        **git_info(),
+        "agent": "dejavue-archive",
+        "event": "archive",
+        "summary": f"Archived {len(dropped_fc)} file_changed events before {cutoff}",
+        "dropped_count": len(dropped_fc),
+        "cutoff": cutoff,
+    }
+
+    new_lines = (
+        [json.dumps(ev, ensure_ascii=False) for ev in keep_before]
+        + [json.dumps(summary_event, ensure_ascii=False)]
+        + [json.dumps(ev, ensure_ascii=False) for ev in after]
+    )
+
+    # Back up the original
+    backup = DEJAVUE_DIR / f"timeline.jsonl.bak-{cutoff}"
+    backup.write_text(TIMELINE.read_text(encoding="utf-8"), encoding="utf-8")
+
+    with _lock("archive"):
+        TIMELINE.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+    print(f"Archived {len(dropped_fc)} file_changed events before {cutoff}.")
+    print(f"Timeline: {total_before + len(after)} → {len(new_lines)} lines.")
+    print(f"Backup at {backup}")
+
+
+def cmd_roster(args):
+    """Show agent activity summary — who worked here and when."""
+    events = _load_events()
+
+    if not events:
+        print("No events in timeline.")
+        return
+
+    from collections import defaultdict
+    agents = defaultdict(lambda: {
+        "first": None, "last": None,
+        "sessions": 0, "decisions": 0, "notes": 0, "handoffs": 0,
+    })
+
+    for ev in events:
+        agent = ev.get("agent") or "unknown"
+        ts = ev.get("ts", "")
+        kind = ev.get("event", "")
+        a = agents[agent]
+        if a["first"] is None or ts < a["first"]:
+            a["first"] = ts
+        if a["last"] is None or ts > a["last"]:
+            a["last"] = ts
+        if kind == "session_start":
+            a["sessions"] += 1
+        elif kind == "decision":
+            a["decisions"] += 1
+        elif kind == "note":
+            a["notes"] += 1
+        elif kind == "handoff":
+            a["handoffs"] += 1
+
+    # Sort by last-active descending
+    sorted_agents = sorted(agents.items(), key=lambda kv: kv[1]["last"] or "", reverse=True)
+
+    print(f"Agent roster ({len(sorted_agents)} agents):\n")
+    for agent, data in sorted_agents:
+        first = (data["first"] or "")[:10]
+        last  = (data["last"]  or "")[:10]
+        stats = []
+        if data["sessions"]:
+            stats.append(f"{data['sessions']} session{'s' if data['sessions'] != 1 else ''}")
+        if data["decisions"]:
+            stats.append(f"{data['decisions']} decision{'s' if data['decisions'] != 1 else ''}")
+        if data["notes"]:
+            stats.append(f"{data['notes']} note{'s' if data['notes'] != 1 else ''}")
+        if data["handoffs"]:
+            stats.append(f"{data['handoffs']} handoff{'s' if data['handoffs'] != 1 else ''}")
+        stats_str = "  " + ", ".join(stats) if stats else ""
+        print(f"  {agent:<20}  {first} – {last}{stats_str}")
+
+
+def cmd_config(args):
+    """Get, set, or list per-repo config values in .dejavue/config."""
+    DEJAVUE_DIR.mkdir(exist_ok=True)
+    config_path = DEJAVUE_DIR / "config"
+
+    def _read_lines():
+        if not config_path.exists():
+            return []
+        return config_path.read_text(encoding="utf-8").splitlines()
+
+    def _write_lines(lines):
+        config_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+
+    action = args.action
+
+    if action == "list":
+        cfg = _load_config()
+        if not cfg:
+            print(f"No config set ({config_path} absent or empty).")
+        else:
+            for k, v in sorted(cfg.items()):
+                print(f"{k} = {v}")
+
+    elif action == "get":
+        cfg = _load_config()
+        val = cfg.get(args.key)
+        if val is None:
+            print(f"(not set)")
+            sys.exit(1)
+        else:
+            print(val)
+
+    elif action == "set":
+        lines = _read_lines()
+        # Replace existing key or append
+        new_line = f"{args.key} = {args.value}"
+        replaced = False
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#") and "=" in stripped:
+                k = stripped.split("=", 1)[0].strip()
+                if k == args.key:
+                    lines[i] = new_line
+                    replaced = True
+                    break
+        if not replaced:
+            lines.append(new_line)
+        _write_lines(lines)
+        print(f"Set {args.key} = {args.value}")
+
+    elif action == "unset":
+        lines = _read_lines()
+        new_lines = []
+        removed = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#") and "=" in stripped:
+                k = stripped.split("=", 1)[0].strip()
+                if k == args.key:
+                    removed = True
+                    continue
+            new_lines.append(line)
+        if removed:
+            _write_lines(new_lines)
+            print(f"Unset {args.key}")
+        else:
+            print(f"Key '{args.key}' not found in config.")
+
+
+def cmd_install_skill(args):
+    """Install dejavue SKILL.md files to the user's agent skill directory."""
+    # Locate the skills/ directory relative to this script
+    script_dir = Path(sys.argv[0]).resolve().parent
+    skills_src = script_dir / "skills"
+    if not skills_src.exists():
+        # Try the repo root if dejavue.py lives at the root
+        skills_src = script_dir.parent / "skills"
+    if not skills_src.exists():
+        print(f"ERROR: skills/ directory not found near {sys.argv[0]}")
+        print("This command must be run from the dejavue source repo (the one with skills/).")
+        return
+
+    # Candidate agent skill directories (in priority order)
+    candidates = [
+        Path.home() / ".claude" / "skills",
+        Path.home() / ".cursor" / "rules",
+        Path.home() / ".config" / "aider" / "skills",
+    ]
+    if args.dir:
+        target_dir = Path(args.dir)
+    else:
+        target_dir = next((p for p in candidates if p.parent.exists()), None)
+        if target_dir is None:
+            print("Could not auto-detect an agent skills directory.")
+            print("Pass --dir to specify one explicitly.")
+            return
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    skill_dirs = sorted(skills_src.iterdir()) if skills_src.is_dir() else []
+    skill_dirs = [d for d in skill_dirs if d.is_dir() and (d / "SKILL.md").exists()]
+
+    if not skill_dirs:
+        print(f"No skill directories (with SKILL.md) found in {skills_src}")
+        return
+
+    for skill_dir in skill_dirs:
+        dest = target_dir / skill_dir.name
+        if dest.exists() or dest.is_symlink():
+            if args.force:
+                if dest.is_symlink():
+                    dest.unlink()
+                else:
+                    import shutil
+                    shutil.rmtree(dest)
+            else:
+                print(f"  ⚠  {dest} already exists — skipping (use --force to overwrite)")
+                continue
+        dest.symlink_to(skill_dir.resolve())
+        print(f"  ✓  Installed {skill_dir.name} → {dest}")
+
+    print(f"\nSkills installed to {target_dir}")
+    print("Restart your agent session for the new skills to take effect.")
+
+
 def cmd_log(args):
     """Formatted timeline view with optional filters."""
     events = _load_events()
@@ -701,6 +1058,9 @@ def cmd_log(args):
     if not filtered:
         print("No events match the filter.")
         return
+
+    if args.reverse:
+        filtered = list(reversed(filtered))
 
     if args.oneline:
         for ev in filtered:
@@ -1079,6 +1439,52 @@ def _generate_map():
     print(f"Generated references/map.md from detected project structure ({', '.join(set(project_types)) or 'unknown type'}).")
 
 
+# ── Embedder circuit breaker ──────────────────────────────────────────────────
+# Tracks consecutive failures to avoid hammering a downed embedder endpoint.
+# State stored in .dejavue/embedder_circuit.json (gitignored, local only).
+# After 3 failures the circuit opens; it resets automatically after 5 minutes.
+
+_CIRCUIT_THRESHOLD = 3
+_CIRCUIT_COOLDOWN_S = 300  # 5 minutes
+
+
+def _circuit_open():
+    """Return True if the embedder circuit is open (skip the call)."""
+    if not EMBEDDER_CIRCUIT.exists():
+        return False
+    try:
+        import time
+        state = json.loads(EMBEDDER_CIRCUIT.read_text(encoding="utf-8"))
+        if state.get("failures", 0) >= _CIRCUIT_THRESHOLD:
+            last = state.get("last_failure", "")
+            if last:
+                try:
+                    last_ts = datetime.fromisoformat(last).timestamp()
+                    if time.time() - last_ts < _CIRCUIT_COOLDOWN_S:
+                        return True
+                except ValueError:
+                    pass
+    except Exception:
+        pass
+    return False
+
+
+def _circuit_record(success: bool):
+    """Update circuit-breaker state after an embedder call."""
+    try:
+        existing = {}
+        if EMBEDDER_CIRCUIT.exists():
+            existing = json.loads(EMBEDDER_CIRCUIT.read_text(encoding="utf-8"))
+        if success:
+            existing = {"failures": 0}
+        else:
+            existing["failures"] = existing.get("failures", 0) + 1
+            existing["last_failure"] = now()
+        EMBEDDER_CIRCUIT.write_text(json.dumps(existing), encoding="utf-8")
+    except Exception:
+        pass
+
+
 # ── Semantic recall (v0.2) ────────────────────────────────────────────────────
 
 def _line_hash(line: str) -> str:
@@ -1094,8 +1500,11 @@ def _embedder_model() -> str:
 
 
 def _embed_one(text):
-    """POST an OpenAI-compatible /v1/embeddings request. Returns vec or None on any failure."""
+    """POST an OpenAI-compatible /v1/embeddings request. Returns vec or None on any failure.
+    Respects the circuit breaker — returns None immediately when the circuit is open."""
     if not text:
+        return None
+    if _circuit_open():
         return None
     body = json.dumps({"model": _embedder_model(), "input": text}).encode("utf-8")
     req = urllib.request.Request(
@@ -1108,15 +1517,20 @@ def _embed_one(text):
         with urllib.request.urlopen(req, timeout=EMBEDDER_TIMEOUT_S) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
+        _circuit_record(False)
         return None
     except json.JSONDecodeError:
+        _circuit_record(False)
         return None
     try:
         vec = payload["data"][0]["embedding"]
     except (KeyError, IndexError, TypeError):
+        _circuit_record(False)
         return None
     if not isinstance(vec, list) or not vec:
+        _circuit_record(False)
         return None
+    _circuit_record(True)
     return [float(x) for x in vec]
 
 
@@ -1223,8 +1637,10 @@ def cmd_recall(args):
 
     query = args.query
 
+    limit = getattr(args, "limit", 10) or 10
+
     if getattr(args, "semantic", False):
-        results = _semantic_recall(query)
+        results = _semantic_recall(query, limit=limit)
         if results is None:
             print(
                 f"WARNING: semantic embedder at {_embedder_url()} unavailable; falling back to FTS5 keyword recall.",
@@ -1252,8 +1668,8 @@ def cmd_recall(args):
     if HAS_FTS5:
         try:
             rows = conn.execute(
-                "SELECT ts, event, summary, source FROM events_fts WHERE events_fts MATCH ? ORDER BY rank LIMIT 10",
-                (query,),
+                "SELECT ts, event, summary, source FROM events_fts WHERE events_fts MATCH ? ORDER BY rank LIMIT ?",
+                (query, limit),
             ).fetchall()
         except sqlite3.OperationalError as e:
             print(f"FTS5 query error: {e}")
@@ -1262,8 +1678,8 @@ def cmd_recall(args):
         print("WARNING: FTS5 not available; falling back to LIKE search.")
         pattern = f"%{query}%"
         rows = conn.execute(
-            "SELECT ts, event, summary, source FROM events_fts WHERE summary LIKE ? LIMIT 10",
-            (pattern,),
+            "SELECT ts, event, summary, source FROM events_fts WHERE summary LIKE ? LIMIT ?",
+            (pattern, limit),
         ).fetchall()
     conn.close()
 
@@ -1428,12 +1844,44 @@ def main():
     p = sub.add_parser("status", help="One-line health view: agent, last decision, open next-steps.")
     p.set_defaults(func=cmd_status)
 
+    p = sub.add_parser("check", help="Health check: JSONL validity, hook status, .gitattributes, FTS freshness.")
+    p.set_defaults(func=cmd_check)
+
+    p = sub.add_parser("archive", help="Compact the timeline by collapsing old file_changed events.")
+    p.add_argument("--before", required=True, metavar="YYYY-MM-DD",
+                   help="Drop file_changed events older than this date.")
+    p.add_argument("--yes", action="store_true", help="Apply (omit for dry-run).")
+    p.set_defaults(func=cmd_archive)
+
+    p = sub.add_parser("roster", help="Show agent activity summary.")
+    p.set_defaults(func=cmd_roster)
+
+    p = sub.add_parser("config", help="Get, set, or list per-repo config values.")
+    cfg_sub = p.add_subparsers(dest="action", required=True)
+
+    cs = cfg_sub.add_parser("list", help="List all config values.")
+    cs = cfg_sub.add_parser("get", help="Get a config value.")
+    cs.add_argument("key")
+    cs = cfg_sub.add_parser("set", help="Set a config value.")
+    cs.add_argument("key")
+    cs.add_argument("value")
+    cs = cfg_sub.add_parser("unset", help="Remove a config key.")
+    cs.add_argument("key")
+    p.set_defaults(func=cmd_config)
+
+    p = sub.add_parser("install-skill", help="Install dejavue SKILL.md to your agent's skills directory.")
+    p.add_argument("--dir", default=None, metavar="PATH",
+                   help="Target skills directory (auto-detects ~/.claude/skills/ by default).")
+    p.add_argument("--force", action="store_true", help="Overwrite existing skill symlinks.")
+    p.set_defaults(func=cmd_install_skill)
+
     p = sub.add_parser("log", help="Formatted timeline view.")
     p.add_argument("--since", default=None, help="ISO date or commit hash.")
     p.add_argument("--agent", default=None, help="Filter by agent name.")
     p.add_argument("--type", default=None, dest="type",
                    help="Filter by event type (decision, state_update, handoff, file_changed, note, ...).")
     p.add_argument("--oneline", action="store_true", help="One line per event.")
+    p.add_argument("--reverse", action="store_true", help="Show oldest events first.")
     p.set_defaults(func=cmd_log)
 
     p = sub.add_parser("blame", help="Show decisions and events touching a file path.")
@@ -1459,6 +1907,8 @@ def main():
 
     p = sub.add_parser("recall", help="Keyword (FTS5) or semantic search over timeline + docs.")
     p.add_argument("query")
+    p.add_argument("--limit", type=int, default=10, metavar="N",
+                   help="Max results to return (default 10).")
     p.add_argument(
         "--semantic",
         action="store_true",
