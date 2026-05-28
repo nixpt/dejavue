@@ -68,44 +68,52 @@ Test gate achieved: 62/62 (was ≥50/50 target).
 - `log --reverse` flag; `recall --limit N` flag
 - Embedder circuit breaker (3 failures → 5-min cooldown; state in embedder_circuit.json)
 
-## 🔮 v1.2 candidates
+## ✅ v1.2.0 — expression + discovery wave (2026-05-28)
 
-Items from the original wishlist not yet shipped, plus the one deferred v0.3
-phase. Listed by impact-per-LoC.
+31 commands, 88/88 tests.
+
+- `--type` on `decision` (blocker/claim/question/experiment/checkpoint) + on `note`
+- `stats` — event statistics with mini bar chart
+- `export --format {json,md}` — full memory snapshot export
+- `reference {create,list,update,view}` — reference card management via CLI (`--template api/design`)
+- `link <sha>` — reverse-lookup dejavue events for a git commit
+- `search` — discoverable alias for `recall`
+- `context -n N` — control boot-packet event count
+- Tiered embedder auto-detect (ollama → OpenAI → FTS5 fallback)
+- Model-aware embedding cache (stale vectors from old model ignored)
+
+## 🔮 v1.3 candidates
 
 ### High impact
 
-- **Commit-msg `Dejavue-Event:` trailer** (deferred from v0.3) — reverse
-  git-link via `git interpret-trailers`. Needs a safe design that avoids
-  amend-from-hook infinite loops.
-- **Tiered embedder fallback chain** — Local ONNX → Ollama → cloud API →
-  FTS5. Backends return `None` rather than raising. ~80 LoC.
-- **Embedding staleness tracking** — current cache key is content-hash only;
-  needs `(source_commit, source_path, content_hash)` triple. ~25 LoC.
-- **Circuit breaker for embedder reliability** — 5-minute cooldown after 3
-  consecutive failures. ~50 LoC.
+- **Commit-msg `Dejavue-Event:` trailer** (deferred from v0.3) — safe design
+  via `git notes` (metadata outside the commit, no SHA change) rather than
+  `interpret-trailers` (amend-from-hook loop risk).
+- **`dejavue diff <from> [<to>]`** — compare dejavue state (decisions, state.md
+  content) between two refs/dates. The "what changed in project memory between
+  these two points?" view.
+- **`dejavue timeline --visual`** — ASCII activity chart (commits × events per
+  week). The "how active has this project been?" view.
+- **Local ONNX embedder tier** — try a local ONNX runtime (onnxruntime + a
+  quantized all-MiniLM) before falling back to Ollama. Fully offline; zero
+  API cost.
 
 ### Medium impact
 
-- **`dejavue archive --before <date>`** — timeline compaction for long-running
-  repos (1yr+ of `file_changed` events).
-- **`dejavue check`** — git-fsck equivalent: JSONL validity, FTS freshness,
-  cross-reference consistency.
-- **Richer event-type taxonomy** — domain field + new types (`blocker`,
-  `claim`, `question`, `experiment`, `checkpoint`). Recall filter support.
-- **`dejavue install-skill`** — auto-install the dejavue SKILL.md into the
-  user's agent system (Claude Code, Cursor, etc.) on first use.
-- **Reference frontmatter + templates** — structured metadata on
-  `references/*.md`; `dejavue reference --type api --name <foo>` scaffolds
-  from template.
+- **`dejavue promote --to jagent`** — spec + implementation for graduating a
+  `.dejavue/` into a richer per-repo planning system without losing history.
+- **First-use wizard** — `dejavue init --wizard` 3-question prompt to seed
+  richer initial state (project type, agent name, purpose).
+- **Reference frontmatter** — YAML frontmatter on `references/*.md` (type,
+  owner, updated); `dejavue reference list --type api` filters by it.
+- **`dejavue log --type blocker`** — already works via `event_type` field;
+  add FTS5 indexing of `event_type` so recall finds sub-types.
 
-### Lower impact / longer horizon
+### Lower impact
 
-- **`dejavue roster`** — agent-activity timeline derived from `session_start`
-  events.
-- **First-use wizard** — 3-question init prompt to seed richer initial state.
-- **`dejavue promote --to jagent`** — concrete graduation path to a richer
-  per-repo memory system; spec before code.
+- **`dejavue archive --compress`** — zstd-compress the backup file on archive.
+- **`dejavue check --fix`** — auto-repair repairable issues (re-install hooks,
+  add missing `.gitattributes` entries) rather than just reporting them.
 
 ### MCP-only (separate horizon, joker ecosystem)
 

@@ -116,3 +116,15 @@ Rejected alternatives:
 Outcome:
 v1.1.0 tagged. 25 commands, 71/71 tests.
 
+
+## 2026-05-28T00:16:44-05:00 — v1.2.0 scope: expression + discovery wave
+
+Reason:
+Richer event sub-types (blocker/claim/question/experiment/checkpoint) + stats/export/reference/link/search + tiered embedder auto-detect + model-aware cache. Each feature independently useful; good cohesion as a 'make dejavue more expressive and discoverable' wave.
+
+Rejected alternatives:
+- **defer event sub-types to later**: event_type field adds no migration cost; better to land alongside the commands that benefit from filtering it
+
+Outcome:
+v1.2.0 tagged. 31 commands, 88/88 tests.
+
