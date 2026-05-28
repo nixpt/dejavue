@@ -5,6 +5,46 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 **The on-disk format is stable as of v1.0.0.** `.dejavue/` files written by
 any v1.x release can be read by any later v1.x release without migration.
 
+## [1.3.0] — 2026-05-28
+
+36 commands, 100/100 tests.
+
+### Added
+
+- **`dejavue diff <from> [<to>]`** — compare dejavue memory between two refs.
+  When both refs resolve to ISO timestamps, shows decisions, notes, and state
+  updates added in the window. When refs are git objects, uses `git show
+  <ref>:.dejavue/state.md` and `decisions.md` with `difflib.unified_diff` for
+  a structural diff of the memory documents. Date refs are padded to full-day
+  boundaries (T00:00:00 / T23:59:59) so `diff 2026-05-01 2026-05-15` is
+  inclusive of both endpoints.
+- **`dejavue timeline [--by {day,week,month}] [--agent NAME]`** — ASCII
+  activity chart. Groups events into time buckets, renders a proportional `█`
+  bar per period, reports totals. `--agent` filters to one contributor's
+  activity.
+- **`dejavue check --fix`** — auto-repair mode. For each WARN item with a
+  known fix (missing hooks, wrong hook path, missing `.gitattributes` /
+  `.gitignore` entries, stale FTS database) the repair is applied and the
+  report line shows `↻ auto-fixed` instead of `⚠ warn`. Pass-only checks
+  and non-fixable WARNs behave as before.
+- **`dejavue tag {list,filter <tag>}`** — tag management: `list` shows all
+  unique tags with event counts; `filter <tag>` shows all events carrying
+  that tag. Tags set via `dejavue note --tag` or `dejavue decision --tag`.
+- **`dejavue note-commit <sha>`** — write a git note on a commit that links
+  it to the most-recent dejavue event. Uses `git notes append` — metadata
+  stored outside the commit object, SHA unchanged. `dejavue link <sha>` now
+  also reads these git notes and displays any `Dejavue-Event:` entries.
+- **`event_type` indexed in FTS5** — `dejavue recall blocker` now surfaces
+  events recorded as `--type blocker`; same for `question`, `experiment`, etc.
+- **`dejavue since` now shows a Notes section** — `note` events in the window
+  are surfaced alongside decisions, state updates, and handoffs, with tag and
+  sub-type labels.
+
+### Changed
+
+- `difflib` added to imports (stdlib; no new runtime dep).
+- Test suite: 88 → 100 (100/100 green).
+
 ## [1.2.0] — 2026-05-28
 
 31 commands, 88/88 tests.

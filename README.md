@@ -159,6 +159,10 @@ git                — mechanical history (commits, diffs)
 | `dejavue reference {create,list,update,view}` | Manage `.dejavue/references/` cards via CLI. |
 | `dejavue link <sha>` | Show dejavue events recorded for a git commit SHA. |
 | `dejavue search QUERY [--semantic] [--limit N]` | Alias for `recall` (discoverable name). |
+| `dejavue diff <from> [<to>]` | Compare memory between two refs — decisions added, state diff, event window. |
+| `dejavue timeline [--by day/week/month]` | ASCII activity chart — events per time period. |
+| `dejavue tag {list, filter <tag>}` | List tags with counts or filter events by tag. |
+| `dejavue note-commit <sha>` | Write a git note on a commit linking it to the last dejavue event. |
 | `dejavue version` | Print installed version. |
 
 Each command accepts `--help`. See `dejavue --help` for the full flag list.
@@ -380,12 +384,13 @@ tools sit on top of the same on-disk format. See `docs/05-v0.1-scope.md`
 | v1.0 | Format stable. 20 commands: ambient agent-id, staleness warnings, pre-push hook, codebase map, `status`, `log`, `blame`, `note`. |
 | v1.1 | 25 commands: `check`, `archive`, `roster`, `config`, `install-skill`, embedder circuit breaker. |
 | v1.2 | 31 commands: richer event types, `stats`, `export`, `reference`, `link`, `search`, tiered embedder auto-detect. |
-| v1.3+ | MCP tool wrappers, ONNX local embedder, `dejavue diff`, `dejavue promote`. |
+| v1.3 | 36 commands: `diff`, `timeline`, `tag`, `note-commit`, `check --fix`, event_type FTS indexing, `since` notes section. |
+| v1.4+ | MCP tool wrappers, ONNX local embedder, `dejavue promote`, first-use wizard. |
 
 
 ## Status
 
-v1.2.0 — single-file Python CLI. 31 commands. 88/88 tests. Format stable. Not on PyPI.
+v1.3.0 — single-file Python CLI. 36 commands. 100/100 tests. Format stable. Not on PyPI.
 
 Design documents in repo:
 - `docs/01-origin.md` — original conversation that produced the spec
