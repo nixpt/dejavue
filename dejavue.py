@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import contextlib
 import hashlib
 import json
 import math
@@ -10,8 +11,10 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+
+VERSION = "1.0.0"
 
 DEJAVUE_DIR = Path(".dejavue")
 TIMELINE = DEJAVUE_DIR / "timeline.jsonl"
@@ -31,6 +34,69 @@ HAS_FTS5 = None  # probed lazily on first db open
 DEFAULT_EMBEDDER_URL = "http://localhost:11434/v1/embeddings"
 DEFAULT_EMBEDDER_MODEL = "nomic-embed-text"
 EMBEDDER_TIMEOUT_S = 5.0
+
+# flock support (POSIX only; graceful no-op on Windows)
+try:
+    import fcntl as _fcntl
+    _HAS_FLOCK = True
+except ImportError:
+    _HAS_FLOCK = False
+
+
+@contextlib.contextmanager
+def _lock(name):
+    """Advisory exclusive lock under .dejavue/.locks/<name>.lock. No-op if fcntl unavailable."""
+    lock_dir = DEJAVUE_DIR / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = lock_dir / f"{name}.lock"
+    lf = open(lock_path, "w")
+    try:
+        if _HAS_FLOCK:
+            _fcntl.flock(lf, _fcntl.LOCK_EX)
+        yield
+    finally:
+        if _HAS_FLOCK:
+            _fcntl.flock(lf, _fcntl.LOCK_UN)
+        lf.close()
+
+
+def _load_config():
+    """Load .dejavue/config (key=value lines, # comments). Returns dict."""
+    p = DEJAVUE_DIR / "config"
+    if not p.exists():
+        return {}
+    cfg = {}
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            k, _, v = line.partition("=")
+            cfg[k.strip()] = v.strip()
+    return cfg
+
+
+def resolve_agent(given=None):
+    """Return the best agent identity.
+
+    Priority: explicit --agent flag (non-empty, non-'unknown')
+              > AGENT_NAME env var
+              > CLAUDE_CLI env var
+              > GIT_AUTHOR_NAME env var
+              > .dejavue/config agent_name
+              > 'unknown'
+    """
+    if given and given not in ("unknown", ""):
+        return given
+    for env in ("AGENT_NAME", "CLAUDE_CLI", "GIT_AUTHOR_NAME"):
+        val = os.environ.get(env, "").strip()
+        if val:
+            return val
+    cfg = _load_config()
+    default = cfg.get("agent_name", "").strip()
+    if default:
+        return default
+    return "unknown"
 
 
 def now():
@@ -89,6 +155,35 @@ the code + git log, don't write it.
 """)
 
 
+def _staleness_warnings():
+    """Return list of warning strings about stale .dejavue/ state."""
+    import time
+    warnings = []
+    now_ts = time.time()
+
+    if STATE.exists():
+        age_days = (now_ts - STATE.stat().st_mtime) / 86400
+        content = STATE.read_text(encoding="utf-8")
+        if "No state recorded yet" in content:
+            warnings.append("state.md is a default stub — run: dejavue state --summary '<current state>'")
+        elif age_days > 7:
+            warnings.append(f"state.md is {int(age_days)}d old — consider: dejavue state --summary '<current state>'")
+    else:
+        warnings.append("state.md missing — run: dejavue state --summary '<current state>'")
+
+    if HANDOFF.exists():
+        content = HANDOFF.read_text(encoding="utf-8")
+        if "before making changes" in content and "## Summary\n" not in content:
+            warnings.append("handoff.md is default stub — no prior handoff on record")
+    else:
+        warnings.append("handoff.md missing")
+
+    if REFERENCES.exists() and not list(REFERENCES.glob("*.md")):
+        warnings.append("references/ is empty — consider: dejavue init --map to scaffold map.md")
+
+    return warnings
+
+
 # ── FTS5 / sqlite helpers ──────────────────────────────────────────────────────
 
 def open_db():
@@ -116,52 +211,59 @@ def fts_needs_rebuild():
 
 def rebuild_fts():
     DEJAVUE_DIR.mkdir(exist_ok=True)
-    conn = open_db()
-    if HAS_FTS5:
-        conn.execute("DROP TABLE IF EXISTS events_fts")
-        conn.execute(
-            "CREATE VIRTUAL TABLE events_fts USING fts5(ts, event, summary, source)"
-        )
-    else:
-        conn.execute("DROP TABLE IF EXISTS events_fts")
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS events_fts (ts TEXT, event TEXT, summary TEXT, source TEXT)"
-        )
+    with _lock("fts"):
+        conn = open_db()
+        if HAS_FTS5:
+            conn.execute("DROP TABLE IF EXISTS events_fts")
+            conn.execute(
+                "CREATE VIRTUAL TABLE events_fts USING fts5(ts, event, summary, source)"
+            )
+        else:
+            conn.execute("DROP TABLE IF EXISTS events_fts")
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS events_fts (ts TEXT, event TEXT, summary TEXT, source TEXT)"
+            )
 
-    rows = []
+        rows = []
 
-    if TIMELINE.exists():
-        for line in TIMELINE.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                ev = json.loads(line)
-                parts = [
-                    ev.get("summary", ""),
-                    ev.get("goal", ""),
-                    ev.get("decision_title", ev.get("decision", "")),
-                    ev.get("decision_reason", ev.get("reason", "")),
-                ]
-                text = " ".join(p for p in parts if p)
-                rows.append((ev.get("ts", ""), ev.get("event", ""), text, "timeline.jsonl"))
-            except json.JSONDecodeError:
-                pass
+        if TIMELINE.exists():
+            for line in TIMELINE.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    ev = json.loads(line)
+                    parts = [
+                        ev.get("summary", ""),
+                        ev.get("goal", ""),
+                        ev.get("decision_title", ev.get("decision", "")),
+                        ev.get("decision_reason", ev.get("reason", "")),
+                        ev.get("tag", ""),
+                        ev.get("content", ""),
+                    ]
+                    text = " ".join(p for p in parts if p)
+                    rows.append((ev.get("ts", ""), ev.get("event", ""), text, "timeline.jsonl"))
+                except json.JSONDecodeError:
+                    pass
 
-    for path, label in [(STATE, "state.md"), (DECISIONS, "decisions.md"), (HANDOFF, "handoff.md")]:
-        if path.exists():
-            rows.append(("", "doc", path.read_text(encoding="utf-8"), label))
+        for path, label in [(STATE, "state.md"), (DECISIONS, "decisions.md"), (HANDOFF, "handoff.md")]:
+            if path.exists():
+                rows.append(("", "doc", path.read_text(encoding="utf-8"), label))
 
-    if REFERENCES.exists():
-        for ref in REFERENCES.glob("*.md"):
-            rows.append(("", "reference", ref.read_text(encoding="utf-8"), f"references/{ref.name}"))
+        if REFERENCES.exists():
+            for ref in REFERENCES.glob("*.md"):
+                rows.append(("", "reference", ref.read_text(encoding="utf-8"), f"references/{ref.name}"))
 
-    conn.executemany("INSERT INTO events_fts(ts, event, summary, source) VALUES (?,?,?,?)", rows)
-    conn.commit()
-    conn.close()
+        conn.executemany("INSERT INTO events_fts(ts, event, summary, source) VALUES (?,?,?,?)", rows)
+        conn.commit()
+        conn.close()
 
 
 # ── command implementations ────────────────────────────────────────────────────
+
+def cmd_version(args):
+    print(f"dejavue {VERSION}")
+
 
 def cmd_init(args):
     DEJAVUE_DIR.mkdir(exist_ok=True)
@@ -180,18 +282,19 @@ def cmd_init(args):
             encoding="utf-8",
         )
 
-    # git hook
     git_dir_raw = git_run("git", "rev-parse", "--git-dir")
     if git_dir_raw:
         git_dir = Path(git_dir_raw)
         hooks_dir = git_dir / "hooks"
         hooks_dir.mkdir(exist_ok=True)
+
+        # post-commit hook
         hook_path = hooks_dir / "post-commit"
         marker = "#!/usr/bin/env bash\n# dejavue auto-capture"
         if hook_path.exists():
             content = hook_path.read_text(encoding="utf-8")
             if content.startswith(marker):
-                pass  # already ours
+                pass
             elif args.force:
                 _write_hook(hook_path, marker)
                 print("Replaced existing post-commit hook with dejavue hook.")
@@ -204,21 +307,38 @@ def cmd_init(args):
             _write_hook(hook_path, marker)
             print(f"Installed post-commit hook at {hook_path}")
 
-        # .gitattributes — install merge=union for append-only files.
-        # Critical for worktree-per-agent / multi-branch workflows: without
-        # it, every wave merge conflicts on timeline.jsonl + decisions.md
-        # because both branches added unique lines and git's default text
-        # merger can't see that append-only semantics make union safe.
-        # See README §Concurrency.
+        # pre-push hook
+        prepush_path = hooks_dir / "pre-push"
+        prepush_marker = "#!/usr/bin/env bash\n# dejavue pre-push"
+        if prepush_path.exists():
+            if not prepush_path.read_text(encoding="utf-8").startswith(prepush_marker):
+                if args.force:
+                    _write_prepush_hook(prepush_path, prepush_marker)
+                    print("Replaced existing pre-push hook with dejavue hook.")
+                # else: leave foreign hook alone
+        else:
+            _write_prepush_hook(prepush_path, prepush_marker)
+            print(f"Installed pre-push hook at {prepush_path}")
+
         _install_gitattributes(force=args.force)
+        _install_gitignore()
     else:
         print("WARNING: not inside a git repo; skipping hook install.")
 
     append_event({
-        "agent": args.agent,
+        "agent": resolve_agent(args.agent),
         "event": "init",
         "summary": "Initialized .dejavue/ memory scaffold.",
     })
+
+    if getattr(args, "map", False):
+        _scaffold_map()
+
+    if getattr(args, "ingest", False):
+        class _IngestArgs:
+            force = True
+            generate_map = False
+        cmd_ingest(_IngestArgs())
 
     maybe_show_worthiness()
     print("Initialized .dejavue/")
@@ -234,6 +354,17 @@ def _write_hook(hook_path, marker):
     hook_path.chmod(0o755)
 
 
+def _write_prepush_hook(hook_path, marker):
+    script_path = Path(sys.argv[0]).resolve()
+    script = (
+        marker + "\n"
+        f'python3 "{script_path}" context --check-stale 2>/dev/null || true\n'
+        "exit 0\n"
+    )
+    hook_path.write_text(script, encoding="utf-8")
+    hook_path.chmod(0o755)
+
+
 # .gitattributes lines we own. Both files are append-only by contract;
 # merge=union keeps unique lines from both sides on a branch merge.
 _GITATTR_LINES = (
@@ -244,28 +375,18 @@ _GITATTR_MARKER = "# dejavue: append-only files use git's union merge driver"
 
 
 def _install_gitattributes(force=False):
-    """Append our merge=union directives to .gitattributes if absent.
-
-    Idempotent: if our marker is already present, do nothing. If a non-dejavue
-    .gitattributes exists and our lines are absent, append (with marker) — this
-    is safe because gitattributes is line-based and our patterns only match
-    paths under .dejavue/. With force=True, also re-append even if marker
-    present (effectively ensures the lines are at the bottom).
-    """
+    """Append our merge=union directives to .gitattributes if absent. Idempotent."""
     path = Path(".gitattributes")
     existing = path.read_text(encoding="utf-8") if path.exists() else ""
 
     if _GITATTR_MARKER in existing and not force:
-        return  # already installed
+        return
 
-    # Detect if our exact lines are already there (under any marker, e.g. a
-    # user who copied them from the README before running init).
     already_have_lines = all(line in existing for line in _GITATTR_LINES)
     if already_have_lines and not force:
         return
 
     block = ["", _GITATTR_MARKER, *_GITATTR_LINES, ""]
-    # Avoid blank-line spam: if existing ends in a newline, our leading "" is fine.
     sep = "" if existing.endswith("\n") or existing == "" else "\n"
     new_content = existing + sep + "\n".join(block) + "\n"
     path.write_text(new_content, encoding="utf-8")
@@ -275,10 +396,60 @@ def _install_gitattributes(force=False):
         print(f"Appended {len(_GITATTR_LINES)} merge=union directives to existing .gitattributes.")
 
 
+_GITIGNORE_ENTRIES = (
+    ".dejavue/fts.db",
+    ".dejavue/*.tmp",
+    ".dejavue/.first-use",
+    ".dejavue/ingested.lock",
+    ".dejavue/.locks/",
+    ".dejavue/embeddings.jsonl",
+)
+_GITIGNORE_MARKER = "# dejavue: local-only artifacts"
+
+
+def _install_gitignore():
+    """Append dejavue gitignore entries if absent. Idempotent."""
+    path = Path(".gitignore")
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    if _GITIGNORE_MARKER in existing:
+        return
+    block = ["", _GITIGNORE_MARKER, *_GITIGNORE_ENTRIES, ""]
+    sep = "" if existing.endswith("\n") or existing == "" else "\n"
+    new_content = existing + sep + "\n".join(block) + "\n"
+    path.write_text(new_content, encoding="utf-8")
+    print(f"Appended {len(_GITIGNORE_ENTRIES)} entries to .gitignore.")
+
+
+def _scaffold_map():
+    """Create references/map.md with a starter template."""
+    REFERENCES.mkdir(exist_ok=True)
+    map_path = REFERENCES / "map.md"
+    if map_path.exists():
+        print("references/map.md already exists — not overwritten.")
+        return
+    map_path.write_text(
+        "# Codebase Map\n\n"
+        "<!-- Scaffolded by `dejavue init --map` — fill in and commit. -->\n"
+        "<!-- Run `dejavue ingest --generate-map` for auto-detected structure. -->\n\n"
+        "## Top-level layout\n\n"
+        "```\n"
+        "# (fill in: key directories and their purpose)\n"
+        "```\n\n"
+        "## Key entry points\n\n"
+        "- (fill in: main binaries / packages / modules)\n\n"
+        "## Design invariants\n\n"
+        "- (fill in: what must never change, key architectural constraints)\n\n"
+        "## External dependencies\n\n"
+        "- (fill in: critical external deps and why they were chosen)\n",
+        encoding="utf-8",
+    )
+    print("Scaffolded references/map.md — fill it in with the codebase overview.")
+
+
 def cmd_start(args):
     maybe_show_worthiness()
     append_event({
-        "agent": args.agent,
+        "agent": resolve_agent(args.agent),
         "event": "session_start",
         "goal": args.goal,
         "summary": f"Session start: {args.goal}",
@@ -290,13 +461,10 @@ def cmd_changed(args):
     if args.auto and args.commit:
         sha = args.commit
         diff_stat = git_run("git", "show", "--stat", sha).splitlines()
-        # last line of --stat is summary ("N files changed…"), use it
         stat_summary = diff_stat[-1] if diff_stat else ""
         commit_msg = git_run("git", "log", "-1", "--format=%s", sha)
-        # `git show --name-only` silently emits nothing for merge commits (default
-        # `--diff-merges=off` suppresses combined diff). Use `git diff-tree` with
-        # `-m --first-parent` to handle merges (show what came in via the merge)
-        # plus `--root` to handle initial commits (no parent to diff against).
+        # Use diff-tree with -m --first-parent --root to handle merges + root commits;
+        # plain git show --name-only silently emits nothing for merge commits.
         touched = [
             l for l in git_run(
                 "git", "diff-tree", "--no-commit-id", "-r", "--name-only",
@@ -307,7 +475,7 @@ def cmd_changed(args):
         short = sha[:7]
         for path in touched or [args.path or "unknown"]:
             ev = {
-                "agent": args.agent or "git-hook",
+                "agent": resolve_agent(args.agent) if args.agent else "git-hook",
                 "event": "file_changed",
                 "path": path,
                 "branch": branch,
@@ -315,7 +483,6 @@ def cmd_changed(args):
                 "diff_stat": stat_summary,
                 "summary": commit_msg or f"commit {short}",
             }
-            # skip ts/git_info double-stamp since we set branch/commit directly
             base = {"ts": now(), **ev}
             DEJAVUE_DIR.mkdir(exist_ok=True)
             with TIMELINE.open("a", encoding="utf-8") as f:
@@ -325,7 +492,7 @@ def cmd_changed(args):
         maybe_show_worthiness()
         summary = args.summary or f"Changed {args.path}"
         append_event({
-            "agent": args.agent or "unknown",
+            "agent": resolve_agent(args.agent),
             "event": "file_changed",
             "path": args.path,
             "summary": summary,
@@ -339,14 +506,12 @@ def cmd_decision(args):
     rejected = []
     if args.rejected:
         for r in args.rejected:
-            # parse "option: reason" or just treat as option with no inline reason
             if ": " in r:
                 opt, reason = r.split(": ", 1)
             else:
                 opt, reason = r, ""
             rejected.append({"option": opt, "reason": reason})
 
-    # append to decisions.md
     entry = f"\n## {ts} — {args.title}\n\nReason:\n{args.reason}\n"
     if rejected:
         entry += "\nRejected alternatives:\n"
@@ -362,7 +527,7 @@ def cmd_decision(args):
         f.write(entry)
 
     append_event({
-        "agent": args.agent,
+        "agent": resolve_agent(args.agent),
         "event": "decision",
         "decision_title": args.title,
         "decision_reason": args.reason,
@@ -378,7 +543,7 @@ def cmd_state(args):
     ts = now()
     STATE.write_text(f"# State\n\nUpdated: {ts}\n\n{args.summary}\n", encoding="utf-8")
     append_event({
-        "agent": args.agent,
+        "agent": resolve_agent(args.agent),
         "event": "state_update",
         "summary": args.summary,
     })
@@ -397,7 +562,7 @@ def cmd_handoff(args):
         encoding="utf-8",
     )
     append_event({
-        "agent": args.agent,
+        "agent": resolve_agent(args.agent),
         "event": "handoff",
         "summary": args.summary,
         "next": args.next,
@@ -406,11 +571,30 @@ def cmd_handoff(args):
 
 
 def cmd_context(args):
+    # staleness warnings (hidden behind --check-stale for pre-push hook use)
+    if getattr(args, "check_stale", False):
+        warnings = _staleness_warnings()
+        if warnings:
+            print("dejavue: staleness warnings:", file=sys.stderr)
+            for w in warnings:
+                print(f"  ⚠  {w}", file=sys.stderr)
+        return
+
     print("\n# Dejavue Context\n")
     for path, label in [(HANDOFF, "handoff.md"), (STATE, "state.md"), (DECISIONS, "decisions.md")]:
         if path.exists():
             print(f"--- {label} ---\n")
             print(path.read_text(encoding="utf-8"))
+
+    if REFERENCES.exists():
+        refs = sorted(REFERENCES.glob("*.md"))
+        if refs:
+            print("--- references ---\n")
+            for ref in refs:
+                first_line = ref.read_text(encoding="utf-8").splitlines()
+                title = next((l.lstrip("# ").strip() for l in first_line if l.strip()), ref.stem)
+                print(f"  {ref.name}  ({title})")
+                print()
 
     if TIMELINE.exists():
         print("--- recent timeline (last 10) ---\n")
@@ -421,6 +605,173 @@ def cmd_context(args):
                 print(f"  [{ev.get('ts','')}] {ev.get('event','')} — {ev.get('summary','')}")
             except Exception:
                 print(f"  {line}")
+
+    # staleness warnings at the bottom
+    warnings = _staleness_warnings()
+    if warnings:
+        print("\n--- warnings ---\n")
+        for w in warnings:
+            print(f"  ⚠  {w}")
+
+
+def cmd_status(args):
+    """One-line health view: active agent, last decision, open next-steps."""
+    if not DEJAVUE_DIR.exists():
+        print("Not initialized. Run: dejavue init")
+        return
+
+    events = _load_events()
+
+    # Last active agent (most recent session_start)
+    last_start = next((ev for ev in reversed(events) if ev.get("event") == "session_start"), None)
+    agent_str = last_start.get("agent", "?") if last_start else "(none)"
+
+    # Last decision
+    last_dec = next((ev for ev in reversed(events) if ev.get("event") == "decision"), None)
+    dec_str = ""
+    if last_dec:
+        ts = (last_dec.get("ts") or "")[:10]
+        title = last_dec.get("decision_title", "")[:50]
+        dec_str = f"{title} ({ts})"
+
+    # Open next-steps from handoff
+    next_steps = []
+    if HANDOFF.exists():
+        in_next = False
+        for line in HANDOFF.read_text(encoding="utf-8").splitlines():
+            if line.startswith("## Next Steps"):
+                in_next = True
+                continue
+            if in_next and line.startswith("## "):
+                break
+            if in_next and line.strip():
+                next_steps.append(line.strip().lstrip("- "))
+
+    # Event count
+    n_events = len(events)
+
+    print(f"Active agent : {agent_str}")
+    print(f"Events       : {n_events}")
+    if last_dec:
+        print(f"Last decision: {dec_str}")
+    if next_steps:
+        print(f"Next steps   :")
+        for s in next_steps[:3]:
+            print(f"  • {s}")
+
+    # inline staleness warnings
+    warnings = _staleness_warnings()
+    if warnings:
+        print()
+        for w in warnings:
+            print(f"  ⚠  {w}")
+
+
+def cmd_log(args):
+    """Formatted timeline view with optional filters."""
+    events = _load_events()
+
+    # --since filter
+    since_ts = None
+    if args.since:
+        if re.match(r"^\d{4}-\d{2}-\d{2}", args.since):
+            since_ts = args.since
+        else:
+            ts_raw = git_run("git", "log", "-1", "--format=%aI", args.since)
+            if ts_raw:
+                since_ts = ts_raw
+            else:
+                print(f"Cannot resolve '{args.since}' as a date or commit.")
+                return
+
+    # --agent filter
+    agent_filter = args.agent
+
+    # --type filter
+    type_filter = args.type
+
+    filtered = events
+    if since_ts:
+        filtered = [ev for ev in filtered if ev.get("ts", "") >= since_ts[:19]]
+    if agent_filter:
+        filtered = [ev for ev in filtered if ev.get("agent") == agent_filter]
+    if type_filter:
+        filtered = [ev for ev in filtered if ev.get("event") == type_filter]
+
+    if not filtered:
+        print("No events match the filter.")
+        return
+
+    if args.oneline:
+        for ev in filtered:
+            ts = (ev.get("ts") or "")[:10]
+            kind = ev.get("event", "")
+            summary = ev.get("summary", "")[:70]
+            print(f"{ts}  {kind:<20}  {summary}")
+    else:
+        for ev in filtered:
+            ts = (ev.get("ts") or "")[:19]
+            kind = ev.get("event", "")
+            agent = ev.get("agent", "")
+            summary = ev.get("summary", "")
+            print(f"[{ts}] {kind} ({agent})")
+            if summary:
+                print(f"    {summary}")
+            # show rejected alternatives for decisions
+            if kind == "decision" and ev.get("rejected_alternatives"):
+                for ra in ev["rejected_alternatives"]:
+                    opt = ra.get("option", "")
+                    reason = ra.get("reason", "")
+                    print(f"    ✗ {opt}" + (f": {reason}" if reason else ""))
+            print()
+
+
+def cmd_blame(args):
+    """Show decisions and events that touch a given file path."""
+    path = args.path
+    events = _load_events()
+
+    relevant = []
+    for ev in events:
+        hit = (
+            path in ev.get("path", "")
+            or path in ev.get("summary", "")
+            or path in ev.get("decision_reason", ev.get("reason", ""))
+            or path in ev.get("decision_title", ev.get("decision", ""))
+            or path in ev.get("content", "")
+        )
+        if hit:
+            relevant.append(ev)
+
+    if not relevant:
+        print(f"No events found for '{path}'.")
+        return
+
+    print(f"Events touching '{path}':\n")
+    for ev in relevant:
+        ts = (ev.get("ts") or "")[:19]
+        kind = ev.get("event", "")
+        agent = ev.get("agent", "")
+        summary = ev.get("summary", "")
+        print(f"[{ts}] {kind} ({agent})")
+        if summary:
+            print(f"    {summary}")
+        if kind == "decision" and ev.get("decision_reason"):
+            reason = ev["decision_reason"][:120]
+            print(f"    Reason: {reason}")
+        print()
+
+
+def cmd_note(args):
+    """Lightweight timestamped note, between annotate and decision."""
+    maybe_show_worthiness()
+    append_event({
+        "agent": resolve_agent(args.agent),
+        "event": "note",
+        "summary": args.text,
+        "tag": args.tag or "",
+    })
+    print("Note recorded.")
 
 
 def cmd_since(args):
@@ -433,9 +784,7 @@ def cmd_since(args):
         print("Usage: dejavue since <date|commit> or dejavue since --agent <name>")
         return
 
-    # determine form: --agent, ISO date, or commit hash
     if args.agent:
-        # find last session_start event for that agent
         if not TIMELINE.exists():
             print("No timeline found. Run dejavue init first.")
             return
@@ -451,10 +800,9 @@ def cmd_since(args):
         since_ts = match["ts"]
         since_label = f"agent {args.agent} (last start: {since_ts})"
     elif re.match(r"^\d{4}-\d{2}-\d{2}", ref):
-        since_ts = ref  # ISO prefix — compare lexicographically
+        since_ts = ref
         since_label = f"date {ref}"
     else:
-        # commit hash: get its timestamp
         ts_raw = git_run("git", "log", "-1", "--format=%aI", ref)
         if not ts_raw:
             print(f"Cannot resolve '{ref}' as a commit hash.")
@@ -465,7 +813,6 @@ def cmd_since(args):
 
     print(f"Since {since_label}:\n")
 
-    # git delta
     if since_commit:
         git_log = git_run("git", "log", "--oneline", f"{since_commit}..HEAD")
         git_stat = git_run("git", "diff", "--stat", f"{since_commit}..HEAD")
@@ -485,7 +832,6 @@ def cmd_since(args):
     if git_stat:
         print(f"\n  {git_stat.strip()}")
 
-    # filter timeline events in window
     events = _load_events()
     window = [ev for ev in events if ev.get("ts", "") >= since_ts[:19]]
 
@@ -517,7 +863,6 @@ def cmd_since(args):
     else:
         print("  (none)")
 
-    # topic keywords (simple tf-idf-ish: top 5 words by frequency, skip stopwords)
     stopwords = {"the","a","an","and","or","of","to","in","is","it","for","with","on","at","by","was"}
     freq = {}
     for ev in window:
@@ -530,114 +875,211 @@ def cmd_since(args):
 
 
 def cmd_ingest(args):
-    if INGESTED_LOCK.exists() and not args.force:
-        print("Already ingested (marker exists). Use --force to re-run.")
-        return
+    with _lock("ingest"):
+        if INGESTED_LOCK.exists() and not args.force:
+            print("Already ingested (marker exists). Use --force to re-run.")
+            return
 
-    ingested = []
-    ts = now()
+        ingested = []
+        ts = now()
 
-    # 1. git log --since=1.year
-    log = git_run("git", "log", "--since=1.year", "--pretty=format:%H\t%s", "--name-only")
-    current_hash = current_msg = None
-    touched = []
-    for line in log.splitlines():
-        if "\t" in line and len(line.split("\t")[0]) == 40:
-            if current_hash and touched:
-                for p in touched:
-                    append_event({
-                        "agent": "ingest",
-                        "event": "file_changed",
-                        "path": p,
-                        "commit": current_hash[:7],
-                        "summary": current_msg,
-                    })
-            parts = line.split("\t", 1)
-            current_hash = parts[0]
-            current_msg = parts[1] if len(parts) > 1 else ""
-            touched = []
-        elif line.strip() and current_hash:
-            touched.append(line.strip())
-    if current_hash and touched:
-        for p in touched:
-            append_event({
-                "agent": "ingest",
-                "event": "file_changed",
-                "path": p,
-                "commit": current_hash[:7],
-                "summary": current_msg,
-            })
-    ingested.append("git log --since=1.year")
+        # 1. git log --since=1.year
+        log = git_run("git", "log", "--since=1.year", "--pretty=format:%H\t%s", "--name-only")
+        current_hash = current_msg = None
+        touched = []
+        for line in log.splitlines():
+            if "\t" in line and len(line.split("\t")[0]) == 40:
+                if current_hash and touched:
+                    for p in touched:
+                        append_event({
+                            "agent": "ingest",
+                            "event": "file_changed",
+                            "path": p,
+                            "commit": current_hash[:7],
+                            "summary": current_msg,
+                        })
+                parts = line.split("\t", 1)
+                current_hash = parts[0]
+                current_msg = parts[1] if len(parts) > 1 else ""
+                touched = []
+            elif line.strip() and current_hash:
+                touched.append(line.strip())
+        if current_hash and touched:
+            for p in touched:
+                append_event({
+                    "agent": "ingest",
+                    "event": "file_changed",
+                    "path": p,
+                    "commit": current_hash[:7],
+                    "summary": current_msg,
+                })
+        ingested.append("git log --since=1.year")
 
-    # 2. agent instruction files
-    for candidate in [Path(".claude/CLAUDE.md"), Path("AGENTS.md"), Path(".cursorrules")]:
-        if candidate.exists():
-            content = candidate.read_text(encoding="utf-8", errors="replace")[:500]
-            append_event({
-                "agent": "ingest",
-                "event": "decision",
-                "decision_title": f"Agent instruction file: {candidate}",
-                "decision_reason": content,
-                "summary": f"Ingested agent instruction file {candidate}",
-            })
-            ingested.append(str(candidate))
-
-    # 3. CHANGELOG.md
-    for cl in [Path("CHANGELOG.md"), Path("CHANGELOG")]:
-        if cl.exists():
-            for line in cl.read_text(encoding="utf-8", errors="replace").splitlines():
-                if re.match(r"^#+\s*\[?v?\d", line):
-                    append_event({
-                        "agent": "ingest",
-                        "event": "decision",
-                        "decision_title": f"Release: {line.strip('# ').strip()}",
-                        "decision_reason": "From CHANGELOG",
-                        "summary": f"Release entry: {line.strip('# ').strip()}",
-                    })
-            ingested.append(str(cl))
-            break
-
-    # 4. ADR directories
-    for adr_dir in [Path("docs/decisions"), Path("docs/adr")]:
-        if adr_dir.exists():
-            for adr in sorted(adr_dir.glob("*.md")):
-                content = adr.read_text(encoding="utf-8", errors="replace")[:500]
+        # 2. agent instruction files
+        for candidate in [Path(".claude/CLAUDE.md"), Path("AGENTS.md"), Path(".cursorrules")]:
+            if candidate.exists():
+                content = candidate.read_text(encoding="utf-8", errors="replace")[:500]
                 append_event({
                     "agent": "ingest",
                     "event": "decision",
-                    "decision_title": f"ADR: {adr.stem}",
+                    "decision_title": f"Agent instruction file: {candidate}",
                     "decision_reason": content,
-                    "summary": f"Ingested ADR {adr.name}",
+                    "summary": f"Ingested agent instruction file {candidate}",
                 })
-                ingested.append(str(adr))
+                ingested.append(str(candidate))
 
-    # 5. README.md
-    for readme in [Path("README.md"), Path("README")]:
-        if readme.exists():
-            first_para = ""
-            for line in readme.read_text(encoding="utf-8", errors="replace").splitlines():
-                if line.strip():
-                    first_para = line.strip()
-                    break
-            append_event({
-                "agent": "ingest",
-                "event": "state_update",
-                "summary": first_para or "README present",
-            })
-            ingested.append(str(readme))
+        # 3. CHANGELOG.md
+        for cl in [Path("CHANGELOG.md"), Path("CHANGELOG")]:
+            if cl.exists():
+                for line in cl.read_text(encoding="utf-8", errors="replace").splitlines():
+                    if re.match(r"^#+\s*\[?v?\d", line):
+                        append_event({
+                            "agent": "ingest",
+                            "event": "decision",
+                            "decision_title": f"Release: {line.strip('# ').strip()}",
+                            "decision_reason": "From CHANGELOG",
+                            "summary": f"Release entry: {line.strip('# ').strip()}",
+                        })
+                ingested.append(str(cl))
+                break
+
+        # 4. ADR directories
+        for adr_dir in [Path("docs/decisions"), Path("docs/adr")]:
+            if adr_dir.exists():
+                for adr in sorted(adr_dir.glob("*.md")):
+                    content = adr.read_text(encoding="utf-8", errors="replace")[:500]
+                    append_event({
+                        "agent": "ingest",
+                        "event": "decision",
+                        "decision_title": f"ADR: {adr.stem}",
+                        "decision_reason": content,
+                        "summary": f"Ingested ADR {adr.name}",
+                    })
+                    ingested.append(str(adr))
+
+        # 5. README.md
+        for readme in [Path("README.md"), Path("README")]:
+            if readme.exists():
+                first_para = ""
+                for line in readme.read_text(encoding="utf-8", errors="replace").splitlines():
+                    if line.strip():
+                        first_para = line.strip()
+                        break
+                append_event({
+                    "agent": "ingest",
+                    "event": "state_update",
+                    "summary": first_para or "README present",
+                })
+                ingested.append(str(readme))
+                break
+
+        INGESTED_LOCK.write_text(
+            json.dumps({"ts": ts, "ingested": ingested}, indent=2), encoding="utf-8"
+        )
+        print(f"Ingested {len(ingested)} sources into timeline.")
+
+    if getattr(args, "generate_map", False):
+        _generate_map()
+
+
+def _generate_map():
+    """Auto-populate references/map.md with lang-aware codebase structure."""
+    REFERENCES.mkdir(exist_ok=True)
+    map_path = REFERENCES / "map.md"
+
+    lines = [f"# Codebase Map\n\n<!-- Generated by `dejavue ingest --generate-map` on {now()} -->\n"]
+
+    # detect project type and entry points
+    project_types = []
+    entry_points = []
+
+    cargo = Path("Cargo.toml")
+    if cargo.exists():
+        project_types.append("Rust")
+        try:
+            content = cargo.read_text(encoding="utf-8", errors="replace")
+            for m in re.finditer(r'\[\[bin\]\].*?name\s*=\s*"([^"]+)"', content, re.DOTALL):
+                entry_points.append(f"{m.group(1)} (Rust binary)")
+            for m in re.finditer(r'name\s*=\s*"([^"]+)"', content):
+                entry_points.append(f"{m.group(1)} (Rust crate)")
+                break
+        except Exception:
+            pass
+
+    for pyfile in [Path("pyproject.toml"), Path("setup.py"), Path("setup.cfg")]:
+        if pyfile.exists():
+            project_types.append("Python")
             break
 
-    INGESTED_LOCK.write_text(
-        json.dumps({"ts": ts, "ingested": ingested}, indent=2), encoding="utf-8"
-    )
-    print(f"Ingested {len(ingested)} sources into timeline.")
+    for pyfile in [Path("pyproject.toml"), Path("setup.cfg")]:
+        if pyfile.exists():
+            try:
+                content = pyfile.read_text(encoding="utf-8", errors="replace")
+                for m in re.finditer(r'name\s*=\s*["\']([^"\']+)["\']', content):
+                    entry_points.append(f"{m.group(1)} (Python package)")
+                    break
+            except Exception:
+                pass
+
+    pkg_json = Path("package.json")
+    if pkg_json.exists():
+        project_types.append("JavaScript/TypeScript")
+        try:
+            data = json.loads(pkg_json.read_text(encoding="utf-8", errors="replace"))
+            name = data.get("name", "")
+            if name:
+                entry_points.append(f"{name} (npm package)")
+            main = data.get("main", "")
+            if main:
+                entry_points.append(f"{main} (main entry)")
+        except Exception:
+            pass
+
+    go_mod = Path("go.mod")
+    if go_mod.exists():
+        project_types.append("Go")
+        try:
+            for line in go_mod.read_text(encoding="utf-8", errors="replace").splitlines():
+                if line.startswith("module "):
+                    entry_points.append(f"{line[7:].strip()} (Go module)")
+                    break
+        except Exception:
+            pass
+
+    # top-level structure
+    try:
+        dirs = sorted(
+            p.name for p in Path(".").iterdir()
+            if p.is_dir() and not p.name.startswith(".") and p.name not in ("target", "node_modules", "__pycache__", "dist", "build")
+        )
+    except Exception:
+        dirs = []
+
+    if project_types:
+        lines.append(f"\n## Project type\n\n{', '.join(set(project_types))}\n")
+
+    if dirs:
+        lines.append("\n## Top-level layout\n\n```\n")
+        for d in dirs[:20]:
+            lines.append(f"{d}/\n")
+        lines.append("```\n")
+
+    if entry_points:
+        lines.append("\n## Key entry points\n\n")
+        seen = set()
+        for ep in entry_points:
+            if ep not in seen:
+                lines.append(f"- {ep}\n")
+                seen.add(ep)
+
+    lines.append("\n## Design invariants\n\n- (fill in: key architectural constraints)\n")
+    lines.append("\n## External dependencies\n\n- (fill in: critical external deps)\n")
+
+    map_path.write_text("".join(lines), encoding="utf-8")
+    print(f"Generated references/map.md from detected project structure ({', '.join(set(project_types)) or 'unknown type'}).")
 
 
 # ── Semantic recall (v0.2) ────────────────────────────────────────────────────
-# The format is the contract: `.dejavue/embeddings.jsonl` is append-only, one
-# row per embedded timeline event, keyed by a content hash of the timeline
-# line. Hash-keying means reorderings/duplicates are safe and re-running recall
-# never produces a different cache shape for the same data.
 
 def _line_hash(line: str) -> str:
     return hashlib.sha256(line.encode("utf-8")).hexdigest()[:16]
@@ -679,7 +1121,6 @@ def _embed_one(text):
 
 
 def _read_embeddings_cache():
-    """Return {hash: vec} from .dejavue/embeddings.jsonl. Missing file → empty dict."""
     if not EMBEDDINGS.exists():
         return {}
     out = {}
@@ -722,10 +1163,8 @@ def _cosine(a, b):
 
 
 def _semantic_text_for(event):
-    """Pick the best text to embed for a timeline event. summary > title+reason > content."""
     if event.get("summary"):
         return event["summary"]
-    # Decision events have title + reason
     if event.get("event") == "decision":
         bits = [event.get("title", ""), event.get("reason", "")]
         joined = " — ".join(b for b in bits if b)
@@ -737,12 +1176,10 @@ def _semantic_text_for(event):
 
 
 def _semantic_recall(query, limit=10):
-    """Embed query, lazily fill cache, cosine-rank events. Returns list of (score, event, ts, source) or None on embedder failure."""
     q_vec = _embed_one(query)
     if q_vec is None:
-        return None  # caller falls back to FTS5
+        return None
 
-    # Load timeline lines (raw, for hashing) + parsed events in lockstep.
     if not TIMELINE.exists():
         return []
     raw_lines = []
@@ -771,7 +1208,6 @@ def _semantic_recall(query, limit=10):
                 continue
             vec = _embed_one(text)
             if vec is None:
-                # Embedder went down mid-fill; skip this event but keep going.
                 continue
             _append_embedding(h, vec, model)
             cache[h] = vec
@@ -787,7 +1223,6 @@ def cmd_recall(args):
 
     query = args.query
 
-    # Semantic path (opt-in via --semantic). Falls through to FTS5 on embedder failure.
     if getattr(args, "semantic", False):
         results = _semantic_recall(query)
         if results is None:
@@ -839,7 +1274,6 @@ def cmd_recall(args):
     print(f"Recall results for '{query}':\n")
     for ts, event, summary, source in rows:
         ts_display = ts[:19] if ts else "(no ts)"
-        # truncate long summaries
         snippet = (summary[:120] + "…") if summary and len(summary) > 120 else (summary or "")
         print(f"  [{ts_display}] {event} ({source})")
         print(f"    {snippet}\n")
@@ -941,13 +1375,18 @@ def main():
     parser = argparse.ArgumentParser("dejavue", description="Repo-local agent memory.")
     sub = parser.add_subparsers(required=True)
 
-    p = sub.add_parser("init", help="Create .dejavue/, install git post-commit hook.")
-    p.add_argument("--agent", default="unknown")
-    p.add_argument("--force", action="store_true", help="Overwrite existing non-dejavue post-commit hook.")
+    p = sub.add_parser("version", help="Print dejavue version.")
+    p.set_defaults(func=cmd_version)
+
+    p = sub.add_parser("init", help="Create .dejavue/, install git hooks.")
+    p.add_argument("--agent", default=None)
+    p.add_argument("--force", action="store_true", help="Overwrite existing non-dejavue hooks.")
+    p.add_argument("--ingest", action="store_true", help="Run ingest after init.")
+    p.add_argument("--map", action="store_true", help="Scaffold references/map.md.")
     p.set_defaults(func=cmd_init)
 
     p = sub.add_parser("start", help="Record session start.")
-    p.add_argument("--agent", default="unknown")
+    p.add_argument("--agent", default=None)
     p.add_argument("--goal", required=True)
     p.set_defaults(func=cmd_start)
 
@@ -965,23 +1404,47 @@ def main():
     p.add_argument("--rejected", action="append", default=[], metavar="OPTION",
                    help="Rejected alternative (repeatable). Format: 'option: reason'")
     p.add_argument("--outcome", default=None,
-                   help="What shipped / current state (optional; omit for timeless doctrine entries).")
-    p.add_argument("--agent", default="unknown")
+                   help="What shipped / current state (optional).")
+    p.add_argument("--agent", default=None)
     p.set_defaults(func=cmd_decision)
 
     p = sub.add_parser("state", help="Overwrite state.md with current snapshot.")
     p.add_argument("--summary", required=True)
-    p.add_argument("--agent", default="unknown")
+    p.add_argument("--agent", default=None)
     p.set_defaults(func=cmd_state)
 
     p = sub.add_parser("handoff", help="Write handoff.md.")
     p.add_argument("--summary", required=True)
-    p.add_argument("--next", action="append", required=True, help="Repeatable; each occurrence becomes a bullet in handoff.md.")
-    p.add_argument("--agent", default="unknown")
+    p.add_argument("--next", action="append", required=True,
+                   help="Repeatable; each occurrence becomes a bullet in handoff.md.")
+    p.add_argument("--agent", default=None)
     p.set_defaults(func=cmd_handoff)
 
     p = sub.add_parser("context", help="Print all .md files + last 10 timeline entries.")
+    p.add_argument("--check-stale", action="store_true", dest="check_stale",
+                   help="Only print staleness warnings (used by pre-push hook).")
     p.set_defaults(func=cmd_context)
+
+    p = sub.add_parser("status", help="One-line health view: agent, last decision, open next-steps.")
+    p.set_defaults(func=cmd_status)
+
+    p = sub.add_parser("log", help="Formatted timeline view.")
+    p.add_argument("--since", default=None, help="ISO date or commit hash.")
+    p.add_argument("--agent", default=None, help="Filter by agent name.")
+    p.add_argument("--type", default=None, dest="type",
+                   help="Filter by event type (decision, state_update, handoff, file_changed, note, ...).")
+    p.add_argument("--oneline", action="store_true", help="One line per event.")
+    p.set_defaults(func=cmd_log)
+
+    p = sub.add_parser("blame", help="Show decisions and events touching a file path.")
+    p.add_argument("path")
+    p.set_defaults(func=cmd_blame)
+
+    p = sub.add_parser("note", help="Record a lightweight timestamped note.")
+    p.add_argument("text")
+    p.add_argument("--tag", default=None, help="Optional tag for filtering.")
+    p.add_argument("--agent", default=None)
+    p.set_defaults(func=cmd_note)
 
     p = sub.add_parser("since", help="Temporal delta since a date, commit, or agent's last session.")
     p.add_argument("ref", nargs="?", default=None, help="ISO date, commit hash, or (with --agent) ignored.")
@@ -990,6 +1453,8 @@ def main():
 
     p = sub.add_parser("ingest", help="Scrape .claude/, CHANGELOG, ADRs, git log into timeline.")
     p.add_argument("--force", action="store_true", help="Re-run even if ingested.lock exists.")
+    p.add_argument("--generate-map", action="store_true", dest="generate_map",
+                   help="Also auto-generate references/map.md from detected project structure.")
     p.set_defaults(func=cmd_ingest)
 
     p = sub.add_parser("recall", help="Keyword (FTS5) or semantic search over timeline + docs.")
