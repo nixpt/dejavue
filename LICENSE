@@ -1,21 +1,112 @@
-MIT License
+OpenKO Cooperative Protocol License (OCPL) Version 1.0
+Copyright (c) 2026 nixpt and Dejavue Contributors
 
-Copyright (c) 2026 nixpt
+─────────────────────────────────────────────────────────────────────────────
+PERMISSIONS
+─────────────────────────────────────────────────────────────────────────────
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Subject to the conditions below, every person is granted a worldwide,
+royalty-free, non-exclusive, irrevocable license to:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+  a. Use, copy, and distribute this software and its documentation.
+  b. Modify this software and create derivative works.
+  c. Build and operate commercial services using this software.
+  d. Implement the .dejavue/ format specification in any software.
+  e. Charge for services, hosting, compute, and resource access built on
+     top of this software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+─────────────────────────────────────────────────────────────────────────────
+CONDITIONS
+─────────────────────────────────────────────────────────────────────────────
+
+1. Format Openness
+
+   Any software that reads, writes, or processes the .dejavue/ on-disk
+   format (timeline.jsonl, decisions.md, state.md, handoff.md, references/)
+   must remain interoperable with the canonical format specification
+   published in this repository. You may not use technical measures, patent
+   claims, contractual restrictions, or any other mechanism to prevent third
+   parties from implementing the .dejavue/ format or building tools that
+   consume it without depending on this software.
+
+2. Identity Sovereignty
+
+   You may not modify this software to prevent users from:
+
+     a. Exporting all memory artifacts (.dejavue/ directory) in full at any
+        time, without charge or delay.
+     b. Migrating their memory to a different compatible tool or service.
+     c. Using memory artifacts without this software (the format is the
+        open contract, not the CLI).
+
+3. Data Portability
+
+   Any hosted service operating this software must, upon a user's written
+   request, provide a complete machine-readable export of all memory data
+   associated with that user's repositories within 30 days, at no charge.
+
+4. No Lock-in
+
+   You may not enforce any patent, trade secret, license term, or contractual
+   restriction that would prevent a third party from:
+
+     a. Implementing the .dejavue/ format specification.
+     b. Building software that reads or writes .dejavue/ data.
+     c. Forking this software and operating an independent service.
+
+5. CLI Free Tier
+
+   The local command-line interface (dejavue CLI) must remain available at
+   no charge. Monetization may apply to hosted services, capsule deployments,
+   and API access — but the core local tool must always be freely usable.
+
+6. Attribution
+
+   All distributions must retain this license notice. Hosted services and
+   user-visible documentation must credit the Dejavue project and its
+   contributors. Attribution in the lineage record (foundry.toml) is permanent
+   and survives stewardship transitions.
+
+7. Patent Non-Aggression
+
+   Any contributor who holds patents that would be infringed by a conforming
+   implementation of the .dejavue/ format specification grants a royalty-free,
+   perpetual, irrevocable patent license to all parties for such implementation.
+
+8. Source Availability for Network Services
+
+   If you operate a publicly accessible service that uses a modified version
+   of this software, you must make the complete corresponding source of your
+   modifications available to users of that service under the terms of this
+   license.
+
+─────────────────────────────────────────────────────────────────────────────
+OPENKO FOUNDRY PARTICIPATION
+─────────────────────────────────────────────────────────────────────────────
+
+Dejavue is registered as a Category B Ecosystem Project in the OpenKO
+Foundry (foundry.toml). Participation in the Foundry is voluntary and does
+not restrict use of this software outside the OpenKO network. The OCPL
+conditions above apply to all use of this software regardless of Foundry
+participation.
+
+─────────────────────────────────────────────────────────────────────────────
+COMPLIANCE
+─────────────────────────────────────────────────────────────────────────────
+
+If you cannot comply with these conditions, you may not distribute or operate
+this software. The conditions exist to protect the format's openness, users'
+data sovereignty, and the ecosystem's integrity — not to restrict legitimate
+commercial activity built on an open foundation.
+
+─────────────────────────────────────────────────────────────────────────────
+DISCLAIMER
+─────────────────────────────────────────────────────────────────────────────
+
+THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+IN THE SOFTWARE.
