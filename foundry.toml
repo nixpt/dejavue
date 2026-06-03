@@ -1,6 +1,6 @@
 # Dejavue — OpenKO Foundry Registration
 # Category B: Ecosystem Project (monetizable, open protocol, no lock-in)
-# Docs: https://github.com/nixpt/openko/docs/economics/foundry.md
+# Docs: https://github.com/openko-network/openko/docs/economics/foundry.md
 
 [project]
 name             = "dejavue"
