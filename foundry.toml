@@ -1,0 +1,100 @@
+# Dejavue — OpenKO Foundry Registration
+# Category B: Ecosystem Project (monetizable, open protocol, no lock-in)
+# Docs: https://github.com/nixpt/openko/docs/economics/foundry.md
+
+[project]
+name             = "dejavue"
+did              = "did:openko:project:dejavue"
+version          = "1.3.0"
+description      = "Zero-ceremony repo-local agent memory for coding agents"
+category         = "ecosystem"   # core | governed-commons | ecosystem | commercial
+license          = "OCPL-1.0"
+repository       = "https://github.com/nixpt/dejavue"
+author           = "did:openko:human:nixpt"
+foundry_registry = "did:openko:federation:seed"
+
+[capabilities]
+# capabilities this project contributes to the network
+contributes = [
+  "knowledge.memory",    # provides agent memory layer
+  "agent.context",       # provides context boot packets
+  "agent.decisions",     # captures and surfaces architectural decisions
+]
+# capabilities required when running as a hosted service
+requires = [
+  "storage.write",       # persist .dejavue/ data
+  "net.listen",          # expose API endpoint
+]
+
+[economics]
+pool            = "pool:dejavue"
+creator_share   = 0.30   # nixpt — project creator and primary maintainer
+runner_share    = 0.55   # node operators hosting dejavue-server
+ecosystem_share = 0.10   # OpenKO ecosystem pool
+mission_pool    = 0.05   # earmarked for open-source and public-good missions
+# invariant: shares must sum to 1.0
+# invariant: ecosystem_share >= 0.05 (Foundry minimum)
+# invariant: runner_share >= 0.10 (Foundry minimum)
+
+[economics.modes]
+# cli-tool:      local install, no CU charged, always free
+# hosted-service: per-repo CU subscription, CU per API call
+# capsule:        per-execution-hour CU via okd capsule marketplace
+cli_mode     = "free"
+primary_mode = "hosted-service"
+
+[economics.rates]
+# All rates in CU (Contribution Units)
+hosted_per_repo_per_month  = 100    # team hosted plan: 100 CU/repo/month
+enterprise_per_seat_per_month = 50  # enterprise: 50 CU/seat/month
+api_per_decision_query     = 0.1    # programmatic API: 0.1 CU per recall/query
+api_per_context_fetch      = 0.05   # 0.05 CU per context boot packet
+capsule_per_hour           = 10     # capsule execution: 10 CU/hour
+
+[economics.royalties]
+# Tools that consume the .dejavue/ format trigger attribution royalties
+# Registered format consumers declare dependency: "dejavue.format:1.0"
+# Usage events route CU back to pool:dejavue via the dependency-graph royalty system
+format_dependency = "dejavue.format:1.0"
+royalty_per_1k_reads = 1.0   # 1 CU per 1000 format reads by registered tools
+
+[stewardship]
+primary = "did:openko:human:nixpt"
+
+# Triggers
+inactive_trigger_years   = 3
+on_death                 = true
+on_explicit_transfer     = true
+
+# Succession (ordered preference)
+[[stewardship.succession]]
+type = "council"
+id   = "did:openko:cell:technical-council"
+
+[[stewardship.succession]]
+type = "community"
+id   = "did:openko:cell:openko-tools"
+
+[[stewardship.succession]]
+type = "commons"
+license = "OCPL-1.0"
+
+# Preservation invariants (survive all stewardship transitions)
+attribution      = "permanent"   # creator lineage never removed from any derivative
+fork_rights      = "always"      # community can always fork
+format_openness  = "guaranteed"  # .dejavue/ format always readable without dejavue CLI
+mission_scope    = "agent-tooling"
+
+[capsule]
+# Server deployment (dejavue-server mode, not the local CLI)
+runtime = "python"
+entry   = "dejavue.py"
+# capsule.toml written separately for server deployment
+# local CLI mode has no capsule — it runs directly on host
+
+[test_pilot]
+# Dejavue is the first Foundry project registered for economic model testing
+# See: docs/economics/dejavue-economic-model.md in the OpenKO scaffold
+role      = "first-test-case"
+phase     = "Phase 1 (single-node economic verification)"
+test_repo = "did:openko:federation:seed"
