@@ -18,7 +18,7 @@ If the primary steward becomes inactive for **3 or more years**, or upon death (
 
 1. **OpenKO Technical Council** (`did:openko:cell:technical-council`) — first preference; the council has visibility into the broader ecosystem and can ensure continuity with OpenKO protocol evolution
 2. **OpenKO Tools Community** (`did:openko:cell:openko-tools`) — community of contributors who have worked on dejavue or adjacent agent tooling
-3. **Public Commons** — automatic transition to public commons under OCPL-1.0 if neither of the above accepts within 90 days
+3. **Public Commons** — automatic transition to public commons under OCPL-1.1 if neither of the above accepts within 90 days
 
 The transition is executed via a signed stewardship transfer recorded in the OpenKO governance audit log and gossiped to the federation.
 
@@ -49,7 +49,7 @@ The steward is responsible for:
 
 ## What Stewardship Does Not Include
 
-- The right to change the license away from OCPL-1.0 without federation supermajority vote
+- The right to change the license away from OCPL-1.1 without federation supermajority vote
 - The right to restrict fork rights or format access
 - The right to claim creator attribution on behalf of the steward (nixpt's lineage is permanent)
 - The right to remove the CLI free-tier
