@@ -1,6 +1,27 @@
 # DejaVue Maturation → DCP (DejaVue Context Protocol)
 
-**Session:** 241 (2026-06-05) · **Status:** DRAFT — awaiting maintainer ratification
+**Session:** 241 (2026-06-05) · **Status:** ✅ DESIGN RATIFIED — ready to dispatch
+
+## Ratified decisions (internal session, locked)
+
+| # | Decision | Locked outcome |
+|---|----------|----------------|
+| Axiom 0 | Zero-ceremony | Hard invariant. Base loop frozen; all DCP layers optional/additive; **no new runtime dep ever**. |
+| D1 | Positioning | **Full citable standard** — `docs/dcp-spec.md`, dejavue = reference impl, Foundry/OCPL. |
+| D2 | Adapter safety | **Non-destructive.** Unmarked hand-written target → **append managed block + warn**; `--replace` converts whole file; marked target → replace only the fenced region. |
+| D3 | New files | One new artifact (`context.md`) + optional `references/glossary.md`. patterns/failures = event types. |
+| D4 | ONNX embedder | **Dropped** (violates Axiom 0). |
+| D5 | v1.4 subset | Ship `promote`/`init --wizard`/reference-frontmatter/`diff --format patch` (all stdlib). |
+| Version | Release line | **v2.0.0** — DCP/1.0 spec ships with dejavue v2.0. Format stays backward-compatible (additive). |
+| Meta fmt | context.md metadata | Minimal `key: value` frontmatter (no YAML dep); shared parser with reference-frontmatter. |
+| Adapter loc | Output target | Write the tool's **real file** (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md, …) — no staging dir. |
+| Targets | Registry | claude→CLAUDE.md · codex→AGENTS.md · gemini→GEMINI.md · copilot→.github/copilot-instructions.md · cursor→.cursor/rules · `all`; configurable in `.dejavue/config`. |
+
+Managed-block marker: `<!-- dejavue:begin DCP/1.0 src=context.md hash=<sha> -->` … `<!-- dejavue:end -->`.
+The `hash` feeds `check`'s staleness detection ("context.md changed, adapters stale").
+
+---
+
 **Origin:** maintainer "dejavue maturation"; vision brainstorm `local workspace/private design notes`;
 scope picks = hygiene/reconcile + v1.4 features + productization/release.
 
