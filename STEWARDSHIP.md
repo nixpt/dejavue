@@ -6,6 +6,23 @@
 
 ---
 
+## DCP — the stewarded standard
+
+As of v2.0.0, the stewarded artifact is not only the dejavue tool but the
+**DejaVue Context Protocol (DCP/1.0)** — a portable context-interchange standard
+specified in [`docs/dcp-spec.md`](docs/dcp-spec.md). **dejavue is the reference
+implementation of DCP; DCP is the citable standard.** This is the artifact
+registered for the OpenKO Foundry under OCPL-1.1.
+
+The preservation invariants below apply to DCP as the standard, not just to one
+implementation: the format must stay openly documented and readable without the
+dejavue CLI, and the standard's load-bearing invariant — **Axiom 0:
+zero-ceremony conformance, no mandated runtime dependency** (DCP §0) — may not be
+overridden by any steward, successor, or governance vote. A DCP successor or
+fork carries forward both the standard and the creator attribution lineage.
+
+---
+
 ## Primary Steward
 
 `did:openko:human:nixpt` — project creator and primary maintainer.
