@@ -137,3 +137,13 @@ Natural v1.3 wave: comparison (diff), visualization (timeline), operations (chec
 Outcome:
 v1.3.0 tagged. 36 commands, 100/100 tests.
 
+
+## 2026-06-05T02:36:28-05:00 — context.md is the DCP source of truth; adapters are generated non-destructively
+
+Reason:
+Per ratified internal session plan (D2): export writes a marker-delimited managed block into the target tool's real file. Absent→create block-only; marked→replace fenced region; unmarked hand-written→append block + warn (never clobber); --replace converts whole file. Keeps Axiom 0 (zero new deps, base loop frozen).
+
+Rejected alternatives:
+- **blind overwrite**: clobbers hand-written CLAUDE.md
+- **staging dir only**: less ergonomic, plan picked real-file managed block
+

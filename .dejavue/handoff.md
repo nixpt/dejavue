@@ -1,12 +1,13 @@
 # Handoff
 
-Updated: 2026-05-28T00:32:10-05:00
+Updated: 2026-06-05T02:48:43-05:00
 
 ## Summary
-v1.3.0 shipped.
+DCP core + stdlib v1.4 shipped in dejavue.py (v2.0.0): context.md instruction layer, import/export non-destructive adapters, glossary, promote/wizard/reference-frontmatter/diff-patch. 119/119 tests green.
 
 ## Next Steps
-v1.4 candidates: dejavue diff --format patch, dejavue timeline --visual (unicode sparklines), ONNX local embedder, dejavue promote, dejavue check --fix covers more items, reference frontmatter YAML, first-use wizard
+- Parallel horse owns docs/dcp-spec.md, README.md, STEWARDSHIP.md
+- Merge agent/dcp-core/DCP-CORE to master
 
 ## Boot Instructions
 Read `.dejavue/handoff.md`, `.dejavue/state.md`, `.dejavue/decisions.md`, and `.dejavue/timeline.jsonl` before making changes.

@@ -5,6 +5,62 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 **The on-disk format is stable as of v1.0.0.** `.dejavue/` files written by
 any v1.x release can be read by any later v1.x release without migration.
 
+## [2.0.0] — 2026-06-05
+
+**DejaVue Context Protocol (DCP/1.0).** dejavue becomes the source of truth for
+agent context: `.dejavue/context.md` is the canonical instruction layer and the
+per-tool files (CLAUDE.md / AGENTS.md / GEMINI.md / Copilot / Cursor) become
+**generated, non-destructive adapter targets**. The format stays
+backward-compatible — every v1.x `.dejavue/` reads unchanged, and the base loop
+(init → start → decision → state → handoff) behaves identically with or without
+DCP. Zero new runtime dependencies (stdlib only; Axiom 0).
+
+40 commands, 119/119 tests.
+
+### Added
+
+- **`.dejavue/context.md`** — first-class DCP/1.0 instruction-layer artifact:
+  `key: value` frontmatter (`name` / `purpose` / `dcp`) plus Operating Rules /
+  Build·Test / Architecture Map / Memory sections. `dejavue init` scaffolds an
+  empty template; its absence breaks nothing. `dejavue context` surfaces it (with
+  its parsed DCP tag) at the top of the boot packet.
+- **`parse_frontmatter()`** — stdlib-only minimal `key: value` frontmatter parser
+  (no YAML dependency), shared by context.md metadata and reference frontmatter.
+- **`dejavue import <FILE>`** — bootstrap context.md losslessly from a hand-written
+  AGENTS.md/CLAUDE.md, recording provenance (source path + git blob sha) in
+  frontmatter and as an `import` timeline event. Guards a populated context.md
+  (`--force` to override). The safe step before `export`.
+- **`dejavue export --target {claude,codex,gemini,copilot,cursor,all}`** —
+  generate the tool's real file from context.md, wrapped in a managed block
+  (`<!-- dejavue:begin DCP/1.0 src=context.md hash=… -->` … `<!-- dejavue:end -->`).
+  Non-destructive write behavior: ABSENT → create block-only; MARKED → replace
+  only the fenced region; UNMARKED hand-written → append a managed block + warn
+  (never clobber); `--replace` converts the whole file. Target registry is
+  overridable via `.dejavue/config` (`target_<name> = <path>`). `export` keeps
+  its existing `--format json|md` snapshot mode.
+- **`dejavue check`** now compares each adapter's stored `hash=` against the
+  current context.md hash and warns "context.md changed — adapters stale".
+- **`references/glossary.md`** — glossary reference card via the existing
+  reference machinery (`reference create <name> --template glossary`), surfaced
+  in `dejavue context`.
+- **`dejavue promote --to planning`** — graduate a `.dejavue/` into a richer
+  per-repo planning system (`.planning/`) without losing history: copies (never
+  moves) every memory artifact, records a provenance card + a `promote` event,
+  and leaves `.dejavue/` canonical.
+- **`dejavue init --wizard`** — 3-question prompt (project type / agent / purpose)
+  that seeds context.md + state.md. Non-interactive-safe (piped/EOF falls back to
+  defaults); plain `init` is unchanged.
+- **Reference frontmatter** — reference cards may carry `key: value` frontmatter;
+  `dejavue reference list --type <t>` filters by `type:`, and
+  `reference create --type <t>` injects it.
+- **`dejavue diff --format patch`** — machine-readable unified-diff patch of the
+  decisions (and state) delta between two refs.
+
+### Changed
+
+- Version → 2.0.0. `hashlib` / `difflib` / `re` already imported (stdlib; no new
+  runtime dependency). Test suite: 100 → 119 (119/119 green).
+
 ## [1.3.0] — 2026-05-28
 
 36 commands, 100/100 tests.
