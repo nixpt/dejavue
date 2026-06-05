@@ -15,14 +15,16 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSION = "1.3.0"
+VERSION = "2.0.0"
 
 DEJAVUE_DIR = Path(".dejavue")
 TIMELINE = DEJAVUE_DIR / "timeline.jsonl"
 STATE = DEJAVUE_DIR / "state.md"
 DECISIONS = DEJAVUE_DIR / "decisions.md"
 HANDOFF = DEJAVUE_DIR / "handoff.md"
+CONTEXT = DEJAVUE_DIR / "context.md"
 REFERENCES = DEJAVUE_DIR / "references"
+JAGENT_DIR = Path(".jagent")
 FTS_DB = DEJAVUE_DIR / "fts.db"
 EMBEDDINGS = DEJAVUE_DIR / "embeddings.jsonl"
 INGESTED_LOCK = DEJAVUE_DIR / "ingested.lock"
@@ -41,6 +43,61 @@ EMBEDDER_TIMEOUT_S = 5.0
 # Valid event sub-types for decision/note commands (stored as "event_type" field).
 DECISION_TYPES = {"decision", "blocker", "claim", "question", "experiment", "checkpoint"}
 NOTE_TYPES     = {"note", "blocker", "claim", "question", "observation"}
+
+# ── DCP (DejaVue Context Protocol) ─────────────────────────────────────────────
+# context.md is the DCP instruction-layer source of truth; adapters are generated
+# non-destructively from it (D2/s241). Everything here is optional and additive —
+# the base memory loop (init/start/decision/state/handoff) is unchanged without it.
+DCP_VERSION = "DCP/1.0"
+
+# target name → default output path (the tool's REAL file). Overridable per-repo
+# via .dejavue/config keys `target_<name> = <path>`.
+EXPORT_TARGETS = {
+    "claude":  "CLAUDE.md",
+    "codex":   "AGENTS.md",
+    "gemini":  "GEMINI.md",
+    "copilot": ".github/copilot-instructions.md",
+    "cursor":  ".cursor/rules",
+}
+
+# Managed-block markers. The fenced region between begin/end is the ONLY part
+# export ever rewrites; hand-written content outside it is preserved verbatim.
+_DCP_BEGIN_RE = re.compile(
+    r"<!-- dejavue:begin DCP/[^\s]+ src=context\.md hash=(?P<hash>[0-9a-f]+) -->"
+)
+_DCP_BLOCK_RE = re.compile(
+    r"<!-- dejavue:begin DCP/[^>]*?-->.*?<!-- dejavue:end -->\n?",
+    re.DOTALL,
+)
+
+
+def parse_frontmatter(text):
+    """Parse a minimal `key: value` frontmatter block delimited by `---` lines.
+
+    Stdlib-only (no YAML dependency): supports flat `key: value` pairs, ignores
+    blank lines and `#` comments inside the block. Returns (meta_dict, body_str).
+    If there is no well-formed frontmatter, returns ({}, text) unchanged. Shared
+    by context.md metadata (M1) and reference frontmatter (M5)."""
+    if not text.startswith("---"):
+        return {}, text
+    lines = text.splitlines(keepends=True)
+    if lines[0].strip() != "---":
+        return {}, text
+    meta = {}
+    end_idx = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            end_idx = i
+            break
+        stripped = lines[i].strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if ":" in stripped:
+            k, _, v = stripped.partition(":")
+            meta[k.strip()] = v.strip()
+    if end_idx is None:
+        return {}, text  # no closing delimiter — treat the whole thing as body
+    return meta, "".join(lines[end_idx + 1:])
 
 # flock support (POSIX only; graceful no-op on Windows)
 try:
@@ -290,6 +347,12 @@ def cmd_init(args):
             encoding="utf-8",
         )
 
+    # DCP instruction layer (optional/additive — its absence breaks nothing).
+    _scaffold_context()
+
+    if getattr(args, "wizard", False):
+        _run_wizard(resolve_agent(args.agent))
+
     git_dir_raw = git_run("git", "rev-parse", "--git-dir")
     if git_dir_raw:
         git_dir = Path(git_dir_raw)
@@ -456,6 +519,78 @@ def _scaffold_map():
     print("Scaffolded references/map.md — fill it in with the codebase overview.")
 
 
+def _context_template(name="", purpose=""):
+    """Return an empty DCP context.md template with `key: value` frontmatter."""
+    return (
+        "---\n"
+        f"name: {name}\n"
+        f"purpose: {purpose}\n"
+        f"dcp: {DCP_VERSION}\n"
+        "---\n\n"
+        "# Context\n\n"
+        "<!-- The DCP instruction layer: what an agent should *do* in this repo.\n"
+        "     Source of truth — adapters (CLAUDE.md / AGENTS.md / …) are generated\n"
+        "     from this file via `dejavue export --target <tool>`. -->\n\n"
+        "## Operating Rules\n\n"
+        "- \n\n"
+        "## Build / Test\n\n"
+        "- \n\n"
+        "## Architecture Map\n\n"
+        "- \n\n"
+        "## Memory\n\n"
+        "Decisions, blockers, and constraints are captured in `.dejavue/` — run\n"
+        "`dejavue context` for the boot packet and `dejavue recall <query>` to search.\n"
+    )
+
+
+def _scaffold_context():
+    """Create .dejavue/context.md from the empty template if absent. Idempotent."""
+    if CONTEXT.exists():
+        return
+    name = ""
+    try:
+        name = Path.cwd().name
+    except Exception:
+        pass
+    CONTEXT.write_text(_context_template(name=name), encoding="utf-8")
+
+
+def _run_wizard(agent_default):
+    """3-question seed for context.md + state.md. Skippable / non-interactive:
+    on EOF (no tty, piped /dev/null) every answer falls back to its default."""
+    repo = ""
+    try:
+        repo = Path.cwd().name
+    except Exception:
+        pass
+
+    def ask(prompt, default):
+        try:
+            ans = input(prompt).strip()
+        except EOFError:
+            ans = ""
+        return ans or default
+
+    print("dejavue init --wizard — 3 questions (Enter accepts the default):\n")
+    ptype   = ask(f"  1. Project type [{repo}]? ", repo)
+    agent   = ask(f"  2. Primary agent [{agent_default}]? ", agent_default)
+    purpose = ask("  3. Purpose (one line) []? ", "")
+
+    CONTEXT.write_text(_context_template(name=ptype, purpose=purpose), encoding="utf-8")
+    STATE.write_text(
+        f"# State\n\nUpdated: {now()}\n\n"
+        f"Project: {ptype}. Primary agent: {agent}."
+        + (f" Purpose: {purpose}." if purpose else "") + "\n",
+        encoding="utf-8",
+    )
+    append_event({
+        "agent": agent,
+        "event": "wizard",
+        "summary": f"init --wizard seeded context.md + state.md (type={ptype}, agent={agent})",
+    })
+    print("\nSeeded context.md + state.md from wizard answers.")
+
+
 def cmd_start(args):
     maybe_show_worthiness()
     append_event({
@@ -597,6 +732,17 @@ def cmd_context(args):
         return
 
     print("\n# Dejavue Context\n")
+
+    # DCP instruction layer first (if present) — surfaces frontmatter + body.
+    if CONTEXT.exists():
+        ctx_text = CONTEXT.read_text(encoding="utf-8")
+        meta, _ = parse_frontmatter(ctx_text)
+        label = "context.md"
+        if meta.get("dcp"):
+            label += f"  [{meta['dcp']}]"
+        print(f"--- {label} ---\n")
+        print(ctx_text)
+
     for path, label in [(HANDOFF, "handoff.md"), (STATE, "state.md"), (DECISIONS, "decisions.md")]:
         if path.exists():
             print(f"--- {label} ---\n")
@@ -607,8 +753,7 @@ def cmd_context(args):
         if refs:
             print("--- references ---\n")
             for ref in refs:
-                first_line = ref.read_text(encoding="utf-8").splitlines()
-                title = next((l.lstrip("# ").strip() for l in first_line if l.strip()), ref.stem)
+                title = _ref_title(ref.read_text(encoding="utf-8"), fallback=ref.stem)
                 print(f"  {ref.name}  ({title})")
                 print()
 
@@ -807,6 +952,24 @@ def cmd_check(args):
         _report("WARN", "references/map.md", "missing — run: dejavue init --map or ingest --generate-map")
     else:
         _report("WARN", "references/", "directory not created")
+
+    # DCP adapter staleness — compare stored hash= in each managed block against
+    # the current context.md hash. (Only when context.md exists.)
+    if CONTEXT.exists():
+        current_hash = _context_hash(CONTEXT.read_text(encoding="utf-8"))
+        for name in EXPORT_TARGETS:
+            path = _target_path(name)
+            if not path.exists():
+                continue
+            m = _DCP_BEGIN_RE.search(path.read_text(encoding="utf-8"))
+            if not m:
+                continue
+            if m.group("hash") == current_hash:
+                _report("PASS", f"adapter {path}", "in sync with context.md")
+            else:
+                _report("WARN", f"adapter {path}",
+                        "context.md changed — adapters stale; re-run: "
+                        f"dejavue export --target {name}")
 
     print()
     if fixed:
@@ -1843,8 +2006,145 @@ def cmd_stats(args):
             print(f"    #{tag:<19} {count:>4}")
 
 
+def cmd_import(args):
+    """Bootstrap context.md from an existing hand-written instruction file.
+
+    Lossless: the source file's full content is preserved as the body of
+    context.md. Provenance (source path + git blob sha) is recorded both in the
+    frontmatter and as a timeline event. This is the SAFE step before `export`."""
+    src = Path(args.file)
+    if not src.exists():
+        print(f"{src} does not exist.")
+        sys.exit(1)
+
+    DEJAVUE_DIR.mkdir(exist_ok=True)
+    if CONTEXT.exists() and not getattr(args, "force", False):
+        existing = CONTEXT.read_text(encoding="utf-8")
+        # A pristine init-scaffolded template is safe to overwrite; a filled-in
+        # context.md is not (would lose hand-written instruction content).
+        if "## Operating Rules\n\n- \n" not in existing:
+            print(f"{CONTEXT} already exists and looks populated. "
+                  "Use --force to overwrite.")
+            sys.exit(1)
+
+    content = src.read_text(encoding="utf-8", errors="replace")
+    # git blob sha of the source for provenance (empty string if not tracked).
+    src_sha = git_run("git", "hash-object", str(src))[:12]
+
+    meta, _ = parse_frontmatter(content)
+    if meta.get("dcp"):
+        # Source already carries DCP frontmatter — keep it verbatim (lossless).
+        new_text = content
+    else:
+        name = ""
+        try:
+            name = Path.cwd().name
+        except Exception:
+            pass
+        fm = (
+            "---\n"
+            f"name: {name}\n"
+            f"purpose: imported from {src}\n"
+            f"dcp: {DCP_VERSION}\n"
+            f"source: {src}\n"
+            f"source_sha: {src_sha}\n"
+            "---\n\n"
+        )
+        new_text = fm + content
+
+    CONTEXT.write_text(new_text, encoding="utf-8")
+    append_event({
+        "agent": resolve_agent(getattr(args, "agent", None)),
+        "event": "import",
+        "source": str(src),
+        "source_sha": src_sha,
+        "summary": f"Imported {src} into context.md (lossless; provenance sha={src_sha or 'untracked'})",
+    })
+    print(f"Imported {src} → {CONTEXT} ({len(content)} bytes, lossless). "
+          f"Provenance sha={src_sha or 'untracked'}.")
+
+
+def cmd_promote(args):
+    """Graduate a .dejavue/ into a richer per-repo planning system (.jagent/)
+    WITHOUT losing history. Copies (never moves) every memory artifact and
+    records provenance; the .dejavue/ log stays canonical (non-destructive)."""
+    if args.to != "jagent":
+        print(f"Unknown --to '{args.to}'. Supported: jagent")
+        sys.exit(1)
+    if not DEJAVUE_DIR.exists():
+        print("Nothing to promote — no .dejavue/. Run: dejavue init")
+        sys.exit(1)
+
+    JAGENT_DIR.mkdir(exist_ok=True)
+    force = getattr(args, "force", False)
+
+    # Spec'd mapping: .dejavue/<x> → .jagent/<x> (1:1 copy, lossless).
+    mapping = [
+        (CONTEXT,                JAGENT_DIR / "context.md"),
+        (STATE,                  JAGENT_DIR / "state.md"),
+        (DECISIONS,              JAGENT_DIR / "decisions.md"),
+        (HANDOFF,                JAGENT_DIR / "handoff.md"),
+        (TIMELINE,               JAGENT_DIR / "timeline.jsonl"),
+        (DEJAVUE_DIR / "config", JAGENT_DIR / "config"),
+    ]
+    copied, skipped = [], []
+    for src, dst in mapping:
+        if not src.exists():
+            continue
+        if dst.exists() and not force:
+            skipped.append(dst.name)
+            continue
+        dst.write_bytes(src.read_bytes())
+        copied.append(dst.name)
+
+    if REFERENCES.exists():
+        jrefs = JAGENT_DIR / "references"
+        jrefs.mkdir(exist_ok=True)
+        for ref in sorted(REFERENCES.glob("*.md")):
+            dst = jrefs / ref.name
+            if dst.exists() and not force:
+                skipped.append(f"references/{ref.name}")
+                continue
+            dst.write_bytes(ref.read_bytes())
+            copied.append(f"references/{ref.name}")
+
+    sha = git_run("git", "rev-parse", "--short", "HEAD") or "untracked"
+    (JAGENT_DIR / "PROVENANCE.md").write_text(
+        "# Promoted from .dejavue/\n\n"
+        f"- Promoted: {now()}\n"
+        f"- Source commit: {sha}\n"
+        f"- Tool: dejavue {VERSION} ({DCP_VERSION})\n\n"
+        "## Mapping\n\n"
+        "| .dejavue/ | .jagent/ |\n|---|---|\n"
+        "| context.md | context.md |\n"
+        "| state.md | state.md |\n"
+        "| decisions.md | decisions.md |\n"
+        "| handoff.md | handoff.md |\n"
+        "| timeline.jsonl | timeline.jsonl |\n"
+        "| config | config |\n"
+        "| references/ | references/ |\n\n"
+        "The `.dejavue/` log remains canonical; this is a non-destructive copy "
+        "so history is never lost.\n",
+        encoding="utf-8",
+    )
+
+    append_event({
+        "agent": resolve_agent(getattr(args, "agent", None)),
+        "event": "promote",
+        "target": "jagent",
+        "summary": f"Promoted .dejavue/ → .jagent/ ({len(copied)} artifacts copied, history preserved)",
+    })
+    print(f"Promoted .dejavue/ → .jagent/ — copied {len(copied)} artifact(s).")
+    if skipped:
+        print(f"  Skipped (already exist; use --force): {', '.join(skipped)}")
+    print("  .dejavue/ left intact — history preserved.")
+
+
 def cmd_export(args):
-    """Export dejavue memory as JSON or Markdown."""
+    """Export dejavue memory as JSON/Markdown, or generate adapter targets."""
+    if getattr(args, "target", None):
+        return _export_adapters(args)
+
     fmt = getattr(args, "format", "json") or "json"
 
     events = _load_events()
@@ -1895,6 +2195,100 @@ def cmd_export(args):
         sys.exit(1)
 
 
+def _target_path(name):
+    """Resolve a target name to its output Path, honoring config overrides."""
+    cfg = _load_config()
+    override = cfg.get(f"target_{name}")
+    return Path(override) if override else Path(EXPORT_TARGETS[name])
+
+
+def _context_hash(text):
+    """Stable short hash of the full context.md content (drives staleness)."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+
+
+def _build_managed_block(context_text):
+    """Render the managed block generated from context.md. Returns (block, hash)."""
+    _, body = parse_frontmatter(context_text)
+    h = _context_hash(context_text)
+    begin = f"<!-- dejavue:begin {DCP_VERSION} src=context.md hash={h} -->"
+    end = "<!-- dejavue:end -->"
+    banner = ("<!-- GENERATED by `dejavue export` from .dejavue/context.md — "
+              "edit context.md, not this block. -->")
+    inner = body.strip("\n")
+    return f"{begin}\n{banner}\n\n{inner}\n\n{end}\n", h
+
+
+def _write_adapter(path, block_text, replace=False):
+    """Write the managed block into an adapter target non-destructively.
+
+    Returns one of: 'created' (target absent), 'updated' (existing managed block
+    replaced in place), 'replaced' (whole unmarked file converted via --replace),
+    'appended' (managed block appended to an unmarked hand-written file)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text(block_text, encoding="utf-8")
+        return "created"
+
+    existing = path.read_text(encoding="utf-8")
+    if _DCP_BLOCK_RE.search(existing):
+        new = _DCP_BLOCK_RE.sub(lambda _m: block_text, existing, count=1)
+        path.write_text(new, encoding="utf-8")
+        return "updated"
+
+    # Unmarked, hand-written target — never clobber.
+    if replace:
+        path.write_text(block_text, encoding="utf-8")
+        return "replaced"
+    sep = "" if existing.endswith("\n") else "\n"
+    path.write_text(existing + sep + "\n" + block_text, encoding="utf-8")
+    return "appended"
+
+
+def _export_adapters(args):
+    """Generate adapter target file(s) from context.md (M3, non-destructive)."""
+    if not CONTEXT.exists():
+        print("No .dejavue/context.md to export from. "
+              "Run `dejavue init` or `dejavue import <FILE>` first.")
+        sys.exit(1)
+
+    target = args.target
+    if target == "all":
+        names = list(EXPORT_TARGETS.keys())
+    elif target in EXPORT_TARGETS:
+        names = [target]
+    else:
+        print(f"Unknown --target '{target}'. "
+              f"Valid: {', '.join(sorted(EXPORT_TARGETS))}, all")
+        sys.exit(1)
+
+    context_text = CONTEXT.read_text(encoding="utf-8")
+    block_text, h = _build_managed_block(context_text)
+    replace = getattr(args, "replace", False)
+
+    for name in names:
+        path = _target_path(name)
+        status = _write_adapter(path, block_text, replace=replace)
+        if status == "appended":
+            print(f"WARNING: {path} has hand-written content with no dejavue "
+                  "markers — appended a managed block at the end (use --replace "
+                  "to convert the whole file).")
+        verb = {
+            "created": "created", "updated": "updated managed block in",
+            "replaced": "replaced", "appended": "appended managed block to",
+        }[status]
+        print(f"  {name:<8} → {verb} {path}")
+        append_event({
+            "agent": resolve_agent(getattr(args, "agent", None)),
+            "event": "export_adapter",
+            "target": name,
+            "path": str(path),
+            "hash": h,
+            "status": status,
+            "summary": f"Exported context.md → {name} ({path}) [{status}, hash={h}]",
+        })
+
+
 def cmd_reference(args):
     """Manage reference cards in .dejavue/references/."""
     REFERENCES.mkdir(exist_ok=True)
@@ -1902,13 +2296,23 @@ def cmd_reference(args):
 
     if action == "list":
         refs = sorted(REFERENCES.glob("*.md"))
+        type_filter = getattr(args, "type", None)
         if not refs:
             print(f"No reference cards in {REFERENCES}")
             print("Create one with: dejavue reference create <name>")
             return
+        shown = 0
         for ref in refs:
-            first = next((l.lstrip("# ").strip() for l in ref.read_text(encoding="utf-8").splitlines() if l.strip()), ref.stem)
-            print(f"  {ref.stem:<20}  {first[:60]}")
+            text = ref.read_text(encoding="utf-8")
+            meta, _ = parse_frontmatter(text)
+            if type_filter and meta.get("type") != type_filter:
+                continue
+            title = _ref_title(text, fallback=ref.stem)
+            type_tag = f"  [{meta['type']}]" if meta.get("type") else ""
+            print(f"  {ref.stem:<20}  {title[:60]}{type_tag}")
+            shown += 1
+        if type_filter and shown == 0:
+            print(f"No reference cards with type '{type_filter}'.")
 
     elif action == "create":
         name = args.name
@@ -1920,7 +2324,7 @@ def cmd_reference(args):
             return
         title = getattr(args, "title", None) or args.name.replace("-", " ").replace("_", " ").title()
         if getattr(args, "content", None):
-            path.write_text(args.content, encoding="utf-8")
+            body = args.content
         else:
             template = getattr(args, "template", "default")
             if template == "api":
@@ -1941,12 +2345,32 @@ def cmd_reference(args):
                     "## Interfaces\n\n\n\n"
                     "## Why this design\n\n"
                 )
+            elif template == "glossary":
+                body = (
+                    "---\n"
+                    "type: glossary\n"
+                    f"dcp: {DCP_VERSION}\n"
+                    "---\n\n"
+                    f"# {title}\n\n"
+                    "<!-- DCP glossary card: domain terms an agent must know.\n"
+                    "     Surfaced by `dejavue context`. One term per row. -->\n\n"
+                    "| Term | Definition |\n"
+                    "|------|------------|\n"
+                    "|      |            |\n"
+                )
             else:  # default
                 body = (
                     f"# {title}\n\n"
                     "<!-- Reference card: fill in and commit -->\n\n\n"
                 )
-            path.write_text(body, encoding="utf-8")
+        # If --type was given and the card has no frontmatter yet, inject it so
+        # the card is filterable via `reference list --type` (M5).
+        ref_type = getattr(args, "type", None)
+        if ref_type:
+            existing_meta, _ = parse_frontmatter(body)
+            if not existing_meta:
+                body = (f"---\ntype: {ref_type}\ndcp: {DCP_VERSION}\n---\n\n" + body)
+        path.write_text(body, encoding="utf-8")
         append_event({
             "agent": resolve_agent(getattr(args, "agent", None)),
             "event": "reference_created",
@@ -2049,6 +2473,12 @@ def cmd_diff(args):
     from_ref = args.from_ref
     to_ref   = getattr(args, "to_ref", None) or "HEAD"
 
+    # Machine-readable patch of the decisions delta (M5). Emits a clean unified
+    # diff of decisions.md (and state.md) — no human-facing headers/summaries.
+    if getattr(args, "format", None) == "patch":
+        _diff_patch(from_ref, to_ref)
+        return
+
     # Try resolving as timestamps first (for event-level diff)
     from_ts = _ref_to_ts(from_ref)
     to_ts   = _ref_to_ts(to_ref) if to_ref != "HEAD" else now()
@@ -2112,6 +2542,32 @@ def cmd_diff(args):
             for ev in new_states:
                 ts = (ev.get("ts") or "")[:10]
                 print(f"  {ts}  {ev.get('summary','')[:80]}")
+
+
+def _diff_patch(from_ref, to_ref):
+    """Emit a machine-readable unified-diff patch of the memory-doc delta."""
+    resolved_to = to_ref if to_ref != "HEAD" else "HEAD"
+    any_out = False
+    for filepath, label in [(".dejavue/decisions.md", "decisions.md"),
+                            (".dejavue/state.md", "state.md")]:
+        before = _git_show_file(from_ref, filepath)
+        after  = _git_show_file(resolved_to, filepath)
+        if before is None and after is None:
+            continue
+        if before == after:
+            continue
+        delta = difflib.unified_diff(
+            (before or "").splitlines(keepends=True),
+            (after or "").splitlines(keepends=True),
+            fromfile=f"a/{label}", tofile=f"b/{label}",
+            lineterm="",
+        )
+        for line in delta:
+            print(line)
+            any_out = True
+    if not any_out:
+        # Still valid (empty) patch output; signal via a comment on stderr.
+        print(f"# no memory-doc delta between {from_ref} and {to_ref}", file=sys.stderr)
 
 
 def cmd_timeline(args):
@@ -2298,6 +2754,15 @@ def cmd_annotate(args):
     print(f"Annotation appended to {path}.")
 
 
+def _ref_title(text, fallback=""):
+    """First markdown heading/line of a reference card, skipping frontmatter."""
+    _, body = parse_frontmatter(text)
+    for line in body.splitlines():
+        if line.strip():
+            return line.lstrip("# ").strip()
+    return fallback
+
+
 def _resolve_doc(doc):
     if doc == "state":
         return STATE
@@ -2342,6 +2807,9 @@ def main():
     p.add_argument("--force", action="store_true", help="Overwrite existing non-dejavue hooks.")
     p.add_argument("--ingest", action="store_true", help="Run ingest after init.")
     p.add_argument("--map", action="store_true", help="Scaffold references/map.md.")
+    p.add_argument("--wizard", action="store_true",
+                   help="Run a 3-question prompt (project type / agent / purpose) to seed "
+                        "context.md + state.md. Non-interactive (piped/EOF) uses defaults.")
     p.set_defaults(func=cmd_init)
 
     p = sub.add_parser("start", help="Record session start.")
@@ -2495,20 +2963,45 @@ def main():
     p = sub.add_parser("stats", help="Timeline statistics: counts by type, by agent, date range.")
     p.set_defaults(func=cmd_stats)
 
-    p = sub.add_parser("export", help="Export dejavue memory as JSON or Markdown.")
+    p = sub.add_parser("promote", help="Graduate .dejavue/ into a richer planning system (.jagent/) without losing history.")
+    p.add_argument("--to", default="jagent", choices=["jagent"],
+                   help="Target planning system (default: jagent).")
+    p.add_argument("--force", action="store_true", help="Overwrite already-promoted artifacts.")
+    p.add_argument("--agent", default=None)
+    p.set_defaults(func=cmd_promote)
+
+    p = sub.add_parser("import", help="Bootstrap context.md from an existing AGENTS.md/CLAUDE.md (lossless).")
+    p.add_argument("file", help="Path to the hand-written instruction file to import.")
+    p.add_argument("--force", action="store_true", help="Overwrite a populated context.md.")
+    p.add_argument("--agent", default=None)
+    p.set_defaults(func=cmd_import)
+
+    p = sub.add_parser("export", help="Export dejavue memory (--format json|md) or generate adapter files (--target).")
     p.add_argument("--format", choices=["json", "md"], default="json",
-                   help="Output format (default: json).")
+                   help="Snapshot output format (default: json). Ignored when --target is given.")
+    p.add_argument("--target", choices=sorted(EXPORT_TARGETS) + ["all"], default=None,
+                   help="Generate an adapter file (claude→CLAUDE.md, codex→AGENTS.md, "
+                        "gemini→GEMINI.md, copilot→.github/copilot-instructions.md, "
+                        "cursor→.cursor/rules, or all) from context.md.")
+    p.add_argument("--replace", action="store_true",
+                   help="With --target: convert an unmarked hand-written file entirely "
+                        "(default appends a managed block + warns).")
+    p.add_argument("--agent", default=None)
     p.set_defaults(func=cmd_export)
 
     p = sub.add_parser("reference", help="Manage reference cards in .dejavue/references/.")
     ref_sub = p.add_subparsers(dest="action", required=True)
 
     rs = ref_sub.add_parser("list", help="List all reference cards.")
+    rs.add_argument("--type", default=None,
+                    help="Filter by `type:` frontmatter value (e.g. glossary, api).")
     rs = ref_sub.add_parser("create", help="Create a new reference card.")
     rs.add_argument("name", help="Card name (becomes references/<name>.md).")
     rs.add_argument("--title", default=None, help="Title text (defaults to name).")
     rs.add_argument("--content", default=None, help="Card content (overrides template).")
-    rs.add_argument("--template", choices=["default", "api", "design"], default="default")
+    rs.add_argument("--template", choices=["default", "api", "design", "glossary"], default="default")
+    rs.add_argument("--type", default=None,
+                    help="Set a `type:` frontmatter value on the card (filterable via list --type).")
     rs.add_argument("--force", action="store_true")
     rs.add_argument("--agent", default=None)
     rs = ref_sub.add_parser("update", help="Overwrite a reference card's content.")
@@ -2534,6 +3027,8 @@ def main():
     p.add_argument("from_ref", metavar="FROM", help="Start ref: ISO date (2026-05-13), commit hash, or git tag.")
     p.add_argument("to_ref",   metavar="TO",   nargs="?", default="HEAD",
                    help="End ref (default: HEAD).")
+    p.add_argument("--format", choices=["text", "patch"], default="text",
+                   help="text (default, human summary) or patch (machine-readable unified diff of the decisions delta).")
     p.set_defaults(func=cmd_diff)
 
     p = sub.add_parser("timeline", help="ASCII activity chart of events over time.")
