@@ -95,36 +95,56 @@ Test gate achieved: 62/62 (was ≥50/50 target).
 - `event_type` field indexed in FTS5 — `recall blocker` finds `--type blocker` events
 - `since` now shows a Notes section (notes in time window with tag + sub-type labels)
 
-## 🔮 v1.4 candidates
+## 📌 Reconciliation note (internal session, 2026-06-05)
 
-### High impact
+Several items previously listed as "v1.4 candidates" **already shipped in
+v1.3.0** — this section was drifted. Corrected:
 
-- **`dejavue diff --format patch`** — emit a machine-readable patch of decisions delta; useful for CI "what decisions changed in this PR?"
-- **`dejavue diff <from> [<to>]`** — compare dejavue state (decisions, state.md
-  content) between two refs/dates. The "what changed in project memory between
-  these two points?" view.
-- **`dejavue timeline --visual`** — ASCII activity chart (commits × events per
-  week). The "how active has this project been?" view.
-- **Local ONNX embedder tier** — try a local ONNX runtime (onnxruntime + a
-  quantized all-MiniLM) before falling back to Ollama. Fully offline; zero
-  API cost.
+- ✅ `dejavue diff <from> [<to>]` — **shipped v1.3.0**
+- ✅ `dejavue timeline` (activity chart) — **shipped v1.3.0**
+- ✅ `dejavue check --fix` (auto-repair) — **shipped v1.3.0**
+- ✅ `log --type` / FTS5 `event_type` indexing — **shipped v1.3.0**
 
-### Medium impact
+## 🚀 Next wave — DCP (DejaVue Context Protocol)
 
-- **`dejavue promote --to planning`** — spec + implementation for graduating a
-  `.dejavue/` into a richer per-repo planning system without losing history.
-- **First-use wizard** — `dejavue init --wizard` 3-question prompt to seed
-  richer initial state (project type, agent name, purpose).
-- **Reference frontmatter** — YAML frontmatter on `references/*.md` (type,
-  owner, updated); `dejavue reference list --type api` filters by it.
-- **`dejavue log --type blocker`** — already works via `event_type` field;
-  add FTS5 indexing of `event_type` so recall finds sub-types.
+The next maturation step (maintainer-directed internal session) evolves dejavue from *per-repo
+agent memory* into **DCP — a portable context interchange standard**: `.dejavue/`
+becomes the single source of truth; `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` /
+Copilot rules become **generated, non-destructive adapter targets**. dejavue is
+the reference implementation; the protocol gets a citable spec (Foundry / OCPL).
+
+**Axiom 0 — Zero-ceremony conformance (hard invariant):** a conforming DCP tool
+MUST be usable with no configuration and no files beyond what `init` creates.
+Every layer above the base memory log (`context.md`, adapters, glossary,
+frontmatter) is **optional and additive**; the base five-command loop
+(`init → start → decision → state → handoff`) is frozen and unchanged. **No new
+runtime dependency may ever be introduced** (this is why the ONNX embedder tier,
+below, is dropped — it would break the single-file stdlib contract).
+
+Design + waves: `docs/plans/2026-06-05-dcp-maturation.md`.
+
+## 🔮 Remaining candidates (post-reconciliation)
+
+### DCP wave (next)
+- **`context.md` instruction layer** + `init` scaffold + `context` surfaces it.
+- **`dejavue import <FILE>`** — seed `context.md` from an existing AGENTS.md/CLAUDE.md (lossless bootstrap).
+- **`dejavue export --target {claude,codex,gemini,copilot,all}`** — generate adapter files via a marker-delimited managed block (never clobbers hand-written content).
+- **`references/glossary.md`** glossary reference card.
+- **`docs/dcp-spec.md`** — the DCP standard.
+
+### Stdlib-safe v1.4 features (parallel/after DCP)
+- **`dejavue promote --to planning`** — graduate a `.dejavue/` into a richer per-repo planning system without losing history.
+- **`dejavue init --wizard`** — 3-question prompt to seed richer initial state.
+- **Reference frontmatter** — simple `key: value` frontmatter on `references/*.md`; `reference list --type api` filters by it. (Parser reused by DCP `context.md` metadata.)
+- **`dejavue diff --format patch`** — machine-readable patch of decisions delta (CI "what decisions changed in this PR?").
+
+### Dropped (contract conflict — see Axiom 0)
+- ~~**Local ONNX embedder tier**~~ — would require `onnxruntime`, breaking the
+  stdlib-only / no-new-deps invariant. Dropped. (Optional out-of-process
+  shellout could be revisited, but never as an import.)
 
 ### Lower impact
-
-- **`dejavue archive --compress`** — zstd-compress the backup file on archive.
-- **`dejavue check --fix`** — auto-repair repairable issues (re-install hooks,
-  add missing `.gitattributes` entries) rather than just reporting them.
+- **`dejavue archive --compress`** — zstd-compress the backup file on archive (stdlib `zlib`/`lzma` only — no zstd dep).
 
 ### MCP-only (separate horizon, memory-service ecosystem)
 
