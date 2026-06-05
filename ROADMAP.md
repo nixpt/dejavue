@@ -105,13 +105,27 @@ v1.3.0** — this section was drifted. Corrected:
 - ✅ `dejavue check --fix` (auto-repair) — **shipped v1.3.0**
 - ✅ `log --type` / FTS5 `event_type` indexing — **shipped v1.3.0**
 
-## 🚀 Next wave — DCP (DejaVue Context Protocol)
+## 🚧 v2.0.0 — DCP (DejaVue Context Protocol) — in flight
 
-The next maturation step (captain-directed s241) evolves dejavue from *per-repo
+The maturation step (captain-directed s241) evolves dejavue from *per-repo
 agent memory* into **DCP — a portable context interchange standard**: `.dejavue/`
 becomes the single source of truth; `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` /
 Copilot rules become **generated, non-destructive adapter targets**. dejavue is
 the reference implementation; the protocol gets a citable spec (Foundry / OCPL).
+
+Dispatched s241 across parallel horses (spec/positioning + code). Release line
+is **v2.0.0**; the format stays backward-compatible (additive, DCP §7).
+
+**Wave status:**
+- ✅ `docs/dcp-spec.md` — **the DCP/1.0 standard** (three layers, Axiom 0,
+  adapter + import contracts, `.dejavue/` layout, conformance). Written.
+- ✅ README / STEWARDSHIP repositioned — "portable context + memory + adapter
+  bridge"; DCP/1.0 named as the stewarded standard.
+- 🚧 `context.md` instruction layer + `init` scaffold + `context` surfaces it.
+- 🚧 `dejavue import <FILE>` — lossless seed of `context.md` (provenance recorded).
+- 🚧 `dejavue export --target {claude,codex,gemini,copilot,cursor,all}` —
+  non-destructive managed-block adapters.
+- 🚧 `references/glossary.md` glossary reference card.
 
 **Axiom 0 — Zero-ceremony conformance (hard invariant):** a conforming DCP tool
 MUST be usable with no configuration and no files beyond what `init` creates.
@@ -125,12 +139,7 @@ Design + waves: `docs/plans/2026-06-05-dcp-maturation.md`.
 
 ## 🔮 Remaining candidates (post-reconciliation)
 
-### DCP wave (next)
-- **`context.md` instruction layer** + `init` scaffold + `context` surfaces it.
-- **`dejavue import <FILE>`** — seed `context.md` from an existing AGENTS.md/CLAUDE.md (lossless bootstrap).
-- **`dejavue export --target {claude,codex,gemini,copilot,all}`** — generate adapter files via a marker-delimited managed block (never clobbers hand-written content).
-- **`references/glossary.md`** glossary reference card.
-- **`docs/dcp-spec.md`** — the DCP standard.
+> DCP wave items moved up to the **🚧 v2.0.0 — DCP** section above (in flight).
 
 ### Stdlib-safe v1.4 features (parallel/after DCP)
 - **`dejavue promote --to jagent`** — graduate a `.dejavue/` into a richer per-repo planning system without losing history.
