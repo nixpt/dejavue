@@ -974,7 +974,7 @@ test_version_prints_version() {
     trap cleanup EXIT
     cd "$TEST_DIR"
     out="$(dv version)"
-    assert_contains "version output" "$out" "dejavue 1."
+    assert_contains "version output" "$out" "dejavue 2."
 }
 
 test_init_creates_prepush_hook() {
@@ -1859,6 +1859,106 @@ test_dcp_export_config_override() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# M4: glossary reference card via existing reference machinery, surfaced in context
+test_dcp_glossary_card() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv reference create glossary --template glossary >/dev/null 2>&1
+    assert_file_exists "glossary.md" ".dejavue/references/glossary.md" || return 1
+    local content
+    content="$(cat .dejavue/references/glossary.md)"
+    assert_contains "glossary type frontmatter" "$content" "type: glossary" || return 1
+    assert_contains "glossary table" "$content" "| Term | Definition |" || return 1
+    # surfaced in context (title clean, no leading ---)
+    local ctx
+    ctx="$(dv context 2>&1)"
+    assert_contains "glossary surfaced in context" "$ctx" "glossary.md" || return 1
+    assert_not_contains "no raw frontmatter as title" "$ctx" "glossary.md  (---)" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# M5: reference list --type filters by frontmatter type
+test_dcp_reference_type_filter() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv reference create gloss --template glossary >/dev/null 2>&1
+    dv reference create apicard --template api --type api >/dev/null 2>&1
+    dv reference create plaincard >/dev/null 2>&1
+    local out
+    out="$(dv reference list --type glossary 2>&1)"
+    assert_contains "glossary listed" "$out" "gloss" || return 1
+    assert_not_contains "api excluded" "$out" "apicard" || return 1
+    assert_not_contains "plain excluded" "$out" "plaincard" || return 1
+    local apiout
+    apiout="$(dv reference list --type api 2>&1)"
+    assert_contains "api listed" "$apiout" "apicard" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# M5: init --wizard is non-interactive-safe (EOF → defaults) and seeds files
+test_dcp_wizard_noninteractive() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init --wizard </dev/null >/dev/null 2>&1
+    assert_file_exists "context.md seeded" ".dejavue/context.md" || return 1
+    local state
+    state="$(cat .dejavue/state.md)"
+    assert_contains "state seeded by wizard" "$state" "Primary agent" || return 1
+    assert_event_recorded "wizard event" ".dejavue/timeline.jsonl" "event" "wizard" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# M5: init without --wizard is unchanged (no wizard event, base loop frozen)
+test_dcp_wizard_skippable() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    if grep -q '"event": "wizard"' .dejavue/timeline.jsonl 2>/dev/null; then
+        echo "  FAIL: plain init must not run wizard" >&2; return 1
+    fi
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# M5: promote --to jagent copies artifacts, preserves .dejavue/, records event
+test_dcp_promote_jagent() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "keepme" --reason "history" >/dev/null 2>&1
+    dv promote --to jagent >/dev/null 2>&1
+    assert_file_exists "jagent decisions" ".jagent/decisions.md" || return 1
+    assert_file_exists "jagent timeline" ".jagent/timeline.jsonl" || return 1
+    assert_file_exists "provenance" ".jagent/PROVENANCE.md" || return 1
+    # .dejavue/ left intact (history preserved)
+    assert_file_exists "dejavue intact" ".dejavue/decisions.md" || return 1
+    assert_contains "history preserved" "$(cat .jagent/decisions.md)" "keepme" || return 1
+    assert_event_recorded "promote event" ".dejavue/timeline.jsonl" "event" "promote" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# M5: diff --format patch emits a machine-readable unified diff
+test_dcp_diff_patch() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    git add -A && git commit -q -m c1
+    dv decision "patchable decision" --reason "delta" >/dev/null 2>&1
+    git add -A && git commit -q -m c2
+    local out
+    out="$(dv diff HEAD~1 HEAD --format patch 2>&1)"
+    assert_contains "unified diff header" "$out" "+++ b/decisions.md" || return 1
+    assert_contains "added decision in patch" "$out" "patchable decision" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -1919,7 +2019,7 @@ main() {
     run_test "31 list --type events shows only events"      test_list_type_events
     run_test "32 annotate handoff appends note"             test_annotate_handoff
     run_test "33 annotate unknown doc prints Unknown doc"   test_annotate_unknown_doc
-    run_test "34 version prints 1.0.0"                      test_version_prints_version
+    run_test "34 version prints 2.x"                        test_version_prints_version
     run_test "35 init creates pre-push hook"                test_init_creates_prepush_hook
     run_test "36 init appends gitignore entries"            test_init_creates_gitignore
     run_test "37 init --map scaffolds map.md"               test_init_map_scaffolds_map_md
@@ -1990,6 +2090,12 @@ main() {
     run_test "102 DCP export --target all writes all"       test_dcp_export_all
     run_test "103 DCP check detects adapter staleness"      test_dcp_check_staleness
     run_test "104 DCP export honors config target override" test_dcp_export_config_override
+    run_test "105 DCP glossary reference card + context"     test_dcp_glossary_card
+    run_test "106 DCP reference list --type filter"          test_dcp_reference_type_filter
+    run_test "107 DCP init --wizard non-interactive seeds"   test_dcp_wizard_noninteractive
+    run_test "108 DCP init without --wizard unchanged"       test_dcp_wizard_skippable
+    run_test "109 DCP promote --to jagent preserves history" test_dcp_promote_jagent
+    run_test "110 DCP diff --format patch machine-readable"  test_dcp_diff_patch
 
     echo ""
     echo "========================================"
