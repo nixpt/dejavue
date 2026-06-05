@@ -105,27 +105,28 @@ v1.3.0** — this section was drifted. Corrected:
 - ✅ `dejavue check --fix` (auto-repair) — **shipped v1.3.0**
 - ✅ `log --type` / FTS5 `event_type` indexing — **shipped v1.3.0**
 
-## 🚧 v2.0.0 — DCP (DejaVue Context Protocol) — in flight
+## ✅ v2.0.0 — DCP (DejaVue Context Protocol) — shipped (2026-06-05, s241)
 
 The maturation step (captain-directed s241) evolves dejavue from *per-repo
 agent memory* into **DCP — a portable context interchange standard**: `.dejavue/`
 becomes the single source of truth; `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` /
 Copilot rules become **generated, non-destructive adapter targets**. dejavue is
-the reference implementation; the protocol gets a citable spec (Foundry / OCPL).
+the reference implementation; the protocol has a citable spec (Foundry / OCPL).
 
-Dispatched s241 across parallel horses (spec/positioning + code). Release line
-is **v2.0.0**; the format stays backward-compatible (additive, DCP §7).
+Shipped s241 across parallel horses (spec/positioning + code), **119/119 tests**,
+zero new deps. Release line **v2.0.0**; format backward-compatible (additive, DCP §7).
 
-**Wave status:**
+**Wave (all shipped):**
 - ✅ `docs/dcp-spec.md` — **the DCP/1.0 standard** (three layers, Axiom 0,
-  adapter + import contracts, `.dejavue/` layout, conformance). Written.
+  adapter + import contracts, `.dejavue/` layout, conformance).
 - ✅ README / STEWARDSHIP repositioned — "portable context + memory + adapter
-  bridge"; DCP/1.0 named as the stewarded standard.
-- 🚧 `context.md` instruction layer + `init` scaffold + `context` surfaces it.
-- 🚧 `dejavue import <FILE>` — lossless seed of `context.md` (provenance recorded).
-- 🚧 `dejavue export --target {claude,codex,gemini,copilot,cursor,all}` —
-  non-destructive managed-block adapters.
-- 🚧 `references/glossary.md` glossary reference card.
+  bridge"; DCP/1.0 named as the stewarded standard; `foundry.toml` → `dcp:1.0`.
+- ✅ `context.md` instruction layer + `init` scaffold + `context` surfaces it.
+- ✅ `dejavue import <FILE>` — lossless seed of `context.md` (provenance recorded).
+- ✅ `dejavue export --target {claude,codex,gemini,copilot,cursor,all}` —
+  non-destructive managed-block adapters (append-and-warn / `--replace`; hash staleness in `check`).
+- ✅ `references/glossary.md` glossary reference card.
+- ✅ Stdlib v1.4: `promote --to jagent`, `init --wizard`, reference frontmatter, `diff --format patch`.
 
 **Axiom 0 — Zero-ceremony conformance (hard invariant):** a conforming DCP tool
 MUST be usable with no configuration and no files beyond what `init` creates.
@@ -139,13 +140,7 @@ Design + waves: `docs/plans/2026-06-05-dcp-maturation.md`.
 
 ## 🔮 Remaining candidates (post-reconciliation)
 
-> DCP wave items moved up to the **🚧 v2.0.0 — DCP** section above (in flight).
-
-### Stdlib-safe v1.4 features (parallel/after DCP)
-- **`dejavue promote --to jagent`** — graduate a `.dejavue/` into a richer per-repo planning system without losing history.
-- **`dejavue init --wizard`** — 3-question prompt to seed richer initial state.
-- **Reference frontmatter** — simple `key: value` frontmatter on `references/*.md`; `reference list --type api` filters by it. (Parser reused by DCP `context.md` metadata.)
-- **`dejavue diff --format patch`** — machine-readable patch of decisions delta (CI "what decisions changed in this PR?").
+> DCP wave + the stdlib v1.4 features all shipped in **✅ v2.0.0 — DCP** above.
 
 ### Dropped (contract conflict — see Axiom 0)
 - ~~**Local ONNX embedder tier**~~ — would require `onnxruntime`, breaking the
