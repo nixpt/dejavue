@@ -1,14 +1,27 @@
 # Deja Vue
 
-> Zero-ceremony repo-local agent memory for coding agents.
+> Portable context + memory + adapter bridge for coding agents — the reference
+> implementation of **DCP, the DejaVue Context Protocol**.
 
-Deja Vue is to project memory what `.git/` is to history. Drop it into any git
-repo in 5 seconds. No infra, no MCP server, no embeddings to configure. It
-captures what git cannot: the *why* — architectural decisions, constraints not
-obvious from the code, context the next coding session needs to hit the ground
-running. The one command worth building for is `since`: show me everything that
-changed in this repo — git commits and cognitive context — since I last worked
-here.
+**Zero ceremony first.** Deja Vue is to project memory what `.git/` is to
+history. Drop it into any git repo in 5 seconds. No infra, no MCP server, no
+embeddings to configure, no runtime dependency — a single Python 3 file on the
+standard library. This is *Axiom 0*: every layer above the base memory log is
+optional and additive, and nothing is ever mandated. (See the
+[DCP spec §0](docs/dcp-spec.md).)
+
+On that base it does three things:
+
+- **Memory** — captures what git cannot: the *why* — architectural decisions,
+  rejected alternatives, constraints not obvious from the code, the context the
+  next coding session needs to hit the ground running. The one command worth
+  building for is `since`: show me everything that changed in this repo — git
+  commits and cognitive context — since I last worked here.
+- **Context** — a single `context.md` source of truth for an agent's operating
+  rules, build/test commands, and architecture map.
+- **Adapter bridge** — generate `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` /
+  Copilot / Cursor files *from* that source of truth, non-destructively, so the
+  per-tool files become compatibility targets instead of N drifting copies.
 
 
 ## Install
@@ -89,6 +102,44 @@ For the full design rationale — including the overlap with adjacent memory
 tools, hook strategy, and the rejected-alternatives principle — see
 `docs/04-design-perspective.md`. For the build spec and migration path,
 see `docs/05-v0.1-scope.md`.
+
+
+## DCP — DejaVue Context Protocol
+
+Deja Vue is the reference implementation of **DCP**, a portable context
+interchange standard. The full standard is in
+[`docs/dcp-spec.md`](docs/dcp-spec.md) (DCP/1.0, draft). The idea: `.dejavue/`
+is the **single source of truth**, and the per-tool instruction files
+(`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, Copilot/Cursor rules) become
+**generated, non-destructive adapter targets** rather than the authority.
+
+DCP organizes context into three layers:
+
+1. **Instruction layer** (`context.md`) — what the agent should *do*: operating
+   rules, build/test commands, architecture map.
+2. **Memory layer** (`timeline.jsonl` + `decisions.md` + `state.md` +
+   `handoff.md`) — what the agent should *remember*. Deja Vue already is this.
+3. **Adapter layer** — generated per-tool files plus an `import` to bootstrap
+   from existing ones.
+
+The round-trip flow:
+
+```
+dejavue import CLAUDE.md            # seed .dejavue/context.md from an existing file (lossless)
+$EDITOR .dejavue/context.md         # edit the single source of truth
+dejavue export --target claude      # regenerate CLAUDE.md (and codex/gemini/copilot/cursor/all)
+```
+
+`export` writes a marker-delimited managed block —
+`<!-- dejavue:begin DCP/1.0 src=context.md hash=… -->` … `<!-- dejavue:end -->` —
+into each tool's real file, preserving any hand-written content outside the
+markers (absent→create, marked→replace region, unmarked→append+warn,
+`--replace`→convert). Hand-written instruction files are never blindly
+clobbered. The whole protocol holds to **Axiom 0**: zero ceremony, no mandated
+dependency, every layer above the base memory log optional.
+
+DCP is stewarded for the OpenKO Foundry under OCPL-1.1; see
+[`STEWARDSHIP.md`](STEWARDSHIP.md).
 
 
 ### Layer relationships
@@ -385,14 +436,19 @@ tools sit on top of the same on-disk format. See `docs/05-v0.1-scope.md`
 | v1.1 | 25 commands: `check`, `archive`, `roster`, `config`, `install-skill`, embedder circuit breaker. |
 | v1.2 | 31 commands: richer event types, `stats`, `export`, `reference`, `link`, `search`, tiered embedder auto-detect. |
 | v1.3 | 36 commands: `diff`, `timeline`, `tag`, `note-commit`, `check --fix`, event_type FTS indexing, `since` notes section. |
-| v1.4+ | MCP tool wrappers, ONNX local embedder, `dejavue promote`, first-use wizard. |
+| v2.0 | **DCP/1.0** — `context.md` instruction layer, `import`, `export --target {claude,codex,gemini,copilot,cursor,all}` (non-destructive adapter bridge), `references/glossary.md`. `docs/dcp-spec.md` ships as a citable standard. |
 
 
 ## Status
 
-v1.3.0 — single-file Python CLI. 36 commands. 100/100 tests. Format stable. Not on PyPI.
+v2.0.0 — single-file Python CLI and the **DCP/1.0 reference implementation**.
+DCP/1.0 spec at `docs/dcp-spec.md` (draft). Format stable and
+backward-compatible (additive evolution per DCP §7). Single file, stdlib only,
+zero mandated dependency (Axiom 0). Not on PyPI.
 
 Design documents in repo:
+- `docs/dcp-spec.md` — **the DCP/1.0 standard** (three layers, adapter contract, `.dejavue/` layout, conformance)
+- `docs/plans/2026-06-05-dcp-maturation.md` — ratified DCP design decisions (internal session)
 - `docs/01-origin.md` — original conversation that produced the spec
 - `docs/02-evolution.md` — the spec's evolution (semantic, boot packet, since/recall)
 - `docs/03-example.md` — early bash demo
