@@ -22,6 +22,7 @@ TIMELINE = DEJAVUE_DIR / "timeline.jsonl"
 STATE = DEJAVUE_DIR / "state.md"
 DECISIONS = DEJAVUE_DIR / "decisions.md"
 HANDOFF = DEJAVUE_DIR / "handoff.md"
+CONTEXT = DEJAVUE_DIR / "context.md"
 REFERENCES = DEJAVUE_DIR / "references"
 FTS_DB = DEJAVUE_DIR / "fts.db"
 EMBEDDINGS = DEJAVUE_DIR / "embeddings.jsonl"
@@ -41,6 +42,61 @@ EMBEDDER_TIMEOUT_S = 5.0
 # Valid event sub-types for decision/note commands (stored as "event_type" field).
 DECISION_TYPES = {"decision", "blocker", "claim", "question", "experiment", "checkpoint"}
 NOTE_TYPES     = {"note", "blocker", "claim", "question", "observation"}
+
+# ── DCP (DejaVue Context Protocol) ─────────────────────────────────────────────
+# context.md is the DCP instruction-layer source of truth; adapters are generated
+# non-destructively from it (D2/internal session). Everything here is optional and additive —
+# the base memory loop (init/start/decision/state/handoff) is unchanged without it.
+DCP_VERSION = "DCP/1.0"
+
+# target name → default output path (the tool's REAL file). Overridable per-repo
+# via .dejavue/config keys `target_<name> = <path>`.
+EXPORT_TARGETS = {
+    "claude":  "CLAUDE.md",
+    "codex":   "AGENTS.md",
+    "gemini":  "GEMINI.md",
+    "copilot": ".github/copilot-instructions.md",
+    "cursor":  ".cursor/rules",
+}
+
+# Managed-block markers. The fenced region between begin/end is the ONLY part
+# export ever rewrites; hand-written content outside it is preserved verbatim.
+_DCP_BEGIN_RE = re.compile(
+    r"<!-- dejavue:begin DCP/[^\s]+ src=context\.md hash=(?P<hash>[0-9a-f]+) -->"
+)
+_DCP_BLOCK_RE = re.compile(
+    r"<!-- dejavue:begin DCP/[^>]*?-->.*?<!-- dejavue:end -->\n?",
+    re.DOTALL,
+)
+
+
+def parse_frontmatter(text):
+    """Parse a minimal `key: value` frontmatter block delimited by `---` lines.
+
+    Stdlib-only (no YAML dependency): supports flat `key: value` pairs, ignores
+    blank lines and `#` comments inside the block. Returns (meta_dict, body_str).
+    If there is no well-formed frontmatter, returns ({}, text) unchanged. Shared
+    by context.md metadata (M1) and reference frontmatter (M5)."""
+    if not text.startswith("---"):
+        return {}, text
+    lines = text.splitlines(keepends=True)
+    if lines[0].strip() != "---":
+        return {}, text
+    meta = {}
+    end_idx = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            end_idx = i
+            break
+        stripped = lines[i].strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if ":" in stripped:
+            k, _, v = stripped.partition(":")
+            meta[k.strip()] = v.strip()
+    if end_idx is None:
+        return {}, text  # no closing delimiter — treat the whole thing as body
+    return meta, "".join(lines[end_idx + 1:])
 
 # flock support (POSIX only; graceful no-op on Windows)
 try:
@@ -290,6 +346,9 @@ def cmd_init(args):
             encoding="utf-8",
         )
 
+    # DCP instruction layer (optional/additive — its absence breaks nothing).
+    _scaffold_context()
+
     git_dir_raw = git_run("git", "rev-parse", "--git-dir")
     if git_dir_raw:
         git_dir = Path(git_dir_raw)
@@ -456,6 +515,42 @@ def _scaffold_map():
     print("Scaffolded references/map.md — fill it in with the codebase overview.")
 
 
+def _context_template(name="", purpose=""):
+    """Return an empty DCP context.md template with `key: value` frontmatter."""
+    return (
+        "---\n"
+        f"name: {name}\n"
+        f"purpose: {purpose}\n"
+        f"dcp: {DCP_VERSION}\n"
+        "---\n\n"
+        "# Context\n\n"
+        "<!-- The DCP instruction layer: what an agent should *do* in this repo.\n"
+        "     Source of truth — adapters (CLAUDE.md / AGENTS.md / …) are generated\n"
+        "     from this file via `dejavue export --target <tool>`. -->\n\n"
+        "## Operating Rules\n\n"
+        "- \n\n"
+        "## Build / Test\n\n"
+        "- \n\n"
+        "## Architecture Map\n\n"
+        "- \n\n"
+        "## Memory\n\n"
+        "Decisions, blockers, and constraints are captured in `.dejavue/` — run\n"
+        "`dejavue context` for the boot packet and `dejavue recall <query>` to search.\n"
+    )
+
+
+def _scaffold_context():
+    """Create .dejavue/context.md from the empty template if absent. Idempotent."""
+    if CONTEXT.exists():
+        return
+    name = ""
+    try:
+        name = Path.cwd().name
+    except Exception:
+        pass
+    CONTEXT.write_text(_context_template(name=name), encoding="utf-8")
+
+
 def cmd_start(args):
     maybe_show_worthiness()
     append_event({
@@ -597,6 +692,17 @@ def cmd_context(args):
         return
 
     print("\n# Dejavue Context\n")
+
+    # DCP instruction layer first (if present) — surfaces frontmatter + body.
+    if CONTEXT.exists():
+        ctx_text = CONTEXT.read_text(encoding="utf-8")
+        meta, _ = parse_frontmatter(ctx_text)
+        label = "context.md"
+        if meta.get("dcp"):
+            label += f"  [{meta['dcp']}]"
+        print(f"--- {label} ---\n")
+        print(ctx_text)
+
     for path, label in [(HANDOFF, "handoff.md"), (STATE, "state.md"), (DECISIONS, "decisions.md")]:
         if path.exists():
             print(f"--- {label} ---\n")

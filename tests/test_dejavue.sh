@@ -1657,6 +1657,64 @@ test_v13_commands_present() {
     dv note-commit --help >/dev/null 2>&1 || { echo "  FAIL: note-commit command missing" >&2; return 1; }
 }
 
+# ── DCP (DejaVue Context Protocol) tests ────────────────────────────────────────
+
+# M1: init scaffolds context.md with DCP frontmatter
+test_dcp_init_scaffolds_context() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    assert_file_exists "context.md" ".dejavue/context.md" || return 1
+    local content
+    content="$(cat .dejavue/context.md)"
+    assert_contains "dcp frontmatter" "$content" "dcp: DCP/1.0" || return 1
+    assert_contains "operating rules section" "$content" "## Operating Rules" || return 1
+    assert_contains "build/test section" "$content" "## Build / Test" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# M1: base loop unaffected — absence of context.md does not break context cmd
+test_dcp_context_absent_ok() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    rm -f .dejavue/context.md
+    local out
+    out="$(dv context 2>&1)"
+    assert_contains "context still runs" "$out" "Dejavue Context" || return 1
+    assert_not_contains "no context.md section" "$out" "--- context.md" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# M1: dejavue context surfaces context.md when present
+test_dcp_context_surfaces_context_md() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    local out
+    out="$(dv context 2>&1)"
+    assert_contains "surfaces context.md" "$out" "--- context.md" || return 1
+    assert_contains "shows DCP tag" "$out" "[DCP/1.0]" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# M1: frontmatter parser handles key:value + body (probe via context surfacing)
+test_dcp_frontmatter_parse() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    printf -- '---\nname: probe\npurpose: testing\ndcp: DCP/1.0\n---\n\n# Body\nhello world\n' > .dejavue/context.md
+    local out
+    out="$(dv context 2>&1)"
+    assert_contains "body preserved" "$out" "hello world" || return 1
+    assert_contains "dcp tag from parsed meta" "$out" "[DCP/1.0]" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -1775,6 +1833,10 @@ main() {
     run_test "89 since shows notes section"                 test_since_shows_notes
     run_test "90 event_type indexed by FTS5"                test_event_type_in_fts
     run_test "91 diff and timeline commands present"        test_v13_commands_present
+    run_test "92 DCP init scaffolds context.md"             test_dcp_init_scaffolds_context
+    run_test "93 DCP context.md absence breaks nothing"     test_dcp_context_absent_ok
+    run_test "94 DCP context surfaces context.md"           test_dcp_context_surfaces_context_md
+    run_test "95 DCP frontmatter parser key:value + body"   test_dcp_frontmatter_parse
 
     echo ""
     echo "========================================"
