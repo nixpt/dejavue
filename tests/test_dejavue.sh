@@ -1715,6 +1715,150 @@ test_dcp_frontmatter_parse() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# M2: import seeds context.md losslessly + records provenance event
+test_dcp_import_roundtrip() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    printf '# Hand CLAUDE\n\nKEEP_THIS_MARKER line.\n' > CLAUDE.md
+    git add CLAUDE.md && git commit -q -m "add claude"
+    local out
+    out="$(dv import CLAUDE.md 2>&1)"
+    assert_contains "import reports lossless" "$out" "lossless" || return 1
+    local ctx
+    ctx="$(cat .dejavue/context.md)"
+    assert_contains "content preserved lossless" "$ctx" "KEEP_THIS_MARKER" || return 1
+    assert_contains "provenance source recorded" "$ctx" "source: CLAUDE.md" || return 1
+    assert_event_recorded "import event" ".dejavue/timeline.jsonl" "event" "import" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# M2: import refuses to clobber a populated context.md without --force
+test_dcp_import_guards_populated() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    printf '# Source\nbody one\n' > AGENTS.md
+    dv import AGENTS.md >/dev/null 2>&1   # first import populates context.md
+    printf '# Source2\nbody two\n' > OTHER.md
+    local out
+    out="$(dv import OTHER.md 2>&1)"
+    assert_contains "guard warns" "$out" "already exists" || return 1
+    local out2
+    out2="$(dv import OTHER.md --force 2>&1)"
+    assert_contains "force overrides" "$out2" "lossless" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# M3: export to ABSENT target creates a block-only file
+test_dcp_export_creates_absent() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    local out
+    out="$(dv export --target gemini 2>&1)"
+    assert_contains "created message" "$out" "created GEMINI.md" || return 1
+    assert_file_exists "GEMINI.md" "GEMINI.md" || return 1
+    local content
+    content="$(cat GEMINI.md)"
+    assert_contains "begin marker" "$content" "dejavue:begin DCP/1.0 src=context.md" || return 1
+    assert_contains "end marker" "$content" "dejavue:end" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# M3: export to UNMARKED hand-written target appends + warns, preserves content
+test_dcp_export_appends_unmarked() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    printf '# Hand CLAUDE\n\nPRESERVE_ME line.\n' > CLAUDE.md
+    local out
+    out="$(dv export --target claude 2>&1)"
+    assert_contains "warns on append" "$out" "WARNING" || return 1
+    local content
+    content="$(cat CLAUDE.md)"
+    assert_contains "hand-written preserved" "$content" "PRESERVE_ME" || return 1
+    assert_contains "managed block appended" "$content" "dejavue:begin" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# M3: re-export to MARKED target replaces only the fenced region (idempotent)
+test_dcp_export_updates_marked() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    printf '# Hand CLAUDE\n\nPRESERVE_ME line.\n' > CLAUDE.md
+    dv export --target claude >/dev/null 2>&1
+    dv export --target claude >/dev/null 2>&1   # second run must not duplicate
+    local count
+    count="$(grep -c 'dejavue:begin' CLAUDE.md)"
+    assert_eq "exactly one managed block" "$count" "1" || return 1
+    assert_contains "still preserves hand-written" "$(cat CLAUDE.md)" "PRESERVE_ME" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# M3: --replace converts an unmarked hand-written file entirely
+test_dcp_export_replace_converts() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    printf 'ONLY_HANDWRITTEN\n' > AGENTS.md
+    dv export --target codex --replace >/dev/null 2>&1
+    assert_not_contains "handwritten removed" "$(cat AGENTS.md)" "ONLY_HANDWRITTEN" || return 1
+    assert_contains "block present" "$(cat AGENTS.md)" "dejavue:begin" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# M3: export --target all writes every adapter
+test_dcp_export_all() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv export --target all >/dev/null 2>&1
+    assert_file_exists "CLAUDE.md" "CLAUDE.md" || return 1
+    assert_file_exists "AGENTS.md" "AGENTS.md" || return 1
+    assert_file_exists "GEMINI.md" "GEMINI.md" || return 1
+    assert_file_exists "copilot" ".github/copilot-instructions.md" || return 1
+    assert_file_exists "cursor" ".cursor/rules" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# M3: check warns when context.md changed after export (adapters stale)
+test_dcp_check_staleness() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv export --target gemini >/dev/null 2>&1
+    local fresh
+    fresh="$(dv check 2>&1)"
+    assert_contains "in sync after export" "$fresh" "in sync with context.md" || return 1
+    printf '\n- a new operating rule\n' >> .dejavue/context.md
+    local stale
+    stale="$(dv check 2>&1)"
+    assert_contains "stale warning" "$stale" "adapters stale" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# M3: export adapter via config target override
+test_dcp_export_config_override() {
+    TEST_DIR="$(setup_repo)"
+    trap cleanup EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv config set target_claude docs/AI.md >/dev/null 2>&1
+    dv export --target claude >/dev/null 2>&1
+    assert_file_exists "override path used" "docs/AI.md" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -1837,6 +1981,15 @@ main() {
     run_test "93 DCP context.md absence breaks nothing"     test_dcp_context_absent_ok
     run_test "94 DCP context surfaces context.md"           test_dcp_context_surfaces_context_md
     run_test "95 DCP frontmatter parser key:value + body"   test_dcp_frontmatter_parse
+    run_test "96 DCP import seeds context.md lossless"      test_dcp_import_roundtrip
+    run_test "97 DCP import guards populated context.md"    test_dcp_import_guards_populated
+    run_test "98 DCP export creates absent target"          test_dcp_export_creates_absent
+    run_test "99 DCP export appends to unmarked target"     test_dcp_export_appends_unmarked
+    run_test "100 DCP export updates marked target only"    test_dcp_export_updates_marked
+    run_test "101 DCP export --replace converts file"       test_dcp_export_replace_converts
+    run_test "102 DCP export --target all writes all"       test_dcp_export_all
+    run_test "103 DCP check detects adapter staleness"      test_dcp_check_staleness
+    run_test "104 DCP export honors config target override" test_dcp_export_config_override
 
     echo ""
     echo "========================================"
