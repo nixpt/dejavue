@@ -15,7 +15,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSION = "1.3.0"
+VERSION = "2.0.0"
 
 DEJAVUE_DIR = Path(".dejavue")
 TIMELINE = DEJAVUE_DIR / "timeline.jsonl"
@@ -24,6 +24,7 @@ DECISIONS = DEJAVUE_DIR / "decisions.md"
 HANDOFF = DEJAVUE_DIR / "handoff.md"
 CONTEXT = DEJAVUE_DIR / "context.md"
 REFERENCES = DEJAVUE_DIR / "references"
+JAGENT_DIR = Path(".planning")
 FTS_DB = DEJAVUE_DIR / "fts.db"
 EMBEDDINGS = DEJAVUE_DIR / "embeddings.jsonl"
 INGESTED_LOCK = DEJAVUE_DIR / "ingested.lock"
@@ -349,6 +350,9 @@ def cmd_init(args):
     # DCP instruction layer (optional/additive — its absence breaks nothing).
     _scaffold_context()
 
+    if getattr(args, "wizard", False):
+        _run_wizard(resolve_agent(args.agent))
+
     git_dir_raw = git_run("git", "rev-parse", "--git-dir")
     if git_dir_raw:
         git_dir = Path(git_dir_raw)
@@ -551,6 +555,42 @@ def _scaffold_context():
     CONTEXT.write_text(_context_template(name=name), encoding="utf-8")
 
 
+def _run_wizard(agent_default):
+    """3-question seed for context.md + state.md. Skippable / non-interactive:
+    on EOF (no tty, piped /dev/null) every answer falls back to its default."""
+    repo = ""
+    try:
+        repo = Path.cwd().name
+    except Exception:
+        pass
+
+    def ask(prompt, default):
+        try:
+            ans = input(prompt).strip()
+        except EOFError:
+            ans = ""
+        return ans or default
+
+    print("dejavue init --wizard — 3 questions (Enter accepts the default):\n")
+    ptype   = ask(f"  1. Project type [{repo}]? ", repo)
+    agent   = ask(f"  2. Primary agent [{agent_default}]? ", agent_default)
+    purpose = ask("  3. Purpose (one line) []? ", "")
+
+    CONTEXT.write_text(_context_template(name=ptype, purpose=purpose), encoding="utf-8")
+    STATE.write_text(
+        f"# State\n\nUpdated: {now()}\n\n"
+        f"Project: {ptype}. Primary agent: {agent}."
+        + (f" Purpose: {purpose}." if purpose else "") + "\n",
+        encoding="utf-8",
+    )
+    append_event({
+        "agent": agent,
+        "event": "wizard",
+        "summary": f"init --wizard seeded context.md + state.md (type={ptype}, agent={agent})",
+    })
+    print("\nSeeded context.md + state.md from wizard answers.")
+
+
 def cmd_start(args):
     maybe_show_worthiness()
     append_event({
@@ -713,8 +753,7 @@ def cmd_context(args):
         if refs:
             print("--- references ---\n")
             for ref in refs:
-                first_line = ref.read_text(encoding="utf-8").splitlines()
-                title = next((l.lstrip("# ").strip() for l in first_line if l.strip()), ref.stem)
+                title = _ref_title(ref.read_text(encoding="utf-8"), fallback=ref.stem)
                 print(f"  {ref.name}  ({title})")
                 print()
 
@@ -2025,6 +2064,82 @@ def cmd_import(args):
           f"Provenance sha={src_sha or 'untracked'}.")
 
 
+def cmd_promote(args):
+    """Graduate a .dejavue/ into a richer per-repo planning system (.planning/)
+    WITHOUT losing history. Copies (never moves) every memory artifact and
+    records provenance; the .dejavue/ log stays canonical (non-destructive)."""
+    if args.to != "planning":
+        print(f"Unknown --to '{args.to}'. Supported: planning")
+        sys.exit(1)
+    if not DEJAVUE_DIR.exists():
+        print("Nothing to promote — no .dejavue/. Run: dejavue init")
+        sys.exit(1)
+
+    JAGENT_DIR.mkdir(exist_ok=True)
+    force = getattr(args, "force", False)
+
+    # Spec'd mapping: .dejavue/<x> → .planning/<x> (1:1 copy, lossless).
+    mapping = [
+        (CONTEXT,                JAGENT_DIR / "context.md"),
+        (STATE,                  JAGENT_DIR / "state.md"),
+        (DECISIONS,              JAGENT_DIR / "decisions.md"),
+        (HANDOFF,                JAGENT_DIR / "handoff.md"),
+        (TIMELINE,               JAGENT_DIR / "timeline.jsonl"),
+        (DEJAVUE_DIR / "config", JAGENT_DIR / "config"),
+    ]
+    copied, skipped = [], []
+    for src, dst in mapping:
+        if not src.exists():
+            continue
+        if dst.exists() and not force:
+            skipped.append(dst.name)
+            continue
+        dst.write_bytes(src.read_bytes())
+        copied.append(dst.name)
+
+    if REFERENCES.exists():
+        jrefs = JAGENT_DIR / "references"
+        jrefs.mkdir(exist_ok=True)
+        for ref in sorted(REFERENCES.glob("*.md")):
+            dst = jrefs / ref.name
+            if dst.exists() and not force:
+                skipped.append(f"references/{ref.name}")
+                continue
+            dst.write_bytes(ref.read_bytes())
+            copied.append(f"references/{ref.name}")
+
+    sha = git_run("git", "rev-parse", "--short", "HEAD") or "untracked"
+    (JAGENT_DIR / "PROVENANCE.md").write_text(
+        "# Promoted from .dejavue/\n\n"
+        f"- Promoted: {now()}\n"
+        f"- Source commit: {sha}\n"
+        f"- Tool: dejavue {VERSION} ({DCP_VERSION})\n\n"
+        "## Mapping\n\n"
+        "| .dejavue/ | .planning/ |\n|---|---|\n"
+        "| context.md | context.md |\n"
+        "| state.md | state.md |\n"
+        "| decisions.md | decisions.md |\n"
+        "| handoff.md | handoff.md |\n"
+        "| timeline.jsonl | timeline.jsonl |\n"
+        "| config | config |\n"
+        "| references/ | references/ |\n\n"
+        "The `.dejavue/` log remains canonical; this is a non-destructive copy "
+        "so history is never lost.\n",
+        encoding="utf-8",
+    )
+
+    append_event({
+        "agent": resolve_agent(getattr(args, "agent", None)),
+        "event": "promote",
+        "target": "planning",
+        "summary": f"Promoted .dejavue/ → .planning/ ({len(copied)} artifacts copied, history preserved)",
+    })
+    print(f"Promoted .dejavue/ → .planning/ — copied {len(copied)} artifact(s).")
+    if skipped:
+        print(f"  Skipped (already exist; use --force): {', '.join(skipped)}")
+    print("  .dejavue/ left intact — history preserved.")
+
+
 def cmd_export(args):
     """Export dejavue memory as JSON/Markdown, or generate adapter targets."""
     if getattr(args, "target", None):
@@ -2181,13 +2296,23 @@ def cmd_reference(args):
 
     if action == "list":
         refs = sorted(REFERENCES.glob("*.md"))
+        type_filter = getattr(args, "type", None)
         if not refs:
             print(f"No reference cards in {REFERENCES}")
             print("Create one with: dejavue reference create <name>")
             return
+        shown = 0
         for ref in refs:
-            first = next((l.lstrip("# ").strip() for l in ref.read_text(encoding="utf-8").splitlines() if l.strip()), ref.stem)
-            print(f"  {ref.stem:<20}  {first[:60]}")
+            text = ref.read_text(encoding="utf-8")
+            meta, _ = parse_frontmatter(text)
+            if type_filter and meta.get("type") != type_filter:
+                continue
+            title = _ref_title(text, fallback=ref.stem)
+            type_tag = f"  [{meta['type']}]" if meta.get("type") else ""
+            print(f"  {ref.stem:<20}  {title[:60]}{type_tag}")
+            shown += 1
+        if type_filter and shown == 0:
+            print(f"No reference cards with type '{type_filter}'.")
 
     elif action == "create":
         name = args.name
@@ -2199,7 +2324,7 @@ def cmd_reference(args):
             return
         title = getattr(args, "title", None) or args.name.replace("-", " ").replace("_", " ").title()
         if getattr(args, "content", None):
-            path.write_text(args.content, encoding="utf-8")
+            body = args.content
         else:
             template = getattr(args, "template", "default")
             if template == "api":
@@ -2220,12 +2345,32 @@ def cmd_reference(args):
                     "## Interfaces\n\n\n\n"
                     "## Why this design\n\n"
                 )
+            elif template == "glossary":
+                body = (
+                    "---\n"
+                    "type: glossary\n"
+                    f"dcp: {DCP_VERSION}\n"
+                    "---\n\n"
+                    f"# {title}\n\n"
+                    "<!-- DCP glossary card: domain terms an agent must know.\n"
+                    "     Surfaced by `dejavue context`. One term per row. -->\n\n"
+                    "| Term | Definition |\n"
+                    "|------|------------|\n"
+                    "|      |            |\n"
+                )
             else:  # default
                 body = (
                     f"# {title}\n\n"
                     "<!-- Reference card: fill in and commit -->\n\n\n"
                 )
-            path.write_text(body, encoding="utf-8")
+        # If --type was given and the card has no frontmatter yet, inject it so
+        # the card is filterable via `reference list --type` (M5).
+        ref_type = getattr(args, "type", None)
+        if ref_type:
+            existing_meta, _ = parse_frontmatter(body)
+            if not existing_meta:
+                body = (f"---\ntype: {ref_type}\ndcp: {DCP_VERSION}\n---\n\n" + body)
+        path.write_text(body, encoding="utf-8")
         append_event({
             "agent": resolve_agent(getattr(args, "agent", None)),
             "event": "reference_created",
@@ -2328,6 +2473,12 @@ def cmd_diff(args):
     from_ref = args.from_ref
     to_ref   = getattr(args, "to_ref", None) or "HEAD"
 
+    # Machine-readable patch of the decisions delta (M5). Emits a clean unified
+    # diff of decisions.md (and state.md) — no human-facing headers/summaries.
+    if getattr(args, "format", None) == "patch":
+        _diff_patch(from_ref, to_ref)
+        return
+
     # Try resolving as timestamps first (for event-level diff)
     from_ts = _ref_to_ts(from_ref)
     to_ts   = _ref_to_ts(to_ref) if to_ref != "HEAD" else now()
@@ -2391,6 +2542,32 @@ def cmd_diff(args):
             for ev in new_states:
                 ts = (ev.get("ts") or "")[:10]
                 print(f"  {ts}  {ev.get('summary','')[:80]}")
+
+
+def _diff_patch(from_ref, to_ref):
+    """Emit a machine-readable unified-diff patch of the memory-doc delta."""
+    resolved_to = to_ref if to_ref != "HEAD" else "HEAD"
+    any_out = False
+    for filepath, label in [(".dejavue/decisions.md", "decisions.md"),
+                            (".dejavue/state.md", "state.md")]:
+        before = _git_show_file(from_ref, filepath)
+        after  = _git_show_file(resolved_to, filepath)
+        if before is None and after is None:
+            continue
+        if before == after:
+            continue
+        delta = difflib.unified_diff(
+            (before or "").splitlines(keepends=True),
+            (after or "").splitlines(keepends=True),
+            fromfile=f"a/{label}", tofile=f"b/{label}",
+            lineterm="",
+        )
+        for line in delta:
+            print(line)
+            any_out = True
+    if not any_out:
+        # Still valid (empty) patch output; signal via a comment on stderr.
+        print(f"# no memory-doc delta between {from_ref} and {to_ref}", file=sys.stderr)
 
 
 def cmd_timeline(args):
@@ -2577,6 +2754,15 @@ def cmd_annotate(args):
     print(f"Annotation appended to {path}.")
 
 
+def _ref_title(text, fallback=""):
+    """First markdown heading/line of a reference card, skipping frontmatter."""
+    _, body = parse_frontmatter(text)
+    for line in body.splitlines():
+        if line.strip():
+            return line.lstrip("# ").strip()
+    return fallback
+
+
 def _resolve_doc(doc):
     if doc == "state":
         return STATE
@@ -2621,6 +2807,9 @@ def main():
     p.add_argument("--force", action="store_true", help="Overwrite existing non-dejavue hooks.")
     p.add_argument("--ingest", action="store_true", help="Run ingest after init.")
     p.add_argument("--map", action="store_true", help="Scaffold references/map.md.")
+    p.add_argument("--wizard", action="store_true",
+                   help="Run a 3-question prompt (project type / agent / purpose) to seed "
+                        "context.md + state.md. Non-interactive (piped/EOF) uses defaults.")
     p.set_defaults(func=cmd_init)
 
     p = sub.add_parser("start", help="Record session start.")
@@ -2774,6 +2963,13 @@ def main():
     p = sub.add_parser("stats", help="Timeline statistics: counts by type, by agent, date range.")
     p.set_defaults(func=cmd_stats)
 
+    p = sub.add_parser("promote", help="Graduate .dejavue/ into a richer planning system (.planning/) without losing history.")
+    p.add_argument("--to", default="planning", choices=["planning"],
+                   help="Target planning system (default: planning).")
+    p.add_argument("--force", action="store_true", help="Overwrite already-promoted artifacts.")
+    p.add_argument("--agent", default=None)
+    p.set_defaults(func=cmd_promote)
+
     p = sub.add_parser("import", help="Bootstrap context.md from an existing AGENTS.md/CLAUDE.md (lossless).")
     p.add_argument("file", help="Path to the hand-written instruction file to import.")
     p.add_argument("--force", action="store_true", help="Overwrite a populated context.md.")
@@ -2797,11 +2993,15 @@ def main():
     ref_sub = p.add_subparsers(dest="action", required=True)
 
     rs = ref_sub.add_parser("list", help="List all reference cards.")
+    rs.add_argument("--type", default=None,
+                    help="Filter by `type:` frontmatter value (e.g. glossary, api).")
     rs = ref_sub.add_parser("create", help="Create a new reference card.")
     rs.add_argument("name", help="Card name (becomes references/<name>.md).")
     rs.add_argument("--title", default=None, help="Title text (defaults to name).")
     rs.add_argument("--content", default=None, help="Card content (overrides template).")
-    rs.add_argument("--template", choices=["default", "api", "design"], default="default")
+    rs.add_argument("--template", choices=["default", "api", "design", "glossary"], default="default")
+    rs.add_argument("--type", default=None,
+                    help="Set a `type:` frontmatter value on the card (filterable via list --type).")
     rs.add_argument("--force", action="store_true")
     rs.add_argument("--agent", default=None)
     rs = ref_sub.add_parser("update", help="Overwrite a reference card's content.")
@@ -2827,6 +3027,8 @@ def main():
     p.add_argument("from_ref", metavar="FROM", help="Start ref: ISO date (2026-05-13), commit hash, or git tag.")
     p.add_argument("to_ref",   metavar="TO",   nargs="?", default="HEAD",
                    help="End ref (default: HEAD).")
+    p.add_argument("--format", choices=["text", "patch"], default="text",
+                   help="text (default, human summary) or patch (machine-readable unified diff of the decisions delta).")
     p.set_defaults(func=cmd_diff)
 
     p = sub.add_parser("timeline", help="ASCII activity chart of events over time.")
