@@ -29,6 +29,7 @@ _dejavue() {
                 'blame:Show decisions and events touching a file path'
                 'note:Record a lightweight timestamped note'
                 'since:Temporal delta since a date, commit, or agent session'
+                'changelog:Why-aware markdown changelog over a git range'
                 'ingest:Scrape .claude/, CHANGELOG, ADRs, git log into timeline'
                 'recall:Keyword (FTS5) or semantic search over all artifacts'
                 'worthiness:Print the capture/skip worthiness gate'

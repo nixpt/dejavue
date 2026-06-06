@@ -2,7 +2,7 @@
 # Install: dejavue completion fish | source
 # Or persist: dejavue completion fish > ~/.config/fish/completions/dejavue.fish
 set -l cmds version init start changed decision state handoff context status \
-    check archive roster config install-skill log blame note since ingest recall \
+    check archive roster config install-skill log blame note since changelog ingest recall \
     worthiness get list annotate stats promote import export reference link search \
     diff timeline tag note-commit completion rejected trap incident invariant pattern entities
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
