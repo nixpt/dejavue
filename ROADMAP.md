@@ -231,7 +231,7 @@ Axiom-0 clean (stdlib, single-file, additive fields). Favors the core loop
 - ✅ **`--supersedes` read-back** — *shipped (unreleased)*; `recall`/`since`/`context` now surface "⚠ superseded by …" on overridden decisions (event-identity self-exclusion, same-second-safe). Closed the inert v2.0.1 contract. Fourth P0 item, done.
 
 **P1**
-- `dejavue changelog <range>` — why-aware changelog from timeline + decisions.
+- ✅ **`dejavue changelog <range>`** — *shipped (unreleased)*; why-aware markdown changelog (decisions + confidence + superseded annotations + traps/incidents + notes + commits) over a git range. First P1 item, done.
 - Per-entry freshness / expiry with read-time staleness flagging.
 - `derived_from` intent lineage (after entities land).
 - Memory stability-class label.
@@ -288,7 +288,7 @@ The git-companion commands from `deja-git.md` not yet shipped (`blame`, `since r
 `note-commit`, the `post-checkout` banner already are). All compose timeline + decisions
 over a git range — thin views, no new storage.
 
-- **`dejavue changelog <range>`** — generate a *why-aware* changelog from decisions + notes + the timeline over a git range (e.g. `v2.0.1..HEAD`). A `since` + `export` composition; the highest-value item here.
+- ✅ **`dejavue changelog <range>`** *(shipped, unreleased)* — why-aware markdown changelog (decisions + notes + traps/incidents + commits) over a git range, with confidence + superseded annotations. A `since` + `export` composition. (scratch: `deja-git.md`)
 - **`dejavue branch start|summary|close`** + **`merge-summary <base> <branch>`** — capture and replay the intent of a branch and what a merge brought in. Useful across multi-agent worktrees.
 - **`dejavue squash-summary <branch>`** — synthesize a single commit message from a branch's dejavue events before a squash-merge.
 - **`dejavue conflict record --reason`** — first-class capture of why a merge conflict was resolved a given way (today expressible only as a free-text `note`).
