@@ -21,6 +21,7 @@ DEJAVUE_DIR = Path(".dejavue")
 TIMELINE = DEJAVUE_DIR / "timeline.jsonl"
 STATE = DEJAVUE_DIR / "state.md"
 DECISIONS = DEJAVUE_DIR / "decisions.md"
+INVARIANTS = DEJAVUE_DIR / "invariants.md"
 HANDOFF = DEJAVUE_DIR / "handoff.md"
 CONTEXT = DEJAVUE_DIR / "context.md"
 REFERENCES = DEJAVUE_DIR / "references"
@@ -340,6 +341,9 @@ def cmd_init(args):
     if not DECISIONS.exists():
         DECISIONS.write_text("# Decisions\n\n", encoding="utf-8")
 
+    if not INVARIANTS.exists():
+        INVARIANTS.write_text("# Invariants\n\n", encoding="utf-8")
+
     if not HANDOFF.exists():
         HANDOFF.write_text(
             "# Handoff\n\nRead `.dejavue/state.md`, `.dejavue/decisions.md`,"
@@ -443,6 +447,7 @@ def _write_prepush_hook(hook_path, marker):
 _GITATTR_LINES = (
     ".dejavue/timeline.jsonl merge=union",
     ".dejavue/decisions.md   merge=union",
+    ".dejavue/invariants.md  merge=union",
 )
 _GITATTR_MARKER = "# dejavue: append-only files use git's union merge driver"
 
@@ -803,7 +808,7 @@ def cmd_context(args):
         print(f"--- {label} ---\n")
         print(ctx_text)
 
-    for path, label in [(HANDOFF, "handoff.md"), (STATE, "state.md"), (DECISIONS, "decisions.md")]:
+    for path, label in [(HANDOFF, "handoff.md"), (STATE, "state.md"), (DECISIONS, "decisions.md"), (INVARIANTS, "invariants.md")]:
         if path.exists():
             print(f"--- {label} ---\n")
             print(path.read_text(encoding="utf-8"))
@@ -1396,6 +1401,43 @@ def cmd_note(args):
         "tag": args.tag or "",
     })
     print(f"{event_type.capitalize()} recorded.")
+
+
+def cmd_trap(args):
+    """Record a known lie / trap — misleading name, fake abstraction, dangerous assumption."""
+    append_event({
+        "agent": resolve_agent(args.agent),
+        "event": "trap",
+        "summary": args.text,
+        "tag": args.tag or "",
+    })
+    print("Trap recorded.")
+
+
+def cmd_incident(args):
+    """Record an operational incident — outage, data corruption, failed migration."""
+    append_event({
+        "agent": resolve_agent(args.agent),
+        "event": "incident",
+        "summary": args.text,
+        "tag": args.tag or "",
+    })
+    print("Incident recorded.")
+
+
+def cmd_invariant(args):
+    """Record an architectural invariant and append to invariants.md."""
+    ts = now()
+    entry = f"\n## {ts}\n\n{args.text}\n"
+    with INVARIANTS.open("a", encoding="utf-8") as f:
+        f.write(entry)
+    append_event({
+        "agent": resolve_agent(args.agent),
+        "event": "invariant",
+        "summary": args.text,
+        "tag": args.tag or "",
+    })
+    print("Invariant recorded.")
 
 
 def cmd_since(args):
@@ -3325,6 +3367,24 @@ def main():
     p = sub.add_parser("completion", help="Print shell completion script to stdout.")
     p.add_argument("shell", choices=["bash", "zsh", "fish"], help="Target shell.")
     p.set_defaults(func=cmd_completion)
+
+    p = sub.add_parser("trap", help="Record a known lie / trap: misleading name, fake abstraction, dangerous assumption.")
+    p.add_argument("text", help="What the trap is.")
+    p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
+    p.add_argument("--tag", metavar="TAG", help="Tag.")
+    p.set_defaults(func=cmd_trap)
+
+    p = sub.add_parser("incident", help="Record an operational incident: outage, data corruption, failed migration.")
+    p.add_argument("text", help="Incident description.")
+    p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
+    p.add_argument("--tag", metavar="TAG", help="Tag.")
+    p.set_defaults(func=cmd_incident)
+
+    p = sub.add_parser("invariant", help="Record an architectural invariant that must always hold.")
+    p.add_argument("text", help="The invariant statement.")
+    p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
+    p.add_argument("--tag", metavar="TAG", help="Tag.")
+    p.set_defaults(func=cmd_invariant)
 
     args = parser.parse_args()
     args.func(args)
