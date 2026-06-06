@@ -153,3 +153,13 @@ Rejected alternatives:
 Reason:
 dejavue's core value requires agents to know it exists; init was half-wired — memory scaffold set up but discovery not. CLAUDE.md is the reliable trigger for Claude Code; in-repo skill fallback works without a global install. Both steps idempotent, no new deps (Axiom 0 preserved).
 
+
+## 2026-06-06T07:49:45-05:00 — [STRATEGIC] note-commit --trailer: require HEAD + clean index, amend before noting
+
+Reason:
+git notes are keyed by commit SHA and amending changes the SHA. The original order (write note, then git commit --amend) orphaned the note on the pre-amend object while the trailer shipped on the new commit; and --amend always targets HEAD, so a non-HEAD sha argument silently rewrote the HEAD message. Fix: validate sha==HEAD and a clean index up front, amend FIRST, re-resolve HEAD, then attach the note, so note and trailer always land on the same shipped commit.
+
+Rejected alternatives:
+- **keep write-note-then-amend**: orphans the note every time --trailer runs (git notes show HEAD finds nothing)
+- **allow a non-HEAD sha with --trailer**: git commit --amend can only rewrite HEAD, so it corrupts the wrong commit message
+
