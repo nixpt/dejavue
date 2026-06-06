@@ -1650,6 +1650,77 @@ def cmd_pattern(args):
     print("Pattern recorded.")
 
 
+def _resolve_range(ref):
+    """Resolve a git range/ref into (base, tip, git_range, base_ts, tip_ts).
+    Accepts 'base..tip', 'base..' (tip defaults to HEAD), or a single ref (= ref..HEAD).
+    Returns base=None if the base ref can't be resolved. tip_ts is "" when tip is HEAD."""
+    if ".." in ref:
+        base, _, tip = ref.partition("..")
+        tip = tip or "HEAD"
+    else:
+        base, tip = ref, "HEAD"
+    base_ts = git_run("git", "log", "-1", "--format=%aI", base)
+    if not base_ts:
+        return None, tip, None, None, None
+    tip_ts = git_run("git", "log", "-1", "--format=%aI", tip) if tip != "HEAD" else ""
+    return base, tip, f"{base}..{tip}", base_ts, tip_ts
+
+
+def cmd_changelog(args):
+    """Generate a why-aware markdown changelog from dejavue events over a git range."""
+    base, tip, git_range, base_ts, tip_ts = _resolve_range(args.range)
+    if base is None:
+        print(f"Cannot resolve base of range '{args.range}'.")
+        return
+
+    events = _load_events()
+    lo = base_ts[:19]
+    hi = tip_ts[:19] if tip_ts else None
+    window = [ev for ev in events
+              if ev.get("ts", "")[:19] >= lo and (hi is None or ev.get("ts", "")[:19] <= hi)]
+    overridden_by = supersession_lookup(events)
+
+    decisions = [e for e in window if e.get("event") == "decision"]
+    hazards = [e for e in window if e.get("event") in ("trap", "incident")]
+    notes = [e for e in window if e.get("event") == "note"]
+    git_log = git_run("git", "log", "--oneline", git_range)
+
+    print(f"## {git_range}\n")
+
+    if decisions:
+        print("### Decisions\n")
+        for e in decisions:
+            title = e.get("decision_title") or "(untitled)"
+            conf = e.get("confidence")
+            label = f" _({conf})_" if conf else ""
+            reason = e.get("decision_reason") or ""
+            print(f"- **{title}**{label}" + (f" — {reason}" if reason else ""))
+            for sup_title, sup_ts in overridden_by(e):
+                print(f"  - ⚠ later superseded by '{sup_title}' ({sup_ts})")
+        print()
+
+    if hazards:
+        print("### Traps & incidents\n")
+        for e in hazards:
+            print(f"- [{e.get('event','')}] {e.get('summary','')}")
+        print()
+
+    if notes:
+        print("### Notes\n")
+        for e in notes:
+            print(f"- {e.get('summary','')}")
+        print()
+
+    if git_log:
+        print("### Commits\n")
+        for line in git_log.splitlines():
+            print(f"- {line}")
+        print()
+
+    if not (decisions or hazards or notes or git_log):
+        print("_(no dejavue events or commits in range)_")
+
+
 def cmd_since(args):
     ref = args.ref
     since_ts = None
@@ -3246,7 +3317,7 @@ _dejavue() {
     local cur prev words
     _init_completion || return
     local cmds="version init start changed decision state handoff context status \\
-check archive roster config install-skill log blame note since ingest recall \\
+check archive roster config install-skill log blame note since changelog ingest recall \\
 worthiness get list annotate stats promote import export reference link search \\
 diff timeline tag note-commit completion rejected trap incident invariant pattern entities"
     if [[ $COMP_CWORD -eq 1 ]]; then
@@ -3349,6 +3420,7 @@ _dejavue() {
                 'blame:Show decisions and events touching a file path'
                 'note:Record a lightweight timestamped note'
                 'since:Temporal delta since a date, commit, or agent session'
+                'changelog:Why-aware markdown changelog over a git range'
                 'ingest:Scrape .claude/, CHANGELOG, ADRs, git log into timeline'
                 'recall:Keyword (FTS5) or semantic search over all artifacts'
                 'worthiness:Print the capture/skip worthiness gate'
@@ -3437,7 +3509,7 @@ _FISH_COMPLETION = """\
 # Install: dejavue completion fish | source
 # Or persist: dejavue completion fish > ~/.config/fish/completions/dejavue.fish
 set -l cmds version init start changed decision state handoff context status \\
-    check archive roster config install-skill log blame note since ingest recall \\
+    check archive roster config install-skill log blame note since changelog ingest recall \\
     worthiness get list annotate stats promote import export reference link search \\
     diff timeline tag note-commit completion rejected trap incident invariant pattern entities
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
@@ -3618,6 +3690,10 @@ def main():
     p.add_argument("ref", nargs="?", default=None, help="ISO date, commit hash, or (with --agent) ignored.")
     p.add_argument("--agent", default=None, help="Show events since this agent's last session_start.")
     p.set_defaults(func=cmd_since)
+
+    p = sub.add_parser("changelog", help="Generate a why-aware markdown changelog from dejavue events over a git range.")
+    p.add_argument("range", help="Git range (e.g. v2.0.1..HEAD) or a single ref (= ref..HEAD).")
+    p.set_defaults(func=cmd_changelog)
 
     p = sub.add_parser("ingest", help="Scrape .claude/, CHANGELOG, ADRs, git log into timeline.")
     p.add_argument("--force", action="store_true", help="Re-run even if ingested.lock exists.")
