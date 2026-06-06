@@ -5,6 +5,45 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 **The on-disk format is stable as of v1.0.0.** `.dejavue/` files written by
 any v1.x release can be read by any later v1.x release without migration.
 
+## [2.0.1] — 2026-06-06
+
+**v2.x agent workflow depth.** Six new commands and flags directly addressing
+recurring agent friction points, from zero new dependencies (Axiom 0 preserved).
+
+43 commands, 134/134 tests.
+
+### Added
+
+- **`dejavue trap "<text>"`** — first-class known-lie / trap event. Agents waste
+  real time rediscovering misleading names, fake abstractions, and historical hacks.
+  `trap` events surface in `blame` and `context`.
+- **`dejavue incident "<text>"`** — first-class operational incident. Outages, data
+  corruption, failed migrations. Stored as `event_type: incident`.
+- **`dejavue invariant "<text>"`** — architectural invariant. Appends a timestamped
+  entry to `.dejavue/invariants.md` (scaffolded by `init`, surfaced by `context`,
+  `merge=union` in `.gitattributes`).
+- **`dejavue rejected [<query>]`** — show all decisions with rejected alternatives,
+  optionally filtered by a topic. The "why not X?" question answered in one command.
+- **`decision --supersedes <id>`** — record that a new decision supersedes an older
+  one. Stored in event + shown as `Supersedes: …` in decisions.md.
+- **`decision --durability {temporary,tactical,strategic,constitutional}`** — classify
+  how long-lived a decision is. Label shown in the decisions.md heading.
+- **`since <base>..<tip>`** — git revision range syntax (e.g. `main..HEAD`,
+  `v1.0..v2.0`, `origin/main..HEAD`). Passes the explicit range to git log/diff.
+- **`post-checkout` hook** — prints `dejavue status` on branch switch (guards on
+  `$3==1` so file-checkout is not noisy). Installed by `dejavue init`.
+- **`note-commit --trailer`** — opt-in flag to also amend the commit message with a
+  `Dejavue-Event: <ts> | <summary>` trailer via `git interpret-trailers`, so the
+  link travels with the commit without requiring git notes push. Never called from
+  a hook.
+
+### Fixed
+
+- `note-commit`: null-guard bug — `ev.get("commit", "")` could still return `None`
+  for events with an explicit null commit field; fixed to `(ev.get("commit") or "")`.
+
+---
+
 ## [2.0.0] — 2026-06-05
 
 **DejaVue Context Protocol (DCP/1.0).** dejavue becomes the source of truth for
