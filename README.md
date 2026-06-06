@@ -442,7 +442,7 @@ tools sit on top of the same on-disk format. See `docs/05-v0.1-scope.md`
 ## Status
 
 v2.0.0 — single-file Python CLI and the **DCP/1.0 reference implementation**.
-DCP/1.0 spec at `docs/dcp-spec.md` (draft). Format stable and
+DCP/1.0 spec at `docs/dcp-spec.md` (Release Candidate). Format stable and
 backward-compatible (additive evolution per DCP §7). Single file, stdlib only,
 zero mandated dependency (Axiom 0). Not on PyPI.
 
