@@ -35,12 +35,12 @@ reminder and the command quick-reference.
 | `dejavue context` | Boot packet — handoff + state + decisions + references + last 10 events + staleness warnings. Run on arrival. |
 | `dejavue status` | One-liner health: agent, event count, last decision, open next-steps. |
 | `dejavue start --agent <n> --goal <g>` | Mark a session start (enables `since --agent`) |
-| `dejavue decision "<title>" --reason <r> --rejected "<alt>: <why>"` | Capture an architectural decision + rejected alternatives |
+| `dejavue decision "<title>" --reason <r> --rejected "<alt>: <why>" [--supersedes <id>] [--durability {temporary,tactical,strategic,constitutional}]` | Capture an architectural decision + rejected alternatives. `--supersedes` marks an older decision as overridden; `--durability` classifies longevity. |
 | `dejavue state --summary <s>` | Overwrite state.md — "what's true right now" |
 | `dejavue handoff --summary <s> --next <n>` | Structured next-session brief |
 | `dejavue note "<text>" --tag <t>` | Lightweight timestamped note (between annotate and decision) |
 | `dejavue annotate {state,handoff,decisions} "<note>"` | Append timestamped note to a doc without rewriting it |
-| `dejavue since <date\|commit\|--agent>` | Temporal delta — "what changed since…" |
+| `dejavue since <date\|commit\|ref..ref\|--agent>` | Temporal delta — "what changed since…". Accepts git revision ranges: `main..HEAD`, `v1.0..v2.0`. |
 | `dejavue log [--since] [--agent] [--type] [--oneline]` | Formatted timeline view with filters |
 | `dejavue blame <file>` | "Why does this file exist?" — decisions + events mentioning the path |
 | `dejavue recall "<query>"` | FTS5 keyword (or `--semantic` cosine) search across all artifacts |
@@ -59,8 +59,12 @@ reminder and the command quick-reference.
 | `dejavue reference {create,list,update,view} [--type T]` | Manage `.dejavue/references/` cards |
 | `dejavue diff <from> [<to>] [--format patch]` | Compare memory between two refs |
 | `dejavue link <sha>` | Show dejavue events recorded for a git commit |
+| `dejavue rejected [<query>]` | Show all decisions with rejected alternatives, filtered by topic. "Why wasn't X used?" answered in one command. |
+| `dejavue trap "<text>"` | Record a known lie / trap — misleading name, fake abstraction, dangerous assumption agents waste time rediscovering. |
+| `dejavue incident "<text>"` | Record an operational incident — outage, data corruption, failed migration. High-value memory projects routinely lose. |
+| `dejavue invariant "<text>"` | Record an architectural invariant that must always hold. Appends to `invariants.md`; surfaced prominently by `context`. |
 | `dejavue search "<query>"` | Alias for `recall` (same flags) |
-| `dejavue init [--wizard]` | Create `.dejavue/`, install hooks, write `CLAUDE.md` boot stub. `--wizard` seeds `context.md` interactively. |
+| `dejavue init [--wizard]` | Create `.dejavue/`, install hooks (post-commit, pre-push, post-checkout), write `CLAUDE.md` boot stub. `--wizard` seeds `context.md` interactively. |
 | `dejavue version` | Print the installed version |
 
 If the CLI isn't on PATH but the repo has a copy at `dejavue.py`:

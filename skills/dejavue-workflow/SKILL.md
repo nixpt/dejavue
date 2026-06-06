@@ -107,6 +107,54 @@ Each rejection: `"option: reason"`. This is the single most valuable
 artifact dejavue captures — the reasoning that costs the next agent
 the most to rediscover.
 
+Two optional enrichments worth using when they apply:
+
+```bash
+# --supersedes: makes contradiction explicit
+dejavue decision "Use embedded SQLite" \
+  --reason "Zero deps, single process" \
+  --supersedes "Use service-mode SQLite"
+
+# --durability: filters noise during architectural reasoning
+dejavue decision "Axiom 0 — no runtime deps ever" \
+  --reason "Single-file contract; adoption collapses with pip deps" \
+  --durability constitutional
+```
+
+`--durability` choices: `temporary` · `tactical` · `strategic` · `constitutional`.
+The label appears in the `decisions.md` heading so it's visible without parsing events.
+
+### Invariants, traps, and incidents
+
+Three event types that capture memory most projects routinely lose:
+
+```bash
+# Things that must ALWAYS be true — architectural laws.
+# Appends to invariants.md, surfaced by `context`.
+dejavue invariant "Capsules never access host FS directly"
+dejavue invariant "append-only timeline is immutable; never delete entries"
+
+# Misleading names, fake abstractions, historical hacks.
+# Agents waste real time rediscovering these.
+dejavue trap "AuthManager does NOT handle OAuth — it only handles sessions"
+dejavue trap "The 'cache' in CacheLayer is not a cache; it's a write buffer"
+
+# Operational trauma — outages, data corruption, failed migrations.
+# Highest-value memory; also the most reliably forgotten.
+dejavue incident "FTS index corrupted after ungraceful shutdown 2026-05-15; rebuilt from JSONL"
+dejavue incident "Migration 004 dropped rows where user_id was NULL — data lost in prod"
+```
+
+When unsure which to use: **invariant** = "this must never change"; **trap** = "this will mislead you"; **incident** = "this already hurt us". All three take `--tag` for grouping.
+
+To look up what was previously rejected on a topic:
+
+```bash
+dejavue rejected                  # all decisions with rejected alternatives
+dejavue rejected "grpc"           # only those mentioning gRPC
+dejavue rejected "database"       # why we didn't use X database approach
+```
+
 ### State snapshots
 
 After a meaningful milestone (not every commit):
@@ -155,6 +203,8 @@ short-format next-steps in `--next` shape the receiver's whole plan.
 ```bash
 dejavue since 2026-05-10              # everything since this date
 dejavue since a81f2cd                 # everything since this commit
+dejavue since main..HEAD              # git revision range
+dejavue since v1.0..v2.0             # between two tags
 dejavue since --agent claude          # since this agent's last session_start
 ```
 
@@ -197,7 +247,9 @@ The single biggest mistake with dejavue is over-capture. The CLI's own
 | Blocker requiring external context | "Ran tests, passed" |
 | Handoff context next agent must know | Per-file mechanical edits |
 | Dead end + why it was rejected | LLM reasoning steps |
-| Cross-cutting invariant ("X never depends on Y") | Routine commits |
+| Cross-cutting invariant (`dejavue invariant`) | Routine commits |
+| Misleading name / dangerous assumption (`dejavue trap`) | Things obvious from reading the code |
+| Operational incident (`dejavue incident`) | Successful deploys with no lessons |
 
 Rule of thumb: **if removing this memory wouldn't confuse a future
 agent reading the code + git log, don't write it.**
@@ -217,6 +269,7 @@ When `.dejavue/` ships in a repo, the split is:
 - `state.md` — current state
 - `decisions.md` — architectural decisions
 - `handoff.md` — latest handoff
+- `invariants.md` — architectural invariants (scaffolded by `init`, append-only)
 - `references/` — hand-written reference cards (optional)
 - `context.md` — DCP adapter source (optional; used by `export --target`)
 - `dejavue/`, `dejavue-workflow/` — skill dirs copied by `init` for in-repo fallback (optional)
@@ -251,6 +304,7 @@ produces a conflict on those append-only artifacts. The fix is in
 ```
 .dejavue/timeline.jsonl merge=union
 .dejavue/decisions.md   merge=union
+.dejavue/invariants.md  merge=union
 ```
 
 This tells git to take both sides of an append conflict. Apply once
@@ -391,8 +445,10 @@ For context: `dejavue init` does more than create `.dejavue/`. It also:
    in their global `~/.claude/skills/` can still load them from
    `python3 .dejavue/dejavue install-skill`.
 
-3. **Installs git hooks** — post-commit hook for auto `file_changed`
-   recording; `.gitattributes` `merge=union` entries.
+3. **Installs git hooks** — post-commit (auto `file_changed` recording),
+   pre-push (staleness check), post-checkout (prints `dejavue status` on
+   branch switch — guards on `$3==1`, never fires on file checkout);
+   `.gitattributes` `merge=union` entries for timeline/decisions/invariants.
 
 Use `--wizard` to also interactively seed `context.md` for DCP export.
 
