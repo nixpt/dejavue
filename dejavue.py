@@ -402,6 +402,8 @@ def cmd_init(args):
         "summary": "Initialized .dejavue/ memory scaffold.",
     })
 
+    _install_discovery(force=getattr(args, "force", False))
+
     if getattr(args, "map", False):
         _scaffold_map()
 
@@ -491,6 +493,64 @@ def _install_gitignore():
     new_content = existing + sep + "\n".join(block) + "\n"
     path.write_text(new_content, encoding="utf-8")
     print(f"Appended {len(_GITIGNORE_ENTRIES)} entries to .gitignore.")
+
+
+_CLAUDE_MD_MARKER = "<!-- dejavue:discovery -->"
+_CLAUDE_MD_BOOT = """\
+
+## Project memory
+
+This repo uses [dejavue](https://github.com/nixpt/dejavue) for persistent architectural context.
+Run `dejavue context` before making changes.
+Fallback if not on PATH: `python3 .dejavue/dejavue context`
+
+{marker}
+""".format(marker=_CLAUDE_MD_MARKER)
+
+
+def _install_discovery(force=False):
+    """Install in-repo agent discovery: skill fallback + CLAUDE.md boot stub.
+
+    Called automatically by init. Idempotent — safe to call multiple times.
+    Skill install is best-effort (silently skipped if skills/ not found).
+    """
+    import shutil as _shutil
+
+    # --- in-repo skill fallback (copy so they travel with the repo) ---
+    script_dir = Path(sys.argv[0]).resolve().parent
+    skills_src = script_dir / "skills"
+    if not skills_src.exists():
+        skills_src = script_dir.parent / "skills"
+
+    if skills_src.exists():
+        skill_dirs = [d for d in sorted(skills_src.iterdir())
+                      if d.is_dir() and (d / "SKILL.md").exists()]
+        installed = 0
+        for skill_dir in skill_dirs:
+            dest = DEJAVUE_DIR / skill_dir.name
+            if dest.exists() and not force:
+                continue
+            if dest.is_symlink() or dest.is_file():
+                dest.unlink()
+            elif dest.is_dir():
+                _shutil.rmtree(dest)
+            _shutil.copytree(skill_dir, dest)
+            installed += 1
+        if installed:
+            print(f"  ✓  Installed {installed} skill(s) to .dejavue/ (in-repo fallback)")
+
+    # --- CLAUDE.md boot stub ---
+    claude_md = Path("CLAUDE.md")
+    if claude_md.exists():
+        content = claude_md.read_text(encoding="utf-8")
+        if _CLAUDE_MD_MARKER in content or "dejavue context" in content:
+            return  # already wired, skip
+        with claude_md.open("a", encoding="utf-8") as fh:
+            fh.write(_CLAUDE_MD_BOOT)
+        print("  ✓  Appended dejavue boot stub to CLAUDE.md")
+    else:
+        claude_md.write_text("# Project\n" + _CLAUDE_MD_BOOT, encoding="utf-8")
+        print("  ✓  Created CLAUDE.md with dejavue boot stub")
 
 
 def _scaffold_map():

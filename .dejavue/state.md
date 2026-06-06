@@ -1,5 +1,5 @@
 # State
 
-Updated: 2026-05-28T00:32:10-05:00
+Updated: 2026-06-06T05:43:57-05:00
 
-v1.3.0 released. 36 commands: diff, timeline, check --fix, tag {list,filter}, note-commit (git notes), event_type in FTS5, since shows notes. 100/100 tests.
+v2.0.0 RC1: DCP/1.0 spec Release Candidate; 35 commands, 121 tests; init auto-discovery (CLAUDE.md + skills); spec status promoted from Draft.
