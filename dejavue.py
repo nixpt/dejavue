@@ -22,6 +22,7 @@ TIMELINE = DEJAVUE_DIR / "timeline.jsonl"
 STATE = DEJAVUE_DIR / "state.md"
 DECISIONS = DEJAVUE_DIR / "decisions.md"
 INVARIANTS = DEJAVUE_DIR / "invariants.md"
+PATTERNS = DEJAVUE_DIR / "patterns.md"
 HANDOFF = DEJAVUE_DIR / "handoff.md"
 CONTEXT = DEJAVUE_DIR / "context.md"
 REFERENCES = DEJAVUE_DIR / "references"
@@ -268,7 +269,7 @@ def fts_needs_rebuild():
     if not FTS_DB.exists():
         return True
     db_mtime = FTS_DB.stat().st_mtime
-    sources = [TIMELINE, STATE, DECISIONS, HANDOFF, INVARIANTS]
+    sources = [TIMELINE, STATE, DECISIONS, HANDOFF, INVARIANTS, PATTERNS]
     if REFERENCES.exists():
         sources += list(REFERENCES.glob("*.md"))
     return any(p.exists() and p.stat().st_mtime > db_mtime for p in sources)
@@ -312,7 +313,7 @@ def rebuild_fts():
                 except json.JSONDecodeError:
                     pass
 
-        for path, label in [(STATE, "state.md"), (DECISIONS, "decisions.md"), (HANDOFF, "handoff.md"), (INVARIANTS, "invariants.md")]:
+        for path, label in [(STATE, "state.md"), (DECISIONS, "decisions.md"), (HANDOFF, "handoff.md"), (INVARIANTS, "invariants.md"), (PATTERNS, "patterns.md")]:
             if path.exists():
                 rows.append(("", "doc", path.read_text(encoding="utf-8"), label))
 
@@ -343,6 +344,9 @@ def cmd_init(args):
 
     if not INVARIANTS.exists():
         INVARIANTS.write_text("# Invariants\n\n", encoding="utf-8")
+
+    if not PATTERNS.exists():
+        PATTERNS.write_text("# Patterns\n\n", encoding="utf-8")
 
     if not HANDOFF.exists():
         HANDOFF.write_text(
@@ -472,6 +476,7 @@ _GITATTR_LINES = (
     ".dejavue/timeline.jsonl merge=union",
     ".dejavue/decisions.md   merge=union",
     ".dejavue/invariants.md  merge=union",
+    ".dejavue/patterns.md    merge=union",
 )
 _GITATTR_MARKER = "# dejavue: append-only files use git's union merge driver"
 
@@ -840,7 +845,7 @@ def cmd_context(args):
         print(f"--- {label} ---\n")
         print(ctx_text)
 
-    for path, label in [(HANDOFF, "handoff.md"), (STATE, "state.md"), (DECISIONS, "decisions.md"), (INVARIANTS, "invariants.md")]:
+    for path, label in [(HANDOFF, "handoff.md"), (STATE, "state.md"), (DECISIONS, "decisions.md"), (INVARIANTS, "invariants.md"), (PATTERNS, "patterns.md")]:
         if path.exists():
             print(f"--- {label} ---\n")
             print(path.read_text(encoding="utf-8"))
@@ -1531,6 +1536,24 @@ def cmd_invariant(args):
         "tag": args.tag or "",
     })
     print("Invariant recorded.")
+
+
+def cmd_pattern(args):
+    """Record a discovered convention/pattern and append to patterns.md."""
+    DEJAVUE_DIR.mkdir(exist_ok=True)
+    if not PATTERNS.exists():
+        PATTERNS.write_text("# Patterns\n\n", encoding="utf-8")
+    ts = now()
+    entry = f"\n## {ts}\n\n{args.text}\n"
+    with PATTERNS.open("a", encoding="utf-8") as f:
+        f.write(entry)
+    append_event({
+        "agent": resolve_agent(args.agent),
+        "event": "pattern",
+        "summary": args.text,
+        "tag": args.tag or "",
+    })
+    print("Pattern recorded.")
 
 
 def cmd_since(args):
@@ -3071,7 +3094,7 @@ _dejavue() {
     local cmds="version init start changed decision state handoff context status \\
 check archive roster config install-skill log blame note since ingest recall \\
 worthiness get list annotate stats promote import export reference link search \\
-diff timeline tag note-commit completion rejected trap incident invariant"
+diff timeline tag note-commit completion rejected trap incident invariant pattern"
     if [[ $COMP_CWORD -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$cmds" -- "$cur"))
         return
@@ -3085,7 +3108,7 @@ diff timeline tag note-commit completion rejected trap incident invariant"
             elif [[ "$prev" == "--durability" ]]; then
                 COMPREPLY=($(compgen -W "temporary tactical strategic constitutional" -- "$cur"))
             fi ;;
-        trap|incident|invariant) COMPREPLY=($(compgen -W "--agent --tag" -- "$cur")) ;;
+        trap|incident|invariant|pattern) COMPREPLY=($(compgen -W "--agent --tag" -- "$cur")) ;;
         note)
             COMPREPLY=($(compgen -W "--agent --tag --type" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
@@ -3190,6 +3213,7 @@ _dejavue() {
                 'trap:Record a known lie / trap (misleading name, fake abstraction)'
                 'incident:Record an operational incident (outage, corruption, migration)'
                 'invariant:Record an architectural invariant that must always hold'
+                'pattern:Record a discovered convention/pattern (naming, idiom, structure)'
             )
             _describe 'subcommand' subcommands ;;
         args)
@@ -3203,7 +3227,7 @@ _dejavue() {
                         '--supersedes[ID or title of a prior decision this supersedes]:event-id' \\
                         '--durability[How long-lived this decision is]:durability:(temporary tactical strategic constitutional)' \\
                         '--tag[Tag]:tag' ;;
-                trap|incident|invariant)
+                trap|incident|invariant|pattern)
                     _arguments \\
                         '--agent[Agent name]:agent' \\
                         '--tag[Tag]:tag' ;;
@@ -3250,7 +3274,7 @@ _FISH_COMPLETION = """\
 set -l cmds version init start changed decision state handoff context status \\
     check archive roster config install-skill log blame note since ingest recall \\
     worthiness get list annotate stats promote import export reference link search \\
-    diff timeline tag note-commit completion rejected trap incident invariant
+    diff timeline tag note-commit completion rejected trap incident invariant pattern
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
@@ -3274,8 +3298,8 @@ complete -c dejavue -n "__fish_seen_subcommand_from tag" -a "list filter"
 # shell selection
 complete -c dejavue -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"
 # common flags
-complete -c dejavue -n "__fish_seen_subcommand_from decision note start trap incident invariant" -l agent -d "Agent name"
-complete -c dejavue -n "__fish_seen_subcommand_from decision note trap incident invariant" -l tag -d "Tag"
+complete -c dejavue -n "__fish_seen_subcommand_from decision note start trap incident invariant pattern" -l agent -d "Agent name"
+complete -c dejavue -n "__fish_seen_subcommand_from decision note trap incident invariant pattern" -l tag -d "Tag"
 complete -c dejavue -n "__fish_seen_subcommand_from log recall since" -l since -d "Since date or commit"
 complete -c dejavue -n "__fish_seen_subcommand_from check" -l fix -d "Auto-fix issues"
 complete -c dejavue -n "__fish_seen_subcommand_from import" -rF
@@ -3574,6 +3598,12 @@ def main():
     p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
     p.add_argument("--tag", metavar="TAG", help="Tag.")
     p.set_defaults(func=cmd_invariant)
+
+    p = sub.add_parser("pattern", help="Record a discovered convention/pattern: naming, idiom, structure.")
+    p.add_argument("text", help="The convention or pattern.")
+    p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
+    p.add_argument("--tag", metavar="TAG", help="Tag.")
+    p.set_defaults(func=cmd_pattern)
 
     args = parser.parse_args()
     args.func(args)
