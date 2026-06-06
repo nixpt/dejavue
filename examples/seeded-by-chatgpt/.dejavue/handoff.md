@@ -11,10 +11,10 @@ Future agents should understand:
 1. Deja Vue does not replace git.
 2. Git captures file and commit history.
 3. Deja Vue captures the meaning around changes.
-4. `.joker/timeline.jsonl` should be append-only.
-5. `.joker/deja-vue.md` should be readable by humans.
-6. `.joker/current_state.md` should summarize the latest project state.
-7. `.joker/decisions.md` should preserve architectural decisions.
+4. `.dejavue/timeline.jsonl` should be append-only.
+5. `.dejavue/deja-vue.md` should be readable by humans.
+6. `.dejavue/current_state.md` should summarize the latest project state.
+7. `.dejavue/decisions.md` should preserve architectural decisions.
 8. Deja Vue should capture only relevant changes, not noisy logs.
 
 Next implementation steps:
@@ -24,4 +24,4 @@ Next implementation steps:
 - Add git diff summarization.
 - Add `dejavue handoff`.
 - Add Joker MCP tools.
-- Add agent boot protocol: read `.joker/handoff.md` before working.
+- Add agent boot protocol: read `.dejavue/handoff.md` before working.
