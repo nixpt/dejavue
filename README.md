@@ -167,7 +167,7 @@ git                — mechanical history (commits, diffs)
 
 | Command | Description |
 |---|---|
-| `dejavue init [--ingest] [--map]` | Create `.dejavue/`, install post-commit + pre-push hooks, add `.gitattributes` + `.gitignore`. |
+| `dejavue init [--ingest] [--map] [--wizard]` | Create `.dejavue/`, install hooks + `.gitattributes` + `.gitignore`, write `CLAUDE.md` boot stub, copy skill files to `.dejavue/`. `--wizard` seeds `context.md` interactively. |
 | `dejavue start --goal TEXT` | Record session start with intent. Foundation for `since --agent`. |
 | `dejavue state --summary TEXT` | Overwrite `state.md` with current snapshot. |
 | `dejavue handoff --summary TEXT --next TEXT` | Write `handoff.md` for the next session. |
@@ -207,14 +207,22 @@ git                — mechanical history (commits, diffs)
 | `dejavue worthiness` | Print the capture/skip table as a reminder. |
 | `dejavue stats` | Event statistics: counts by type (with bar chart), by agent, date range. |
 | `dejavue export --format {json,md}` | Export full memory snapshot as JSON or Markdown. |
-| `dejavue reference {create,list,update,view}` | Manage `.dejavue/references/` cards via CLI. |
+| `dejavue reference {create,list,update,view} [--type T]` | Manage `.dejavue/references/` cards via CLI. `--type` filters/injects frontmatter. |
 | `dejavue link <sha>` | Show dejavue events recorded for a git commit SHA. |
 | `dejavue search QUERY [--semantic] [--limit N]` | Alias for `recall` (discoverable name). |
-| `dejavue diff <from> [<to>]` | Compare memory between two refs — decisions added, state diff, event window. |
+| `dejavue diff <from> [<to>] [--format patch]` | Compare memory between two refs — decisions added, state diff, event window. |
 | `dejavue timeline [--by day/week/month]` | ASCII activity chart — events per time period. |
 | `dejavue tag {list, filter <tag>}` | List tags with counts or filter events by tag. |
 | `dejavue note-commit <sha>` | Write a git note on a commit linking it to the last dejavue event. |
 | `dejavue version` | Print installed version. |
+
+**DCP — adapter bridge**
+
+| Command | Description |
+|---|---|
+| `dejavue import <FILE>` | Bootstrap `context.md` losslessly from an existing `AGENTS.md` / `CLAUDE.md`; records provenance. Safe first step before `export`. |
+| `dejavue export --target {claude,codex,gemini,copilot,cursor,all}` | Generate the tool's instruction file from `context.md` non-destructively. Absent → create; managed block → replace region; hand-written → append + warn; `--replace` to convert. |
+| `dejavue promote --to planning` | Graduate `.dejavue/` into a `.planning/` planning system without losing history — copies artifacts, records provenance, leaves `.dejavue/` canonical. |
 
 Each command accepts `--help`. See `dejavue --help` for the full flag list.
 
