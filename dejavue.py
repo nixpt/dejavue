@@ -2860,7 +2860,7 @@ def cmd_note_commit(args):
     # Find the most recent event (or the closest file_changed for this sha)
     events = _load_events()
     short = sha[:7]
-    for_commit = [ev for ev in events if ev.get("commit", "")[:7] == short]
+    for_commit = [ev for ev in events if (ev.get("commit") or "")[:7] == short]
     latest = for_commit[-1] if for_commit else (events[-1] if events else None)
 
     if not latest:
@@ -2880,6 +2880,27 @@ def cmd_note_commit(args):
     except subprocess.CalledProcessError as e:
         print(f"Failed to write git note: {e}")
         print("Ensure 'git notes' is available (git ≥ 2.0).")
+        return
+
+    if getattr(args, "trailer", False):
+        # Amend commit message with a Dejavue-Event: trailer (user-invoked only, never from a hook).
+        try:
+            orig_msg = git_run("git", "log", "-1", "--format=%B", full_sha)
+            result = subprocess.run(
+                ["git", "interpret-trailers", "--trailer", f"Dejavue-Event: {ts} | {summary}"],
+                input=orig_msg, capture_output=True, text=True,
+            )
+            if result.returncode != 0:
+                print(f"git interpret-trailers failed: {result.stderr.strip()}")
+                return
+            new_msg = result.stdout
+            subprocess.check_call(
+                ["git", "commit", "--amend", "--no-edit", "-m", new_msg],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            print(f"Commit message amended with Dejavue-Event trailer.")
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to amend commit: {e}")
 
 
 def cmd_worthiness(args):
@@ -3452,6 +3473,8 @@ def main():
 
     p = sub.add_parser("note-commit", help="Write a git note on a commit linking it to the last dejavue event.")
     p.add_argument("sha", help="Commit SHA or short SHA.")
+    p.add_argument("--trailer", action="store_true",
+                   help="Also amend the commit message with a Dejavue-Event: trailer (opt-in, user-invoked only).")
     p.set_defaults(func=cmd_note_commit)
 
     p = sub.add_parser("completion", help="Print shell completion script to stdout.")
