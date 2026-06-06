@@ -2004,6 +2004,57 @@ test_init_discovery_without_skills_dir() {
     cd /; rm -rf "$TEST_DIR" "$SCRIPT_DIR"; trap - EXIT
 }
 
+# 114. trap records event with event=trap
+test_trap_records_event() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv trap "AuthManager does NOT handle OAuth anymore" >/dev/null 2>&1
+    assert_event_recorded "trap event" ".dejavue/timeline.jsonl" "event" "trap" || return 1
+    assert_event_recorded "trap summary" ".dejavue/timeline.jsonl" "summary" "AuthManager does NOT handle OAuth anymore" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 115. incident records event with event=incident
+test_incident_records_event() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv incident "FTS index corrupted after power loss" >/dev/null 2>&1
+    assert_event_recorded "incident event" ".dejavue/timeline.jsonl" "event" "incident" || return 1
+    assert_event_recorded "incident summary" ".dejavue/timeline.jsonl" "summary" "FTS index corrupted after power loss" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 116. invariant records event AND appends to invariants.md
+test_invariant_records_event_and_doc() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv invariant "Capsules never access host FS directly" >/dev/null 2>&1
+    assert_event_recorded "invariant event" ".dejavue/timeline.jsonl" "event" "invariant" || return 1
+    assert_file_exists "invariants.md created" ".dejavue/invariants.md" || return 1
+    local content; content="$(cat .dejavue/invariants.md)"
+    assert_contains "invariant text in doc" "$content" "Capsules never access host FS directly" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 117. init creates invariants.md scaffold
+test_init_creates_invariants_md() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    assert_file_exists "invariants.md scaffolded by init" ".dejavue/invariants.md" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 118. context surfaces invariants.md
+test_context_shows_invariants() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv invariant "append-only timeline is immutable" >/dev/null 2>&1
+    local out; out="$(dv context 2>/dev/null)"
+    assert_contains "invariants section header" "$out" "invariants.md" || return 1
+    assert_contains "invariant text in context" "$out" "append-only timeline is immutable" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2144,6 +2195,11 @@ main() {
     run_test "111 init creates CLAUDE.md with boot stub"     test_init_creates_claude_md
     run_test "112 init CLAUDE.md boot stub is idempotent"    test_init_claude_md_idempotent
     run_test "113 init discovery skips skills/ gracefully"   test_init_discovery_without_skills_dir
+    run_test "114 trap records event with event=trap"         test_trap_records_event
+    run_test "115 incident records event with event=incident" test_incident_records_event
+    run_test "116 invariant records event + invariants.md"    test_invariant_records_event_and_doc
+    run_test "117 init scaffolds invariants.md"               test_init_creates_invariants_md
+    run_test "118 context surfaces invariants.md"             test_context_shows_invariants
 
     echo ""
     echo "========================================"
