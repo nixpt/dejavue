@@ -223,6 +223,7 @@ Axiom-0 clean (stdlib, single-file, additive fields). Favors the core loop
 - `entities: []` on events + `recall`/`blame` by entity — the relational primitive, no graph DB.
 - `--confidence {speculative…verified}` on `decision`/`note` — copy the `--durability` plumbing.
 - `decision --artifacts <path>` — bind the files a decision is about, precisely.
+- Wire `--supersedes` read-back into `recall`/`since`/`context` — the field is written (event + decisions.md) but **inert**; nothing surfaces "later overridden by…" as v2.0.1 implied. Closing a shipped-but-broken contract beats new features.
 
 **P1**
 - `dejavue changelog <range>` — why-aware changelog from timeline + decisions.
@@ -235,7 +236,7 @@ Axiom-0 clean (stdlib, single-file, additive fields). Favors the core loop
 
 **Later — composes its inputs**
 - `dejavue explain <file|commit>` — the killer command; build after lineage / confidence / entities exist.
-- Dev-tools ingestion tier (ci / lint / coverage / deps / pr / issue) — thin-importer pattern, pull specific ones on demand.
+- Dev-tools ingestion tier (ci / lint / coverage / deps / pr / issue / bench / test-flake / security) — thin-importer pattern, pull specific ones on demand.
 
 **Rejected (Axiom 0):** `.dejavue/graph/` & `capsules/` stores, `dejavue` LSP server, `dcp://` federation, hosted sync.
 
@@ -248,11 +249,23 @@ Bigger ideas that are correct directionally but need DCP/v2.x to stabilize first
 ### Cognitive continuity
 
 - **Intent lineage** (`derived_from: [event-id, ...]` field) — explicit chains of intent across events. Lets agents reconstruct reasoning trees: goal → experiment → failure → decision → migration. Without lineage, memory is flat.
-- **Project epochs** (`dejavue epoch begin/end "<name>"`) — named eras that frame old decisions. "pre-plugin-architecture decisions" are not as authoritative as "post-capsule-runtime decisions." Prevents old context from misleading agents after major rewrites.
+- **Project epochs** (`dejavue epoch begin/end "<name>"`) — named eras that frame old decisions. "pre-plugin-architecture decisions" are not as authoritative as "post-capsule-runtime decisions." Prevents old context from misleading agents after major rewrites. Distinct slice: **ordered milestone anchors** (`dejavue milestone "M2 — Capsule ABI freeze"`) — discrete onboarding/historical checkpoints above sessions, vs open-ended eras. (scratch: `deja1.md`)
 - **`dejavue explain <file|commit>`** — causal reconstruction. Not just "who edited this" but "why does this exist": decision chain + rejected alternatives + incidents + constraints. The long-term killer command.
 - **Confidence levels** on decisions — `speculative / proposed / experimental / adopted / deprecated / verified`. Without this, brainstorms and firm decisions look identical in recall.
 - **Entity references** (`entities: ["auth-system", "redis-cache", …]` field) — an optional normalized subject array on events so `recall`/`blame` can link cross-event *by subject* without a graph DB or embeddings. The single-valued `tag` links by one label and `derived_from` links by event ID; neither links by subject. Lightweight normalized strings only — explicitly **not** a graph or entity registry. (scratch: `deja.md`)
 - **Decision artifacts** (`artifacts: [path, …]` on `decision`) — explicitly bind the files a decision is about so `blame <file>` is precise instead of relying on fuzzy path-in-summary matching. (scratch: `deja_ext.md`)
+
+### Institutional cognition
+
+Multi-writer / project-identity ideas the scratch raised that nothing else records
+(surfaced by the 2026-06-06 audit as the roadmap's main blind spot). All additive
+fields, Axiom-0 clean.
+
+- **`patterns.md` + `pattern`/`convention` command** — the missing 4th core memory file (decisions / patterns / failures / glossary); dejavue ships 3. Discovered naming/idiom/structure conventions, distinct from decisions; same mold as `trap`/`invariant`. (scratch: `deja_ext.md`)
+- **`author_type` field** (`human / agent / orchestrator / ci / bot`) — trust-typing for the multi-writer reality. Records *what kind* of writer, not just *who* (the existing `agent` string). Not access control. (scratch: `deja1.md`)
+- **Tension tracking** (`tension: [security, performance]`) — live *unresolved* architectural tensions as standing institutional memory; distinct from `--rejected` (discarded) and `--supersedes` (resolved). (scratch: `deja1.md`)
+- **Project values / philosophy layer** — a soft `values: []` array (capability-first / local-first / composability) so agents infer solution-fit; distinct from hard `invariant`s. (scratch: `deja1.md`)
+- **`domain_owner` field + recall-by-owner** — promote from the buried Tier-4 "ownership maps" row to a first-class additive event field, mirroring `entities[]`. (scratch: `deja1.md`)
 
 ### Memory management
 
@@ -261,6 +274,8 @@ Bigger ideas that are correct directionally but need DCP/v2.x to stabilize first
 - **Capability negotiation in DCP** — agents can query `dejavue capabilities` and learn what optional layers (semantic recall, managed blocks, schema version) are active in a repo. Prevents silent degradation when adapters encounter older implementations.
 - **Per-entry freshness / expiry** — optional `expires_after: 90d` / `freshness: volatile` on operational memory (build commands, deploy steps, temporary constraints), with `recall`/`context` flagging expired entries at read time. Extends today's file-mtime `_staleness_warnings` (state.md/handoff.md only) to per-entry, computed at read time — **no background process** (Axiom 0). Distinct from `--durability`, a static longevity label with no expiry. (scratch: `deja1.md`)
 - **Memory stability classes** — a retention-class label (`Ephemeral / Operational / Architectural / Constitutional / Historical`) mapped to existing artifacts (scratch→Ephemeral, handoff→Operational, decisions→Architectural, context→Constitutional, timeline→Historical) to drive retention/compaction. **Distinct from `decision --durability`** (a per-decision longevity label, different vocabulary) — this is a cross-artifact taxonomy. Ship the label first; class-driven `archive` can follow. (scratch: `deja.md`)
+- **Machine-readable invariants (open question)** — `invariant` ships free-text only; the *enforcement / validation / architectural-lint* slice (the whole point) is unbuilt and unparked. Decide: a flat declarative `invariants:` block + an optional warnings-only `dejavue check` rule (no graph DB, no LSP — Axiom 0), or explicitly Reject. The LSP realization stays Rejected (below). (scratch: `deja1.md`)
+- **Structured topology** — `map.md` is prose; a keyed `depends_on:` / `isolated_from:` / ownership block could go beyond it, but MUST stay a flat declarative block (`.dejavue/graph/` is Rejected). (scratch: `deja1.md`)
 
 ### Git-native ergonomics
 
@@ -281,12 +296,18 @@ Integration tiers (informational; implementation deferred):
 
 | Tier | Integrations |
 |---|---|
-| **Tier 1 — local dev tools** | lint waivers (clippy/ruff), test annotations (pytest/cargo test), coverage gaps, dependency decisions, task runner discovery, ADR import/export |
-| **Tier 2 — forge tools** | GitHub/GitLab PR memory, issue linking, CI failure ingestion, release memory (`dejavue release v2.1.0`) |
+| **Tier 1 — local dev tools** | lint waivers (clippy/ruff), test annotations (pytest/cargo test), flaky-test markers, coverage gaps, dependency decisions, benchmark/profiler results, task runner discovery, ADR import/export |
+| **Tier 2 — forge tools** | GitHub/GitLab PR memory, issue linking, CI failure ingestion, release memory (`dejavue release v2.1.0`), security-scanner / CVE risk-acceptance |
 | **Tier 3 — AI/runtime tools** | MCP thin adapter (6 tools: context/since/recall/decision/handoff/blame), additional export targets (aider, opencode, continue, cline), shell prompt integration |
 | **Tier 4 — org memory** | incident ingestion from observability tools, cross-repo workspace scope, compliance/license memory, ownership maps |
 
 One rule for any integration: it must answer one of — *what changed / why / what failed / what was rejected / what should the next agent know / what invariant must not be violated*. If it can't, it doesn't belong here.
+
+**Thin emitters & scope (NOT the LSP, which is Rejected):**
+- **`dejavue editor context <file>`** — a thin JSON emitter (handoff + decisions + traps touching the file) so external IDE extensions can render ambient memory. Data → extension; explicitly not an LSP server. (scratch: `deja-dev-tools.md`)
+- **`dejavue docs check / stale / link`** — external-doc drift + canonical-doc-for-behavior mapping, distinct from the adapter-staleness already in `check`. (scratch: `deja-dev-tools.md`)
+- **`dejavue repo map` (intra-repo scope, NEEDS-CARE)** — parse `.gitmodules` / Cargo `[workspace]` / npm workspaces to add a `scope:` dimension *within* a repo (distinct from the repo-and-above "scope layering" above). Flat descriptor, no graph DB.
+- **`worktree spawn` — scope call:** the action-oriented multi-agent dispatch wrapper shells out to `git worktree add` and overlaps Squadron's orchestration. Likely belongs in Squadron, not dejavue — flag before building. (scratch: `deja-git.md`)
 
 ---
 
