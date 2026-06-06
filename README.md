@@ -443,8 +443,8 @@ tools sit on top of the same on-disk format. See `docs/05-v0.1-scope.md`
 | v1.0 | Format stable. 20 commands: ambient agent-id, staleness warnings, pre-push hook, codebase map, `status`, `log`, `blame`, `note`. |
 | v1.1 | 25 commands: `check`, `archive`, `roster`, `config`, `install-skill`, embedder circuit breaker. |
 | v1.2 | 31 commands: richer event types, `stats`, `export`, `reference`, `link`, `search`, tiered embedder auto-detect. |
-| v1.3 | 36 commands: `diff`, `timeline`, `tag`, `note-commit`, `check --fix`, event_type FTS indexing, `since` notes section. |
-| v2.0 | **DCP/1.0** — `context.md` instruction layer, `import`, `export --target {claude,codex,gemini,copilot,cursor,all}` (non-destructive adapter bridge), `references/glossary.md`. `docs/dcp-spec.md` ships as a citable standard. |
+| v1.3 | 35 commands: `diff`, `timeline`, `tag`, `note-commit`, `check --fix`, event_type FTS indexing, `since` notes section. |
+| v2.0 | **DCP/1.0** — `context.md` instruction layer, `import`, `export --target {claude,codex,gemini,copilot,cursor,all}` (non-destructive adapter bridge), `promote --to planning`, `init --wizard`, `references/glossary.md`, init auto-discovery (CLAUDE.md boot stub + in-repo skills). `docs/dcp-spec.md` ships as a citable standard. |
 
 
 ## Status
