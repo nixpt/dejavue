@@ -4,10 +4,12 @@
 set -l cmds version init start changed decision state handoff context status \
     check archive roster config install-skill log blame note since ingest recall \
     worthiness get list annotate stats promote import export reference link search \
-    diff timeline tag note-commit completion
+    diff timeline tag note-commit completion rejected trap incident invariant
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
+complete -c dejavue -n "__fish_seen_subcommand_from decision" -l durability -a "temporary tactical strategic constitutional"
+complete -c dejavue -n "__fish_seen_subcommand_from decision" -l supersedes
 complete -c dejavue -n "__fish_seen_subcommand_from note" -l type -a "note blocker claim question observation"
 # export
 complete -c dejavue -n "__fish_seen_subcommand_from export" -l format -a "json md"
@@ -26,8 +28,8 @@ complete -c dejavue -n "__fish_seen_subcommand_from tag" -a "list filter"
 # shell selection
 complete -c dejavue -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"
 # common flags
-complete -c dejavue -n "__fish_seen_subcommand_from decision note start" -l agent -d "Agent name"
-complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l tag -d "Tag"
+complete -c dejavue -n "__fish_seen_subcommand_from decision note start trap incident invariant" -l agent -d "Agent name"
+complete -c dejavue -n "__fish_seen_subcommand_from decision note trap incident invariant" -l tag -d "Tag"
 complete -c dejavue -n "__fish_seen_subcommand_from log recall since" -l since -d "Since date or commit"
 complete -c dejavue -n "__fish_seen_subcommand_from check" -l fix -d "Auto-fix issues"
 complete -c dejavue -n "__fish_seen_subcommand_from import" -rF

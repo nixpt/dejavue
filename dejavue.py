@@ -15,7 +15,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSION = "2.0.0"
+VERSION = "2.0.2"
 
 DEJAVUE_DIR = Path(".dejavue")
 TIMELINE = DEJAVUE_DIR / "timeline.jsonl"
@@ -268,7 +268,7 @@ def fts_needs_rebuild():
     if not FTS_DB.exists():
         return True
     db_mtime = FTS_DB.stat().st_mtime
-    sources = [TIMELINE, STATE, DECISIONS, HANDOFF]
+    sources = [TIMELINE, STATE, DECISIONS, HANDOFF, INVARIANTS]
     if REFERENCES.exists():
         sources += list(REFERENCES.glob("*.md"))
     return any(p.exists() and p.stat().st_mtime > db_mtime for p in sources)
@@ -312,7 +312,7 @@ def rebuild_fts():
                 except json.JSONDecodeError:
                     pass
 
-        for path, label in [(STATE, "state.md"), (DECISIONS, "decisions.md"), (HANDOFF, "handoff.md")]:
+        for path, label in [(STATE, "state.md"), (DECISIONS, "decisions.md"), (HANDOFF, "handoff.md"), (INVARIANTS, "invariants.md")]:
             if path.exists():
                 rows.append(("", "doc", path.read_text(encoding="utf-8"), label))
 
@@ -845,6 +845,24 @@ def cmd_context(args):
             print(f"--- {label} ---\n")
             print(path.read_text(encoding="utf-8"))
 
+    # Traps & incidents surface prominently — not just in the last-N timeline tail — because
+    # they are the highest-value memory the feature exists to preserve (a trap/incident must
+    # not scroll out of view once a handful of newer events accrue).
+    if TIMELINE.exists():
+        hazards = []
+        for line in TIMELINE.read_text(encoding="utf-8").splitlines():
+            try:
+                ev = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if isinstance(ev, dict) and ev.get("event") in ("trap", "incident"):
+                hazards.append(ev)
+        if hazards:
+            print("--- traps & incidents ---\n")
+            for ev in hazards:
+                print(f"  [{ev.get('event','')}] {ev.get('summary','')}")
+            print()
+
     if REFERENCES.exists():
         refs = sorted(REFERENCES.glob("*.md"))
         if refs:
@@ -993,8 +1011,9 @@ def cmd_check(args):
         script_path = str(Path(sys.argv[0]).resolve())
 
         for hook_name, hmarker, write_fn in [
-            ("post-commit", "dejavue auto-capture", lambda p: _write_hook(p, "#!/usr/bin/env bash\n# dejavue auto-capture")),
-            ("pre-push",    "dejavue pre-push",     lambda p: _write_prepush_hook(p, "#!/usr/bin/env bash\n# dejavue pre-push")),
+            ("post-commit",  "dejavue auto-capture", lambda p: _write_hook(p, "#!/usr/bin/env bash\n# dejavue auto-capture")),
+            ("pre-push",     "dejavue pre-push",     lambda p: _write_prepush_hook(p, "#!/usr/bin/env bash\n# dejavue pre-push")),
+            ("post-checkout", "dejavue post-checkout", lambda p: _write_checkout_hook(p, "#!/usr/bin/env bash\n# dejavue post-checkout")),
         ]:
             hook_path = git_dir / "hooks" / hook_name
             if not hook_path.exists():
@@ -1498,6 +1517,9 @@ def cmd_incident(args):
 
 def cmd_invariant(args):
     """Record an architectural invariant and append to invariants.md."""
+    DEJAVUE_DIR.mkdir(exist_ok=True)
+    if not INVARIANTS.exists():
+        INVARIANTS.write_text("# Invariants\n\n", encoding="utf-8")
     ts = now()
     entry = f"\n## {ts}\n\n{args.text}\n"
     with INVARIANTS.open("a", encoding="utf-8") as f:
@@ -1515,6 +1537,7 @@ def cmd_since(args):
     ref = args.ref
     since_ts = None
     since_commit = None
+    until_ts = None
     since_label = ref or ""
 
     if not args.agent and not ref:
@@ -1552,6 +1575,9 @@ def cmd_since(args):
         since_label = f"range {ref}"
         # override git output to use the explicit range, not base..HEAD
         _range_override = ref
+        # bound the event window by the tip's date too, unless tip is HEAD (open-ended "up to now")
+        if tip != "HEAD":
+            until_ts = git_run("git", "log", "-1", "--format=%aI", tip) or None
     else:
         ts_raw = git_run("git", "log", "-1", "--format=%aI", ref)
         if not ts_raw:
@@ -1585,7 +1611,11 @@ def cmd_since(args):
         print(f"\n  {git_stat.strip()}")
 
     events = _load_events()
-    window = [ev for ev in events if ev.get("ts", "") >= since_ts[:19]]
+    # Compare at second granularity on both sides: the event ts carries a tz suffix
+    # (…:18-05:00) past char 19, which would otherwise sort AFTER the 19-char bound and
+    # drop events in the boundary second from the upper bound.
+    window = [ev for ev in events if ev.get("ts", "")[:19] >= since_ts[:19]
+              and (until_ts is None or ev.get("ts", "")[:19] <= until_ts[:19])]
 
     decisions_in_window = [ev for ev in window if ev.get("event") == "decision"]
     state_updates = [ev for ev in window if ev.get("event") == "state_update"]
@@ -2607,9 +2637,9 @@ def cmd_link(args):
     events = _load_events()
 
     related = [ev for ev in events if
-               ev.get("commit", "")[:7] == short or
-               short in ev.get("summary", "") or
-               short in ev.get("decision_reason", "")]
+               (ev.get("commit") or "")[:7] == short or
+               short in (ev.get("summary") or "") or
+               short in (ev.get("decision_reason") or "")]
 
     # Check git notes for additional links
     git_notes = git_run("git", "notes", "show", sha)
@@ -2848,7 +2878,9 @@ def cmd_tag(args):
 
 def cmd_note_commit(args):
     """Write a git note on a commit linking it to the most recent dejavue event.
-    Uses 'git notes' — metadata stored outside the commit object, SHA is unchanged."""
+    Uses 'git notes' — metadata stored outside the commit object, so the commit SHA is
+    unchanged. The opt-in --trailer flag is the exception: it rewrites HEAD's message
+    (changing its SHA), so it only targets HEAD and the note is attached afterwards."""
     sha = args.sha
 
     # Resolve short SHA to full
@@ -2856,6 +2888,28 @@ def cmd_note_commit(args):
     if not full_sha:
         print(f"Cannot resolve '{sha}' as a git commit.")
         return
+
+    want_trailer = getattr(args, "trailer", False)
+
+    # --trailer amends the commit (new SHA), so it can only target HEAD and needs a clean index.
+    # Validate up front so we never half-apply (note on one SHA, trailer on another).
+    if want_trailer:
+        head_sha = git_run("git", "rev-parse", "--verify", "HEAD")
+        if full_sha != head_sha:
+            print("--trailer can only amend HEAD (amending rewrites the commit's SHA).")
+            print(f"'{sha}' resolves to {full_sha[:7]}, but HEAD is {(head_sha or '?')[:7]}.")
+            print("Re-run without --trailer to write a git note to an older commit.")
+            return
+        # git commit --amend rebuilds HEAD's tree from the index; refuse if anything is staged,
+        # otherwise staged changes get silently folded into the amended commit.
+        staged = subprocess.run(
+            ["git", "diff", "--cached", "--quiet"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        if staged.returncode != 0:
+            print("Refusing to amend HEAD with --trailer: you have staged changes that would be")
+            print("folded into the commit. Commit or unstage them first.")
+            return
 
     # Find the most recent event (or the closest file_changed for this sha)
     events = _load_events()
@@ -2871,6 +2925,29 @@ def cmd_note_commit(args):
     summary = latest.get("summary", "")[:100]
     note_text = f"Dejavue-Event: {ts} | {summary}"
 
+    if want_trailer:
+        # Amend the message FIRST (this changes HEAD's SHA), then re-resolve so the note below
+        # lands on the SHIPPED commit rather than the now-orphaned pre-amend object.
+        try:
+            orig_msg = git_run("git", "log", "-1", "--format=%B", full_sha)
+            result = subprocess.run(
+                ["git", "interpret-trailers", "--trailer", note_text],
+                input=orig_msg, capture_output=True, text=True,
+            )
+            if result.returncode != 0:
+                print(f"git interpret-trailers failed: {result.stderr.strip()}")
+                return
+            subprocess.check_call(
+                ["git", "commit", "--amend", "--no-edit", "-m", result.stdout],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            print("Commit message amended with Dejavue-Event trailer.")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            print(f"Failed to amend commit: {e}")
+            return
+        full_sha = git_run("git", "rev-parse", "--verify", "HEAD") or full_sha
+        short = full_sha[:7]
+
     try:
         subprocess.check_call(
             ["git", "notes", "append", "-m", note_text, full_sha],
@@ -2881,26 +2958,6 @@ def cmd_note_commit(args):
         print(f"Failed to write git note: {e}")
         print("Ensure 'git notes' is available (git ≥ 2.0).")
         return
-
-    if getattr(args, "trailer", False):
-        # Amend commit message with a Dejavue-Event: trailer (user-invoked only, never from a hook).
-        try:
-            orig_msg = git_run("git", "log", "-1", "--format=%B", full_sha)
-            result = subprocess.run(
-                ["git", "interpret-trailers", "--trailer", f"Dejavue-Event: {ts} | {summary}"],
-                input=orig_msg, capture_output=True, text=True,
-            )
-            if result.returncode != 0:
-                print(f"git interpret-trailers failed: {result.stderr.strip()}")
-                return
-            new_msg = result.stdout
-            subprocess.check_call(
-                ["git", "commit", "--amend", "--no-edit", "-m", new_msg],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            )
-            print(f"Commit message amended with Dejavue-Event trailer.")
-        except subprocess.CalledProcessError as e:
-            print(f"Failed to amend commit: {e}")
 
 
 def cmd_worthiness(args):
@@ -3014,7 +3071,7 @@ _dejavue() {
     local cmds="version init start changed decision state handoff context status \\
 check archive roster config install-skill log blame note since ingest recall \\
 worthiness get list annotate stats promote import export reference link search \\
-diff timeline tag note-commit completion"
+diff timeline tag note-commit completion rejected trap incident invariant"
     if [[ $COMP_CWORD -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$cmds" -- "$cur"))
         return
@@ -3022,10 +3079,13 @@ diff timeline tag note-commit completion"
     local subcmd="${COMP_WORDS[1]}"
     case "$subcmd" in
         decision)
-            COMPREPLY=($(compgen -W "--reason --rejected --agent --type --tag" -- "$cur"))
+            COMPREPLY=($(compgen -W "--reason --rejected --agent --type --tag --supersedes --durability" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "decision blocker claim question experiment checkpoint" -- "$cur"))
+            elif [[ "$prev" == "--durability" ]]; then
+                COMPREPLY=($(compgen -W "temporary tactical strategic constitutional" -- "$cur"))
             fi ;;
+        trap|incident|invariant) COMPREPLY=($(compgen -W "--agent --tag" -- "$cur")) ;;
         note)
             COMPREPLY=($(compgen -W "--agent --tag --type" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
@@ -3126,6 +3186,10 @@ _dejavue() {
                 'tag:List tags or filter events by tag'
                 'note-commit:Write a git note linking a commit to the last dejavue event'
                 'completion:Print shell completion script (bash, zsh, fish)'
+                'rejected:Show decisions with rejected alternatives, optionally filtered'
+                'trap:Record a known lie / trap (misleading name, fake abstraction)'
+                'incident:Record an operational incident (outage, corruption, migration)'
+                'invariant:Record an architectural invariant that must always hold'
             )
             _describe 'subcommand' subcommands ;;
         args)
@@ -3136,6 +3200,12 @@ _dejavue() {
                         '*--rejected[Rejected alternative and reason]:alt:reason' \\
                         '--agent[Agent name]:agent' \\
                         '--type[Event type]:type:(decision blocker claim question experiment checkpoint)' \\
+                        '--supersedes[ID or title of a prior decision this supersedes]:event-id' \\
+                        '--durability[How long-lived this decision is]:durability:(temporary tactical strategic constitutional)' \\
+                        '--tag[Tag]:tag' ;;
+                trap|incident|invariant)
+                    _arguments \\
+                        '--agent[Agent name]:agent' \\
                         '--tag[Tag]:tag' ;;
                 note)
                     _arguments \\
@@ -3180,10 +3250,12 @@ _FISH_COMPLETION = """\
 set -l cmds version init start changed decision state handoff context status \\
     check archive roster config install-skill log blame note since ingest recall \\
     worthiness get list annotate stats promote import export reference link search \\
-    diff timeline tag note-commit completion
+    diff timeline tag note-commit completion rejected trap incident invariant
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
+complete -c dejavue -n "__fish_seen_subcommand_from decision" -l durability -a "temporary tactical strategic constitutional"
+complete -c dejavue -n "__fish_seen_subcommand_from decision" -l supersedes
 complete -c dejavue -n "__fish_seen_subcommand_from note" -l type -a "note blocker claim question observation"
 # export
 complete -c dejavue -n "__fish_seen_subcommand_from export" -l format -a "json md"
@@ -3202,8 +3274,8 @@ complete -c dejavue -n "__fish_seen_subcommand_from tag" -a "list filter"
 # shell selection
 complete -c dejavue -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"
 # common flags
-complete -c dejavue -n "__fish_seen_subcommand_from decision note start" -l agent -d "Agent name"
-complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l tag -d "Tag"
+complete -c dejavue -n "__fish_seen_subcommand_from decision note start trap incident invariant" -l agent -d "Agent name"
+complete -c dejavue -n "__fish_seen_subcommand_from decision note trap incident invariant" -l tag -d "Tag"
 complete -c dejavue -n "__fish_seen_subcommand_from log recall since" -l since -d "Since date or commit"
 complete -c dejavue -n "__fish_seen_subcommand_from check" -l fix -d "Auto-fix issues"
 complete -c dejavue -n "__fish_seen_subcommand_from import" -rF

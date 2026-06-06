@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dejavue"
-version = "2.0.0"
+version = "2.0.2"
 description = "Repo-local agent memory — capture the why that git can't."
 readme = "README.md"
 license = { file = "LICENSE" }
