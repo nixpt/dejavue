@@ -213,6 +213,34 @@ Fix = normalize to UTC before comparing.
 
 ---
 
+## 🎯 Prioritized — next waves (from the design backlog audit, 2026-06-06)
+
+Actionable ordering over the v3.x pool + the gaps the audit surfaced. All
+Axiom-0 clean (stdlib, single-file, additive fields). Favors the core loop
+(capture the *why*, keep recall trustworthy) and high value / low effort.
+
+**P0 — do next (all small, additive)**
+- `entities: []` on events + `recall`/`blame` by entity — the relational primitive, no graph DB.
+- `--confidence {speculative…verified}` on `decision`/`note` — copy the `--durability` plumbing.
+- `decision --artifacts <path>` — bind the files a decision is about, precisely.
+
+**P1**
+- `dejavue changelog <range>` — why-aware changelog from timeline + decisions.
+- Per-entry freshness / expiry with read-time staleness flagging.
+- `derived_from` intent lineage (after entities land).
+- Memory stability-class label.
+
+**P2**
+- `branch` / `merge-summary` git-workflow memory; project epochs; capability negotiation.
+
+**Later — composes its inputs**
+- `dejavue explain <file|commit>` — the killer command; build after lineage / confidence / entities exist.
+- Dev-tools ingestion tier (ci / lint / coverage / deps / pr / issue) — thin-importer pattern, pull specific ones on demand.
+
+**Rejected (Axiom 0):** `.dejavue/graph/` & `capsules/` stores, `dejavue` LSP server, `dcp://` federation, hosted sync.
+
+---
+
 ## 🌅 v3.x and beyond
 
 Bigger ideas that are correct directionally but need DCP/v2.x to stabilize first.
@@ -223,12 +251,27 @@ Bigger ideas that are correct directionally but need DCP/v2.x to stabilize first
 - **Project epochs** (`dejavue epoch begin/end "<name>"`) — named eras that frame old decisions. "pre-plugin-architecture decisions" are not as authoritative as "post-capsule-runtime decisions." Prevents old context from misleading agents after major rewrites.
 - **`dejavue explain <file|commit>`** — causal reconstruction. Not just "who edited this" but "why does this exist": decision chain + rejected alternatives + incidents + constraints. The long-term killer command.
 - **Confidence levels** on decisions — `speculative / proposed / experimental / adopted / deprecated / verified`. Without this, brainstorms and firm decisions look identical in recall.
+- **Entity references** (`entities: ["auth-system", "redis-cache", …]` field) — an optional normalized subject array on events so `recall`/`blame` can link cross-event *by subject* without a graph DB or embeddings. The single-valued `tag` links by one label and `derived_from` links by event ID; neither links by subject. Lightweight normalized strings only — explicitly **not** a graph or entity registry. (scratch: `deja.md`)
+- **Decision artifacts** (`artifacts: [path, …]` on `decision`) — explicitly bind the files a decision is about so `blame <file>` is precise instead of relying on fuzzy path-in-summary matching. (scratch: `deja_ext.md`)
 
 ### Memory management
 
 - **Memory compression lineage** — `archive` already compacts `file_changed` events; extend the principle. Define what is immutable (timeline entries), what may be summarized (dense note clusters), what may be regenerated (FTS, embeddings). Preserve provenance of what was compressed into what.
 - **Scope layering** — DCP is currently repo-scoped (correct for v1/v2). Acknowledge workspace/org/personal scope in the spec so the protocol can grow without backward-incompatible changes.
 - **Capability negotiation in DCP** — agents can query `dejavue capabilities` and learn what optional layers (semantic recall, managed blocks, schema version) are active in a repo. Prevents silent degradation when adapters encounter older implementations.
+- **Per-entry freshness / expiry** — optional `expires_after: 90d` / `freshness: volatile` on operational memory (build commands, deploy steps, temporary constraints), with `recall`/`context` flagging expired entries at read time. Extends today's file-mtime `_staleness_warnings` (state.md/handoff.md only) to per-entry, computed at read time — **no background process** (Axiom 0). Distinct from `--durability`, a static longevity label with no expiry. (scratch: `deja1.md`)
+- **Memory stability classes** — a retention-class label (`Ephemeral / Operational / Architectural / Constitutional / Historical`) mapped to existing artifacts (scratch→Ephemeral, handoff→Operational, decisions→Architectural, context→Constitutional, timeline→Historical) to drive retention/compaction. **Distinct from `decision --durability`** (a per-decision longevity label, different vocabulary) — this is a cross-artifact taxonomy. Ship the label first; class-driven `archive` can follow. (scratch: `deja.md`)
+
+### Git-native ergonomics
+
+The git-companion commands from `deja-git.md` not yet shipped (`blame`, `since ref..ref`,
+`note-commit`, the `post-checkout` banner already are). All compose timeline + decisions
+over a git range — thin views, no new storage.
+
+- **`dejavue changelog <range>`** — generate a *why-aware* changelog from decisions + notes + the timeline over a git range (e.g. `v2.0.1..HEAD`). A `since` + `export` composition; the highest-value item here.
+- **`dejavue branch start|summary|close`** + **`merge-summary <base> <branch>`** — capture and replay the intent of a branch and what a merge brought in. Useful across multi-agent worktrees.
+- **`dejavue squash-summary <branch>`** — synthesize a single commit message from a branch's dejavue events before a squash-merge.
+- **`dejavue conflict record --reason`** — first-class capture of why a merge conflict was resolved a given way (today expressible only as a free-text `note`).
 
 ### External tool integrations
 
