@@ -26,6 +26,20 @@ any v1.x release can be read by any later v1.x release without migration.
   longer look identical. Stored on the event, shown as a `[CONFIDENCE]` label in the
   `decisions.md` heading (alongside `--durability`), and indexed by `recall` (so
   `recall verified` / `recall speculative` work). Third P0 item from the design backlog audit.
+- **`--supersedes` read-back** — `recall`, `since`, and `context` now surface
+  "⚠ superseded by '<newer decision>'" on an overridden decision, so stale decisions
+  stop looking authoritative. The `--supersedes` value was previously *write-only*
+  (stored but never read). Matching is by title substring with **event-identity**
+  self-exclusion (so a decision whose own ref is a substring of its title — e.g.
+  "Cache layer" ⊂ "Cache layer v2" — isn't falsely flagged), robust to same-second
+  decisions. Fourth P0 item, and closes the v2.0.1 contract.
+
+### Fixed
+
+- **`_load_events()` ignores non-object timeline lines.** A valid-JSON-but-non-dict
+  line (a bare `12345` / `null` / array from corruption or a manual edit) previously
+  made every event consumer (`recall`, `since`, `blame`, `link`, `stats`, …) crash on
+  `.get()`. Now filtered once at the loader, matching the "timeline is crash-proof" contract.
 
 ## [2.0.2] — 2026-06-06
 
