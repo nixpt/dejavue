@@ -180,6 +180,39 @@ Shipped. No new deps (Axiom 0 preserved). 43 commands, 134/134 tests.
 
 ---
 
+## ✅ v2.0.2 — correctness pass (2026-06-06)
+
+Shipped + released (first non-draft GitHub Release; marked Latest). No new deps
+(Axiom 0). 141/141 tests (+7 regression). Fixes bugs in the v2.0.1 feature set,
+found in a full review of the v2.0.1 diff — **no new surface area**:
+
+- **`note-commit --trailer`** rewritten — the v2.0.1 order wrote the git note to
+  the pre-amend SHA, then `git commit --amend` rewrote HEAD (orphaning the note);
+  it also amended HEAD for any non-HEAD sha and folded staged changes. Now requires
+  `sha == HEAD` + a clean index, amends **first**, then attaches the note to the
+  shipped commit. (This is the safe realization of the Phase-6 trailer deferred
+  back in v1.0.0 for "amend-from-hook risks infinite loop" — it is user-invoked
+  only, never from a hook.)
+- **Version** — `VERSION` / `pyproject` were stuck at `2.0.0` through the v2.0.1
+  tag; now report the real version. (The pushed v2.0.1 tag self-reports 2.0.0 —
+  recorded as a trap.)
+- **`link`** no longer crashes on events with null `commit` / `summary` / `decision_reason`.
+- **`since <base>..<tip>`** now bounds the event window by the tip, not just the
+  base date (open-ended only when tip is `HEAD`).
+- **`invariant`** self-creates `.dejavue/` instead of crashing before `init`;
+  **`invariants.md`** is now indexed by `recall` (FTS sources + rebuild trigger).
+- **`check`** verifies/repairs the `post-checkout` hook; **`context`** surfaces
+  traps & incidents in a dedicated section so they no longer scroll out of the
+  last-N timeline tail.
+- **Shell completions** now cover `trap` / `incident` / `invariant` / `rejected` +
+  `decision --supersedes/--durability` (all three were missing in v2.0.1).
+
+**Known limitation (pre-existing, not introduced):** `cmd_since` compares ISO
+timestamps lexically, so mixed-timezone *authoring* can misorder the window.
+Fix = normalize to UTC before comparing.
+
+---
+
 ## 🌅 v3.x and beyond
 
 Bigger ideas that are correct directionally but need DCP/v2.x to stabilize first.

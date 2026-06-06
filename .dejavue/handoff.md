@@ -1,13 +1,14 @@
 # Handoff
 
-Updated: 2026-06-06T06:43:49-05:00
+Updated: 2026-06-06T07:49:46-05:00
 
 ## Summary
-internal session: dejavue RC prep + v2.0.1 shipped. pyproject.toml (pipx global install), shell completions (bash/zsh/fish), 9 new commands (trap/incident/invariant/rejected/decision --supersedes/--durability/since ref..ref/note-commit --trailer/post-checkout hook), 134/134 tests, skills updated, installed skills updated via install-skill --force.
+v2.0.2 correctness pass shipped + released. Fixed: note-commit --trailer (orphaned note / wrong-commit amend / staged fold), link null-safety, since tip upper bound, invariant-before-init crash, invariants.md FTS indexing, check post-checkout hook, context traps/incidents surfacing, completions for the v2.0.1 commands. 141/141 tests. master @ ea33989, tag v2.0.2, Release published as Latest.
 
 ## Next Steps
-- Tag v2.0.1 on GitHub + create Release (changelog entry ready)
-- Consider --update alias on install-skill for cleaner semantics
+- Consider --update alias on install-skill (open since internal session)
+- Optional: normalize cmd_since timestamps to UTC before comparing (fixes mixed-timezone misorder — see trap, tag:since)
+- Optional v2.x/v3.x: archive --compress, intent lineage, dejavue explain (see ROADMAP)
 
 ## Boot Instructions
 Read `.dejavue/handoff.md`, `.dejavue/state.md`, `.dejavue/decisions.md`, and `.dejavue/timeline.jsonl` before making changes.
