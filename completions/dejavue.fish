@@ -9,6 +9,7 @@ complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l durability -a "temporary tactical strategic constitutional"
+complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l confidence -a "speculative proposed experimental adopted deprecated verified"
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l supersedes
 complete -c dejavue -n "__fish_seen_subcommand_from note" -l type -a "note blocker claim question observation"
 # export
