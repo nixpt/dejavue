@@ -413,6 +413,18 @@ a tool failing any MUST in §8.1 is non-conformant regardless of §8.2–§8.4.
   `key: value` grammar (§3.1) and **MUST NOT** require a YAML library to do so.
 - A tool **SHOULD** preserve unrecognized sections and frontmatter keys verbatim.
 
+### 8.5 Agent discovery (SHOULD, where `init` is implemented)
+
+- A tool's `init` command **SHOULD** write or append a minimal boot stub to
+  `CLAUDE.md` (or equivalent per-tool instruction file) at the repo root so
+  that coding agents discover and invoke `dejavue context` automatically on
+  arrival. The stub **MUST** be idempotent (second `init` run is a no-op if a
+  stub is already present).
+- A tool **SHOULD** install an in-repo copy of its agent skill files (if any)
+  so agents find them without a global installation. This copy **MUST NOT**
+  affect Axiom 0: its absence at a given install site must never block memory
+  writes or any base-loop command.
+
 ---
 
 ## Appendix — Reference implementation
