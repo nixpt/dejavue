@@ -15,7 +15,7 @@ backward-compatible — every v1.x `.dejavue/` reads unchanged, and the base loo
 (init → start → decision → state → handoff) behaves identically with or without
 DCP. Zero new runtime dependencies (stdlib only; Axiom 0).
 
-40 commands, 119/119 tests.
+35 commands, 121/121 tests.
 
 ### Added
 
@@ -55,11 +55,20 @@ DCP. Zero new runtime dependencies (stdlib only; Axiom 0).
   `reference create --type <t>` injects it.
 - **`dejavue diff --format patch`** — machine-readable unified-diff patch of the
   decisions (and state) delta between two refs.
+- **`dejavue init` agent auto-discovery** — `init` now wires agent discovery
+  automatically: (1) copies the bundled `dejavue` + `dejavue-workflow` skill files
+  into `.dejavue/` as an in-repo fallback (so agents arriving at the repo find
+  skills without needing a global install); (2) writes or appends a `## Project
+  memory` boot stub to `CLAUDE.md` so Claude Code loads `dejavue context`
+  automatically on every session. Both steps are idempotent and best-effort:
+  skill copy is skipped if the source `skills/` directory is absent (standalone
+  script installs); CLAUDE.md is only written if a dejavue boot stub isn't already
+  present (detected via `<!-- dejavue:discovery -->` marker).
 
 ### Changed
 
 - Version → 2.0.0. `hashlib` / `difflib` / `re` already imported (stdlib; no new
-  runtime dependency). Test suite: 100 → 119 (119/119 green).
+  runtime dependency). Test suite: 119 → 121 (121/121 green).
 
 ## [1.3.0] — 2026-05-28
 

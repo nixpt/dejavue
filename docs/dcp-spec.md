@@ -1,7 +1,7 @@
 # DCP — DejaVue Context Protocol
 
 **Version:** DCP/1.0
-**Status:** Draft
+**Status:** Release Candidate
 **Reference implementation:** [dejavue](https://github.com/nixpt/dejavue) (v2.0.0)
 **Steward:** OpenKO Foundry (`did:openko:federation:seed`) — see [STEWARDSHIP.md](../STEWARDSHIP.md)
 **License:** OCPL-1.1

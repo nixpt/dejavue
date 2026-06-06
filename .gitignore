@@ -14,3 +14,14 @@ __pycache__/
 
 # Stray config not part of dejavue (flag to maintainer internal session)
 seahorse-server.toml
+
+# dejavue: local-only artifacts
+.dejavue/fts.db
+.dejavue/*.tmp
+.dejavue/.first-use
+.dejavue/ingested.lock
+.dejavue/.locks/
+.dejavue/embeddings.jsonl
+.dejavue/embedder_circuit.json
+.dejavue/timeline.jsonl.bak-*
+

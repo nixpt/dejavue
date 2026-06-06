@@ -147,3 +147,9 @@ Rejected alternatives:
 - **blind overwrite**: clobbers hand-written CLAUDE.md
 - **staging dir only**: less ergonomic, plan picked real-file managed block
 
+
+## 2026-06-06T05:44:31-05:00 — init auto-discovery: install in-repo skills + CLAUDE.md boot stub on init (resolves #1)
+
+Reason:
+dejavue's core value requires agents to know it exists; init was half-wired — memory scaffold set up but discovery not. CLAUDE.md is the reliable trigger for Claude Code; in-repo skill fallback works without a global install. Both steps idempotent, no new deps (Axiom 0 preserved).
+

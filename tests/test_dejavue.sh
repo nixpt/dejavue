@@ -1959,6 +1959,33 @@ test_dcp_diff_patch() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 111. init creates CLAUDE.md with boot stub in a fresh repo
+test_init_creates_claude_md() {
+    TEST_DIR="$(setup_repo)"
+    trap 'cd /; rm -rf "$TEST_DIR"' EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    assert_file_exists "CLAUDE.md created by init" "CLAUDE.md" || return 1
+    local content
+    content="$(cat CLAUDE.md)"
+    assert_contains "boot stub has dejavue context command" "$content" "dejavue context" || return 1
+    assert_contains "discovery idempotency marker present" "$content" "dejavue:discovery" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 112. init CLAUDE.md boot stub is idempotent — second init does not duplicate section
+test_init_claude_md_idempotent() {
+    TEST_DIR="$(setup_repo)"
+    trap 'cd /; rm -rf "$TEST_DIR"' EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv init >/dev/null 2>&1  # second run
+    local count
+    count="$(grep -c "dejavue:discovery" CLAUDE.md)"
+    assert_eq "boot stub not duplicated on second init" "$count" "1" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2096,6 +2123,8 @@ main() {
     run_test "108 DCP init without --wizard unchanged"       test_dcp_wizard_skippable
     run_test "109 DCP promote --to planning preserves history" test_dcp_promote_jagent
     run_test "110 DCP diff --format patch machine-readable"  test_dcp_diff_patch
+    run_test "111 init creates CLAUDE.md with boot stub"     test_init_creates_claude_md
+    run_test "112 init CLAUDE.md boot stub is idempotent"    test_init_claude_md_idempotent
 
     echo ""
     echo "========================================"
