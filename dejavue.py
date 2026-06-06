@@ -202,6 +202,36 @@ def normalize_entities(args):
     return out
 
 
+def supersession_lookup(events):
+    """Reverse index for --supersedes (which was otherwise write-only). Returns
+    overridden_by(decision_event) -> [(superseding_title, ts_date), ...]: a decision is
+    superseded by event B if B's --supersedes value is a (case-insensitive) substring of the
+    decision's title. Excludes B from superseding itself by EVENT IDENTITY (not ts — two
+    decisions can share a second, and B's own ref is often a substring of B's own title, e.g.
+    "use x" ⊂ "use x v2"). Closes the v2.0.1 "later overridden by…" read-back contract."""
+    refs = []  # (ref_lower, superseding_event)
+    for ev in events:
+        ref = (ev.get("supersedes") or "").strip().lower()
+        if ref:
+            refs.append((ref, ev))
+
+    def overridden_by(decision_event):
+        if not isinstance(decision_event, dict):
+            return []
+        t = (decision_event.get("decision_title") or "").strip().lower()
+        if not t or not refs:
+            return []
+        out = []
+        for ref, sup_ev in refs:
+            if sup_ev is decision_event:
+                continue  # an event never supersedes itself (by identity, not ts)
+            if ref in t:
+                out.append((sup_ev.get("decision_title") or sup_ev.get("summary", "") or "(untitled)",
+                            (sup_ev.get("ts") or "")[:10]))
+        return out
+    return overridden_by
+
+
 def append_event(event):
     DEJAVUE_DIR.mkdir(exist_ok=True)
     base = {"ts": now(), **git_info(), **event}
@@ -886,6 +916,23 @@ def cmd_context(args):
             print("--- traps & incidents ---\n")
             for ev in hazards:
                 print(f"  [{ev.get('event','')}] {ev.get('summary','')}")
+            print()
+
+    # Superseded-decision warnings — the reverse of --supersedes (previously write-only),
+    # so a stale decision in decisions.md no longer looks authoritative at boot.
+    if TIMELINE.exists():
+        sup_events = _load_events()
+        overridden_by = supersession_lookup(sup_events)
+        superseded = []
+        for ev in sup_events:
+            if ev.get("event") == "decision":
+                hits = overridden_by(ev)
+                if hits:
+                    superseded.append((ev.get("decision_title") or "(untitled)", hits[-1]))
+        if superseded:
+            print("--- ⚠ superseded decisions ---\n")
+            for title, (sup_title, sup_ts) in superseded:
+                print(f"  '{title}' → superseded by '{sup_title}' ({sup_ts})")
             print()
 
     if REFERENCES.exists():
@@ -1676,9 +1723,13 @@ def cmd_since(args):
     for ev in reversed(window):
         print(f"  [{ev.get('ts','')}] {ev.get('event','')} — {ev.get('summary','')}")
 
+    overridden_by = supersession_lookup(events)
     print(f"\nDecisions made ({len(decisions_in_window)}):")
     for ev in decisions_in_window:
-        print(f"  [{ev.get('ts','')}] {ev.get('decision_title', ev.get('decision',''))}")
+        title = ev.get('decision_title', ev.get('decision', ''))
+        print(f"  [{ev.get('ts','')}] {title}")
+        for sup_title, sup_ts in overridden_by(ev):
+            print(f"    ⚠ superseded by '{sup_title}' ({sup_ts})")
         if ev.get("decision_reason"):
             print(f"    Reason: {ev['decision_reason']}")
 
@@ -2214,12 +2265,34 @@ def cmd_recall(args):
         print(f"No results for '{query}'.")
         return
 
+    sup_events = _load_events()
+    overridden_by = supersession_lookup(sup_events)
+    decs_by_ts = {}
+    for ev in sup_events:
+        if ev.get("event") == "decision":
+            decs_by_ts.setdefault(ev.get("ts"), []).append(ev)
+
+    def _decision_for(ts, summary):
+        # disambiguate same-second decisions by which title appears in the FTS text
+        cands = decs_by_ts.get(ts, [])
+        if len(cands) == 1:
+            return cands[0]
+        for c in cands:
+            title = c.get("decision_title") or ""
+            if title and title in (summary or ""):
+                return c
+        return cands[0] if cands else None
+
     print(f"Recall results for '{query}':\n")
     for ts, event, summary, source in rows:
         ts_display = ts[:19] if ts else "(no ts)"
         snippet = (summary[:120] + "…") if summary and len(summary) > 120 else (summary or "")
         print(f"  [{ts_display}] {event} ({source})")
-        print(f"    {snippet}\n")
+        print(f"    {snippet}")
+        if event == "decision":
+            for sup_title, sup_ts in overridden_by(_decision_for(ts, summary)):
+                print(f"    ⚠ superseded by '{sup_title}' ({sup_ts})")
+        print()
 
 
 def cmd_stats(args):
@@ -3136,9 +3209,11 @@ def _load_events():
         if not line:
             continue
         try:
-            events.append(json.loads(line))
+            ev = json.loads(line)
         except json.JSONDecodeError:
-            pass
+            continue
+        if isinstance(ev, dict):  # ignore valid-JSON-but-non-object lines (corruption/manual edits)
+            events.append(ev)
     return events
 
 
