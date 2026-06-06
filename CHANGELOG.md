@@ -21,6 +21,11 @@ any v1.x release can be read by any later v1.x release without migration.
   matched by `blame <name>`, and `entities` lists them with counts (or filters events
   for one). Lightweight strings only — not a graph or registry (Axiom 0). Second P0
   item from the design backlog audit; the relational primitive that unlocks lineage/explain.
+- **`--confidence {speculative,proposed,experimental,adopted,deprecated,verified}` on
+  `decision` and `note`** — a recall-trust signal so brainstorms and firm decisions no
+  longer look identical. Stored on the event, shown as a `[CONFIDENCE]` label in the
+  `decisions.md` heading (alongside `--durability`), and indexed by `recall` (so
+  `recall verified` / `recall speculative` work). Third P0 item from the design backlog audit.
 
 ## [2.0.2] — 2026-06-06
 
