@@ -5,7 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 **The on-disk format is stable as of v1.0.0.** `.dejavue/` files written by
 any v1.x release can be read by any later v1.x release without migration.
 
-## [Unreleased]
+## [2.1.0] — 2026-06-06
+
+**Institutional-memory P0 wave** — the five top-rated items from the scratch/deja roadmap
+audit, making recall *relational* (`entities`, `--artifacts`) and *trustworthy*
+(`--confidence`, `--supersedes` read-back), plus the missing `pattern` memory file and
+robustness fixes. Two new commands (`pattern`, `entities`), four new fields, zero new
+dependencies (Axiom 0 preserved). 161/161 tests.
 
 ### Added
 
