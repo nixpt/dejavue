@@ -2117,6 +2117,18 @@ test_since_revision_range() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 124. init installs post-checkout hook with branch-switch guard
+test_init_installs_checkout_hook() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    assert_file_exists "post-checkout hook created" ".git/hooks/post-checkout" || return 1
+    local content; content="$(cat .git/hooks/post-checkout)"
+    assert_contains "has dejavue marker" "$content" "dejavue post-checkout" || return 1
+    assert_contains "has branch-switch guard" "$content" '[ "$3" = "1" ]' || return 1
+    assert_contains "calls dejavue status" "$content" "status" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2267,6 +2279,7 @@ main() {
     run_test "121 decision --supersedes stored in event+doc"  test_decision_supersedes
     run_test "122 decision --durability stored in event+doc"  test_decision_durability
     run_test "123 since accepts git revision range ref..ref"  test_since_revision_range
+    run_test "124 init installs post-checkout hook"           test_init_installs_checkout_hook
 
     echo ""
     echo "========================================"
