@@ -2055,6 +2055,31 @@ test_context_shows_invariants() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 119. rejected lists all decisions with rejected alternatives
+test_rejected_lists_all() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "Use SQLite" --reason "stdlib" --rejected "PostgreSQL: too heavy" --rejected "MySQL: license" >/dev/null 2>&1
+    local out; out="$(dv rejected)"
+    assert_contains "decision title" "$out" "Use SQLite" || return 1
+    assert_contains "first rejected" "$out" "PostgreSQL" || return 1
+    assert_contains "second rejected" "$out" "MySQL" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 120. rejected filters by topic query (case-insensitive)
+test_rejected_filters_by_query() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "Rate limiting" --reason "needed" --rejected "leaky-bucket: too smooth" >/dev/null 2>&1
+    dv decision "Auth backend" --reason "security" --rejected "JWT-only: no revocation" >/dev/null 2>&1
+    local out; out="$(dv rejected leaky)"
+    assert_contains "matching decision present" "$out" "Rate limiting" || return 1
+    local noshow; noshow=$(echo "$out" | grep -c "Auth backend" || true)
+    assert_eq "non-matching decision absent" "$noshow" "0" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2200,6 +2225,8 @@ main() {
     run_test "116 invariant records event + invariants.md"    test_invariant_records_event_and_doc
     run_test "117 init scaffolds invariants.md"               test_init_creates_invariants_md
     run_test "118 context surfaces invariants.md"             test_context_shows_invariants
+    run_test "119 rejected lists all rejected alternatives"   test_rejected_lists_all
+    run_test "120 rejected filters by topic query"            test_rejected_filters_by_query
 
     echo ""
     echo "========================================"
