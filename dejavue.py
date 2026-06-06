@@ -1403,6 +1403,45 @@ def cmd_note(args):
     print(f"{event_type.capitalize()} recorded.")
 
 
+def cmd_rejected(args):
+    """Show all decisions that have rejected alternatives, optionally filtered by a topic."""
+    query = (args.query or "").lower().strip()
+    events = _load_events()
+    hits = []
+    for ev in events:
+        ras = ev.get("rejected_alternatives") or []
+        if not ras:
+            continue
+        if query:
+            text = " ".join(
+                (r.get("option", "") + " " + r.get("reason", "")).lower()
+                for r in ras
+            ) + " " + ev.get("decision_title", "").lower() + " " + ev.get("decision_reason", "").lower()
+            if query not in text:
+                continue
+        hits.append(ev)
+
+    if not hits:
+        msg = f"No rejected alternatives found" + (f" mentioning '{args.query}'" if query else "") + "."
+        print(msg)
+        return
+
+    header = f"Rejected alternatives" + (f" mentioning '{args.query}'" if query else "") + f" ({len(hits)} decision(s)):\n"
+    print(header)
+    for ev in hits:
+        ts = (ev.get("ts") or "")[:10]
+        title = ev.get("decision_title", "(untitled)")
+        print(f"  [{ts}] {title}")
+        for r in (ev.get("rejected_alternatives") or []):
+            opt = r.get("option", "")
+            reason = r.get("reason", "")
+            line = f"    ✗ {opt}"
+            if reason:
+                line += f": {reason}"
+            print(line)
+        print()
+
+
 def cmd_trap(args):
     """Record a known lie / trap — misleading name, fake abstraction, dangerous assumption."""
     append_event({
@@ -3367,6 +3406,10 @@ def main():
     p = sub.add_parser("completion", help="Print shell completion script to stdout.")
     p.add_argument("shell", choices=["bash", "zsh", "fish"], help="Target shell.")
     p.set_defaults(func=cmd_completion)
+
+    p = sub.add_parser("rejected", help="Show decisions with rejected alternatives, optionally filtered by topic.")
+    p.add_argument("query", nargs="?", help="Topic to filter on (case-insensitive substring).")
+    p.set_defaults(func=cmd_rejected)
 
     p = sub.add_parser("trap", help="Record a known lie / trap: misleading name, fake abstraction, dangerous assumption.")
     p.add_argument("text", help="What the trap is.")
