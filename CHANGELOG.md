@@ -5,6 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 **The on-disk format is stable as of v1.0.0.** `.dejavue/` files written by
 any v1.x release can be read by any later v1.x release without migration.
 
+## [Unreleased]
+
+### Added
+
+- **`dejavue changelog <range>`** — generate a why-aware markdown changelog from dejavue
+  events over a git range (e.g. `v2.1.0..HEAD`, or a single ref = `ref..HEAD`): **Decisions**
+  (with confidence labels and "⚠ later superseded by" annotations), **Traps & incidents**,
+  **Notes**, and the git **Commits**. A `since` + `export` composition. First P1 item from
+  the design backlog audit.
+
 ## [2.1.0] — 2026-06-06
 
 **Institutional-memory P0 wave** — the five top-rated items from the design backlog roadmap
