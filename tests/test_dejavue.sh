@@ -2455,6 +2455,44 @@ test_recall_by_artifact() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 153. changelog surfaces decisions (title + reason + confidence) over a range
+test_changelog_decisions() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    local base; base="$(git rev-list --max-parents=0 HEAD)"
+    dv decision "Adopt event sourcing" --reason "auditability" --confidence adopted >/dev/null 2>&1
+    local out; out="$(dv changelog "${base}..HEAD" 2>/dev/null)"
+    assert_contains "decisions section" "$out" "### Decisions" || return 1
+    assert_contains "decision title" "$out" "Adopt event sourcing" || return 1
+    assert_contains "decision reason" "$out" "auditability" || return 1
+    assert_contains "confidence label" "$out" "(adopted)" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 154. changelog includes git commits in the range
+test_changelog_commits() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    local base; base="$(git rev-list --max-parents=0 HEAD)"
+    touch feature.txt; git add .; git commit -qm "add feature toggle"
+    local out; out="$(dv changelog "${base}..HEAD" 2>/dev/null)"
+    assert_contains "commits section" "$out" "### Commits" || return 1
+    assert_contains "commit listed" "$out" "add feature toggle" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 155. changelog annotates superseded decisions
+test_changelog_superseded() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    local base; base="$(git rev-list --max-parents=0 HEAD)"
+    dv decision "Use SQLite" --reason "stdlib" >/dev/null 2>&1
+    dv decision "Use Postgres" --reason "scale" --supersedes "Use SQLite" >/dev/null 2>&1
+    local out; out="$(dv changelog "${base}..HEAD" 2>/dev/null)"
+    assert_contains "superseded annotation in changelog" "$out" "later superseded by 'Use Postgres'" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2634,6 +2672,9 @@ main() {
     run_test "150 decision --artifacts stored + in doc"       test_decision_artifacts
     run_test "151 blame by artifacts (precise)"               test_blame_by_artifacts
     run_test "152 recall by artifact path"                    test_recall_by_artifact
+    run_test "153 changelog surfaces decisions"               test_changelog_decisions
+    run_test "154 changelog includes commits"                 test_changelog_commits
+    run_test "155 changelog annotates superseded"             test_changelog_superseded
 
     echo ""
     echo "========================================"

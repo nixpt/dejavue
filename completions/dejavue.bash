@@ -5,7 +5,7 @@ _dejavue() {
     local cur prev words
     _init_completion || return
     local cmds="version init start changed decision state handoff context status \
-check archive roster config install-skill log blame note since ingest recall \
+check archive roster config install-skill log blame note since changelog ingest recall \
 worthiness get list annotate stats promote import export reference link search \
 diff timeline tag note-commit completion rejected trap incident invariant pattern entities"
     if [[ $COMP_CWORD -eq 1 ]]; then
