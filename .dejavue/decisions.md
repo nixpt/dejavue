@@ -173,3 +173,11 @@ Rejected alternatives:
 - **build dejavue explain first**: it is the killer command but composes lineage+confidence+entities, so it must come AFTER those inputs exist
 - **.dejavue/graph/ semantic graph store**: violates Axiom 0 (heavy) and the scratch itself warns no graph DB is needed
 
+
+## 2026-06-06T16:18:09-05:00 — [VERIFIED] supersedes read-back implemented; the earlier 'write-only' trap is RESOLVED (v2.1.0)
+
+Reason:
+v2.0.1's --supersedes was write-only (stored, never surfaced). v2.1.0 wires recall/since/context to show 'superseded by' via supersession_lookup() with EVENT-IDENTITY self-exclusion (ts is not unique — two decisions can share a second). The trap recorded earlier this session (tag:supersedes) is now historical.
+
+Artifacts: dejavue.py
+
