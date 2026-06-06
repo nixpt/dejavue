@@ -156,9 +156,9 @@ Design + waves: `docs/plans/2026-06-05-dcp-maturation.md`.
 
 ---
 
-## 🔮 v2.x — agent workflow depth
+## ✅ v2.0.1 — agent workflow depth (2026-06-06)
 
-Concrete, low-effort, high agent-value. No new deps required for any of these.
+Shipped. No new deps (Axiom 0 preserved). 43 commands, 134/134 tests.
 
 ### Git integration deepening
 
