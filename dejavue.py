@@ -188,6 +188,20 @@ def git_run(*cmd):
         return ""
 
 
+def normalize_entities(args):
+    """Normalize the optional repeatable --entity flag into a sorted-unique list of
+    kebab-case subject strings ("Auth System" -> "auth-system"). Returns [] if none.
+    Deliberately just strings — NOT a graph or registry (Axiom 0)."""
+    raw = getattr(args, "entity", None) or []
+    seen, out = set(), []
+    for e in raw:
+        norm = "-".join(str(e).strip().lower().split())
+        if norm and norm not in seen:
+            seen.add(norm)
+            out.append(norm)
+    return out
+
+
 def append_event(event):
     DEJAVUE_DIR.mkdir(exist_ok=True)
     base = {"ts": now(), **git_info(), **event}
@@ -307,6 +321,7 @@ def rebuild_fts():
                         ev.get("tag", ""),
                         ev.get("content", ""),
                         ev.get("event_type", ""),  # enables recall "blocker"/"question"/etc.
+                        " ".join(ev.get("entities") or []),  # enables recall by entity
                     ]
                     text = " ".join(p for p in parts if p)
                     rows.append((ev.get("ts", ""), ev.get("event", ""), text, "timeline.jsonl"))
@@ -787,6 +802,7 @@ def cmd_decision(args):
         "outcome": args.outcome or "",
         "supersedes": supersedes,
         "durability": durability,
+        "entities": normalize_entities(args),
     })
     print(f"{event_type.capitalize()} recorded: {args.title}")
 
@@ -1410,6 +1426,7 @@ def cmd_blame(args):
     """Show decisions and events that touch a given file path."""
     path = args.path
     events = _load_events()
+    ent_q = "-".join(path.strip().lower().split())  # also match a normalized entity name
 
     relevant = []
     for ev in events:
@@ -1419,6 +1436,7 @@ def cmd_blame(args):
             or path in ev.get("decision_reason", ev.get("reason", ""))
             or path in ev.get("decision_title", ev.get("decision", ""))
             or path in ev.get("content", "")
+            or ent_q in (ev.get("entities") or [])
         )
         if hit:
             relevant.append(ev)
@@ -1455,6 +1473,7 @@ def cmd_note(args):
         "event_type": event_type,
         "summary": args.text,
         "tag": args.tag or "",
+        "entities": normalize_entities(args),
     })
     print(f"{event_type.capitalize()} recorded.")
 
@@ -1505,6 +1524,7 @@ def cmd_trap(args):
         "event": "trap",
         "summary": args.text,
         "tag": args.tag or "",
+        "entities": normalize_entities(args),
     })
     print("Trap recorded.")
 
@@ -1516,6 +1536,7 @@ def cmd_incident(args):
         "event": "incident",
         "summary": args.text,
         "tag": args.tag or "",
+        "entities": normalize_entities(args),
     })
     print("Incident recorded.")
 
@@ -1534,6 +1555,7 @@ def cmd_invariant(args):
         "event": "invariant",
         "summary": args.text,
         "tag": args.tag or "",
+        "entities": normalize_entities(args),
     })
     print("Invariant recorded.")
 
@@ -1552,6 +1574,7 @@ def cmd_pattern(args):
         "event": "pattern",
         "summary": args.text,
         "tag": args.tag or "",
+        "entities": normalize_entities(args),
     })
     print("Pattern recorded.")
 
@@ -2899,6 +2922,38 @@ def cmd_tag(args):
             print(f"  [{ts}] {kind}  {summary}")
 
 
+def cmd_entities(args):
+    """List entities across the timeline, or show events referencing one entity."""
+    events = _load_events()
+    name = getattr(args, "name", None)
+
+    if name:
+        q = "-".join(name.strip().lower().split())
+        matched = [ev for ev in events if q in (ev.get("entities") or [])]
+        if not matched:
+            print(f"No events reference entity '@{q}'.")
+            return
+        print(f"Events referencing @{q} ({len(matched)}):\n")
+        for ev in matched:
+            ts = (ev.get("ts") or "")[:19]
+            kind = ev.get("event", "")
+            summary = ev.get("summary", "")
+            print(f"  [{ts}] {kind}  {summary}")
+        return
+
+    counts = {}
+    for ev in events:
+        for e in (ev.get("entities") or []):
+            counts[e] = counts.get(e, 0) + 1
+    if not counts:
+        print("No entities recorded yet.")
+        print("Tag events with: dejavue decision '<title>' --reason '...' --entity <name>")
+        return
+    print(f"Entities ({len(counts)}):\n")
+    for e, c in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
+        print(f"  @{e:<24} {c:>4} event{'s' if c != 1 else ''}")
+
+
 def cmd_note_commit(args):
     """Write a git note on a commit linking it to the most recent dejavue event.
     Uses 'git notes' — metadata stored outside the commit object, so the commit SHA is
@@ -3094,7 +3149,7 @@ _dejavue() {
     local cmds="version init start changed decision state handoff context status \\
 check archive roster config install-skill log blame note since ingest recall \\
 worthiness get list annotate stats promote import export reference link search \\
-diff timeline tag note-commit completion rejected trap incident invariant pattern"
+diff timeline tag note-commit completion rejected trap incident invariant pattern entities"
     if [[ $COMP_CWORD -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$cmds" -- "$cur"))
         return
@@ -3102,15 +3157,15 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
     local subcmd="${COMP_WORDS[1]}"
     case "$subcmd" in
         decision)
-            COMPREPLY=($(compgen -W "--reason --rejected --agent --type --tag --supersedes --durability" -- "$cur"))
+            COMPREPLY=($(compgen -W "--reason --rejected --agent --type --tag --supersedes --durability --entity" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "decision blocker claim question experiment checkpoint" -- "$cur"))
             elif [[ "$prev" == "--durability" ]]; then
                 COMPREPLY=($(compgen -W "temporary tactical strategic constitutional" -- "$cur"))
             fi ;;
-        trap|incident|invariant|pattern) COMPREPLY=($(compgen -W "--agent --tag" -- "$cur")) ;;
+        trap|incident|invariant|pattern) COMPREPLY=($(compgen -W "--agent --tag --entity" -- "$cur")) ;;
         note)
-            COMPREPLY=($(compgen -W "--agent --tag --type" -- "$cur"))
+            COMPREPLY=($(compgen -W "--agent --tag --type --entity" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "note blocker claim question observation" -- "$cur"))
             fi ;;
@@ -3214,6 +3269,7 @@ _dejavue() {
                 'incident:Record an operational incident (outage, corruption, migration)'
                 'invariant:Record an architectural invariant that must always hold'
                 'pattern:Record a discovered convention/pattern (naming, idiom, structure)'
+                'entities:List entities, or show events referencing one entity'
             )
             _describe 'subcommand' subcommands ;;
         args)
@@ -3226,15 +3282,18 @@ _dejavue() {
                         '--type[Event type]:type:(decision blocker claim question experiment checkpoint)' \\
                         '--supersedes[ID or title of a prior decision this supersedes]:event-id' \\
                         '--durability[How long-lived this decision is]:durability:(temporary tactical strategic constitutional)' \\
+                        '*--entity[Subject this event is about, repeatable]:entity' \\
                         '--tag[Tag]:tag' ;;
                 trap|incident|invariant|pattern)
                     _arguments \\
                         '--agent[Agent name]:agent' \\
+                        '*--entity[Subject this event is about, repeatable]:entity' \\
                         '--tag[Tag]:tag' ;;
                 note)
                     _arguments \\
                         '--agent[Agent name]:agent' \\
                         '--tag[Tag]:tag' \\
+                        '*--entity[Subject this event is about, repeatable]:entity' \\
                         '--type[Note type]:type:(note blocker claim question observation)' ;;
                 export)
                     _arguments \\
@@ -3274,7 +3333,7 @@ _FISH_COMPLETION = """\
 set -l cmds version init start changed decision state handoff context status \\
     check archive roster config install-skill log blame note since ingest recall \\
     worthiness get list annotate stats promote import export reference link search \\
-    diff timeline tag note-commit completion rejected trap incident invariant pattern
+    diff timeline tag note-commit completion rejected trap incident invariant pattern entities
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
@@ -3300,6 +3359,7 @@ complete -c dejavue -n "__fish_seen_subcommand_from completion" -a "bash zsh fis
 # common flags
 complete -c dejavue -n "__fish_seen_subcommand_from decision note start trap incident invariant pattern" -l agent -d "Agent name"
 complete -c dejavue -n "__fish_seen_subcommand_from decision note trap incident invariant pattern" -l tag -d "Tag"
+complete -c dejavue -n "__fish_seen_subcommand_from decision note trap incident invariant pattern" -l entity -d "Subject (repeatable)"
 complete -c dejavue -n "__fish_seen_subcommand_from log recall since" -l since -d "Since date or commit"
 complete -c dejavue -n "__fish_seen_subcommand_from check" -l fix -d "Auto-fix issues"
 complete -c dejavue -n "__fish_seen_subcommand_from import" -rF
@@ -3359,6 +3419,7 @@ def main():
     p.add_argument("--durability", choices=["temporary", "tactical", "strategic", "constitutional"],
                    help="How long-lived this decision is.")
     p.add_argument("--agent", default=None)
+    p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_decision)
 
     p = sub.add_parser("state", help="Overwrite state.md with current snapshot.")
@@ -3436,6 +3497,7 @@ def main():
                    choices=sorted(NOTE_TYPES),
                    help="Event sub-type (default: note).")
     p.add_argument("--agent", default=None)
+    p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_note)
 
     p = sub.add_parser("since", help="Temporal delta since a date, commit, or agent's last session.")
@@ -3585,25 +3647,33 @@ def main():
     p.add_argument("text", help="What the trap is.")
     p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
     p.add_argument("--tag", metavar="TAG", help="Tag.")
+    p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_trap)
 
     p = sub.add_parser("incident", help="Record an operational incident: outage, data corruption, failed migration.")
     p.add_argument("text", help="Incident description.")
     p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
     p.add_argument("--tag", metavar="TAG", help="Tag.")
+    p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_incident)
 
     p = sub.add_parser("invariant", help="Record an architectural invariant that must always hold.")
     p.add_argument("text", help="The invariant statement.")
     p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
     p.add_argument("--tag", metavar="TAG", help="Tag.")
+    p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_invariant)
 
     p = sub.add_parser("pattern", help="Record a discovered convention/pattern: naming, idiom, structure.")
     p.add_argument("text", help="The convention or pattern.")
     p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
     p.add_argument("--tag", metavar="TAG", help="Tag.")
+    p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_pattern)
+
+    p = sub.add_parser("entities", help="List entities, or show events referencing one entity.")
+    p.add_argument("name", nargs="?", help="Entity to filter on (optional; omit to list all).")
+    p.set_defaults(func=cmd_entities)
 
     args = parser.parse_args()
     args.func(args)

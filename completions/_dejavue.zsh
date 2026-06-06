@@ -52,6 +52,7 @@ _dejavue() {
                 'incident:Record an operational incident (outage, corruption, migration)'
                 'invariant:Record an architectural invariant that must always hold'
                 'pattern:Record a discovered convention/pattern (naming, idiom, structure)'
+                'entities:List entities, or show events referencing one entity'
             )
             _describe 'subcommand' subcommands ;;
         args)
@@ -64,15 +65,18 @@ _dejavue() {
                         '--type[Event type]:type:(decision blocker claim question experiment checkpoint)' \
                         '--supersedes[ID or title of a prior decision this supersedes]:event-id' \
                         '--durability[How long-lived this decision is]:durability:(temporary tactical strategic constitutional)' \
+                        '*--entity[Subject this event is about, repeatable]:entity' \
                         '--tag[Tag]:tag' ;;
                 trap|incident|invariant|pattern)
                     _arguments \
                         '--agent[Agent name]:agent' \
+                        '*--entity[Subject this event is about, repeatable]:entity' \
                         '--tag[Tag]:tag' ;;
                 note)
                     _arguments \
                         '--agent[Agent name]:agent' \
                         '--tag[Tag]:tag' \
+                        '*--entity[Subject this event is about, repeatable]:entity' \
                         '--type[Note type]:type:(note blocker claim question observation)' ;;
                 export)
                     _arguments \

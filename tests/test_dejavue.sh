@@ -2293,6 +2293,62 @@ test_recall_finds_pattern_body() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 138. --entity is stored and recall finds events by entity
+test_entity_recall() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "Adopt Zorp engine" --reason "fast" --entity zorpengine >/dev/null 2>&1
+    local out; out="$(dv recall zorpengine 2>/dev/null)"
+    assert_contains "recall by entity finds the decision" "$out" "Adopt Zorp engine" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 139. blame surfaces events by entity name (not just file path)
+test_blame_by_entity() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv note "tuned the eviction policy" --entity rediscache >/dev/null 2>&1
+    local out; out="$(dv blame rediscache 2>/dev/null)"
+    assert_contains "blame by entity surfaces the note" "$out" "tuned the eviction policy" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 140. entities (no arg) lists entities with counts
+test_entities_list() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "d1" --reason r --entity alpha --entity beta >/dev/null 2>&1
+    dv note "n1" --entity alpha >/dev/null 2>&1
+    local out; out="$(dv entities 2>/dev/null)"
+    assert_contains "lists alpha" "$out" "@alpha" || return 1
+    assert_contains "lists beta" "$out" "@beta" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 141. entities <name> filters events referencing one entity
+test_entities_filter() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "use alpha lib" --reason r --entity alpha >/dev/null 2>&1
+    dv note "alpha note" --entity alpha >/dev/null 2>&1
+    dv note "unrelated" --entity gamma >/dev/null 2>&1
+    local out; out="$(dv entities alpha 2>/dev/null)"
+    assert_contains "shows alpha decision" "$out" "use alpha lib" || return 1
+    assert_contains "shows alpha note" "$out" "alpha note" || return 1
+    assert_not_contains "excludes gamma event" "$out" "unrelated" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 142. entity names are normalized to kebab-case (query side too)
+test_entity_normalization() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv trap "AuthManager does not handle OAuth" --entity "Auth System" >/dev/null 2>&1
+    assert_contains "stored as kebab in entities list" "$(dv entities 2>/dev/null)" "@auth-system" || return 1
+    assert_contains "filter by unnormalized query matches" "$(dv entities 'Auth System' 2>/dev/null)" "AuthManager does not handle OAuth" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2457,6 +2513,11 @@ main() {
     run_test "135 context surfaces patterns.md"               test_context_shows_patterns
     run_test "136 pattern before init self-creates dir"       test_pattern_before_init
     run_test "137 recall finds patterns.md body"              test_recall_finds_pattern_body
+    run_test "138 --entity stored + recall by entity"         test_entity_recall
+    run_test "139 blame by entity"                            test_blame_by_entity
+    run_test "140 entities lists with counts"                 test_entities_list
+    run_test "141 entities <name> filters events"             test_entities_filter
+    run_test "142 entity names normalized to kebab"           test_entity_normalization
 
     echo ""
     echo "========================================"
