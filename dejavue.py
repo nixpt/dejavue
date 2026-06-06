@@ -726,8 +726,14 @@ def cmd_decision(args):
                 opt, reason = r, ""
             rejected.append({"option": opt, "reason": reason})
 
+    supersedes = getattr(args, "supersedes", None) or ""
+    durability = getattr(args, "durability", None) or ""
+
     type_label = f"[{event_type.upper()}] " if event_type != "decision" else ""
-    entry = f"\n## {ts} — {type_label}{args.title}\n\nReason:\n{args.reason}\n"
+    dur_label = f"[{durability.upper()}] " if durability else ""
+    entry = f"\n## {ts} — {dur_label}{type_label}{args.title}\n\nReason:\n{args.reason}\n"
+    if supersedes:
+        entry += f"\nSupersedes: {supersedes}\n"
     if rejected:
         entry += "\nRejected alternatives:\n"
         for ra in rejected:
@@ -750,6 +756,8 @@ def cmd_decision(args):
         "summary": f"{event_type.capitalize()}: {args.title}",
         "rejected_alternatives": rejected,
         "outcome": args.outcome or "",
+        "supersedes": supersedes,
+        "durability": durability,
     })
     print(f"{event_type.capitalize()} recorded: {args.title}")
 
@@ -3190,6 +3198,10 @@ def main():
     p.add_argument("--type", dest="event_type", default="decision",
                    choices=sorted(DECISION_TYPES),
                    help="Event sub-type (default: decision).")
+    p.add_argument("--supersedes", metavar="EVENT-ID",
+                   help="ID or title of a prior decision this supersedes.")
+    p.add_argument("--durability", choices=["temporary", "tactical", "strategic", "constitutional"],
+                   help="How long-lived this decision is.")
     p.add_argument("--agent", default=None)
     p.set_defaults(func=cmd_decision)
 
