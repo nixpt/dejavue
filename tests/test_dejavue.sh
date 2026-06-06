@@ -2102,6 +2102,21 @@ test_decision_durability() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 123. since accepts git revision range (ref..ref)
+test_since_revision_range() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    touch first.txt; git add .; git commit -qm "first commit"
+    local base; base="$(git rev-list --max-parents=0 HEAD)"
+    touch second.txt; git add .; git commit -qm "second commit"
+    dv decision "Range test decision" --reason "for range since test" >/dev/null 2>&1
+    local out; out="$(dv since "${base}..HEAD" 2>/dev/null)"
+    assert_contains "range label in output" "$out" "range" || return 1
+    assert_contains "second commit in git delta" "$out" "second commit" || return 1
+    assert_contains "decision in timeline" "$out" "Range test decision" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2251,6 +2266,7 @@ main() {
     run_test "120 rejected filters by topic query"            test_rejected_filters_by_query
     run_test "121 decision --supersedes stored in event+doc"  test_decision_supersedes
     run_test "122 decision --durability stored in event+doc"  test_decision_durability
+    run_test "123 since accepts git revision range ref..ref"  test_since_revision_range
 
     echo ""
     echo "========================================"
