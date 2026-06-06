@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dejavue"
+version = "2.0.0"
+description = "Repo-local agent memory — capture the why that git can't."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+dejavue = "dejavue:main"
+
+[project.urls]
+Homepage = "https://github.com/nixpt/dejavue"
+Repository = "https://github.com/nixpt/dejavue"
+Changelog = "https://github.com/nixpt/dejavue/blob/master/CHANGELOG.md"
+
+[tool.setuptools]
+py-modules = ["dejavue"]
