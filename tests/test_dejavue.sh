@@ -2129,6 +2129,19 @@ test_init_installs_checkout_hook() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 125. note-commit --trailer amends commit message with Dejavue-Event trailer
+test_note_commit_trailer() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    touch file.txt; git add .; git commit -qm "initial commit"
+    dv decision "Trailer test" --reason "testing trailer flag" >/dev/null 2>&1
+    dv note-commit HEAD --trailer >/dev/null 2>&1
+    local msg; msg="$(git log -1 --format="%B")"
+    assert_contains "Dejavue-Event trailer in commit" "$msg" "Dejavue-Event:" || return 1
+    assert_contains "trailer has timestamp" "$msg" "Trailer test" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2280,6 +2293,7 @@ main() {
     run_test "122 decision --durability stored in event+doc"  test_decision_durability
     run_test "123 since accepts git revision range ref..ref"  test_since_revision_range
     run_test "124 init installs post-checkout hook"           test_init_installs_checkout_hook
+    run_test "125 note-commit --trailer amends commit msg"    test_note_commit_trailer
 
     echo ""
     echo "========================================"
