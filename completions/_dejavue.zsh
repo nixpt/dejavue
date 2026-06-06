@@ -47,6 +47,10 @@ _dejavue() {
                 'tag:List tags or filter events by tag'
                 'note-commit:Write a git note linking a commit to the last dejavue event'
                 'completion:Print shell completion script (bash, zsh, fish)'
+                'rejected:Show decisions with rejected alternatives, optionally filtered'
+                'trap:Record a known lie / trap (misleading name, fake abstraction)'
+                'incident:Record an operational incident (outage, corruption, migration)'
+                'invariant:Record an architectural invariant that must always hold'
             )
             _describe 'subcommand' subcommands ;;
         args)
@@ -57,6 +61,12 @@ _dejavue() {
                         '*--rejected[Rejected alternative and reason]:alt:reason' \
                         '--agent[Agent name]:agent' \
                         '--type[Event type]:type:(decision blocker claim question experiment checkpoint)' \
+                        '--supersedes[ID or title of a prior decision this supersedes]:event-id' \
+                        '--durability[How long-lived this decision is]:durability:(temporary tactical strategic constitutional)' \
+                        '--tag[Tag]:tag' ;;
+                trap|incident|invariant)
+                    _arguments \
+                        '--agent[Agent name]:agent' \
                         '--tag[Tag]:tag' ;;
                 note)
                     _arguments \
