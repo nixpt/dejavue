@@ -218,6 +218,8 @@ When `.dejavue/` ships in a repo, the split is:
 - `decisions.md` — architectural decisions
 - `handoff.md` — latest handoff
 - `references/` — hand-written reference cards (optional)
+- `context.md` — DCP adapter source (optional; used by `export --target`)
+- `dejavue/`, `dejavue-workflow/` — skill dirs copied by `init` for in-repo fallback (optional)
 
 **Ignored (per-checkout, rebuildable):**
 - `fts.db` — SQLite FTS5 index, rebuilt from JSONL on demand
@@ -256,6 +258,51 @@ per repo; future merges resolve cleanly. State.md and handoff.md are
 single-file overwrites and stay with git's normal merge (conflicts
 are rare and a human/agent resolves by hand).
 
+## DCP adapter bridge
+
+DCP/1.0 (DejaVue Context Protocol) lets a single `context.md` source
+file feed all the different agent config formats a repo might need
+(`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, etc.) without duplicating
+content.
+
+### Bootstrap `context.md` from an existing instructions file
+
+If the repo already has a `CLAUDE.md` or `AGENTS.md`:
+
+```bash
+dejavue import CLAUDE.md      # reads and seeds .dejavue/context.md
+```
+
+Imports the content into `context.md` as the canonical DCP source. The
+original file is left untouched — import is read-only.
+
+### Generate adapter files from `context.md`
+
+```bash
+dejavue export --target claude      # writes/updates CLAUDE.md
+dejavue export --target codex       # writes/updates AGENTS.md
+dejavue export --target gemini      # writes/updates .gemini/GEMINI.md
+dejavue export --target cursor      # writes/updates .cursorrules
+dejavue export --target copilot     # writes/updates .github/copilot-instructions.md
+dejavue export --target all         # all of the above in one pass
+```
+
+Each export is **non-destructive**: it writes a managed block
+(`<!-- dejavue:begin DCP/1.0 src=context.md hash=… -->…<!-- dejavue:end -->`)
+into the target file. Content outside that block is preserved. Re-run
+any time `context.md` changes — the hash guards against spurious writes.
+
+### Promote to a richer planning system
+
+When the project has outgrown plain dejavue memory and needs a full
+planning system:
+
+```bash
+dejavue promote --to planning     # bootstrap a .planning/ planning system
+```
+
+This graduates the project without losing the `.dejavue/` history.
+
 ## Common workflows
 
 ### Session boot
@@ -289,6 +336,19 @@ git add .dejavue/
 git commit -m "<your message — post-commit hook also records the diff>"
 ```
 
+### DCP multi-target export
+
+```bash
+# seed context.md from an existing instructions file, then generate all targets
+dejavue import CLAUDE.md
+dejavue export --target all
+git add .dejavue/context.md CLAUDE.md AGENTS.md
+git commit -m "chore: add DCP adapter bridge"
+```
+
+After that, keep `context.md` as the single source — re-run
+`dejavue export --target all` whenever it changes.
+
 ### Returning after a gap
 
 ```bash
@@ -315,6 +375,26 @@ Bad candidates:
 
 When in doubt, ask the repo owner. `.dejavue/` does ship in the repo;
 opting users in without their consent is intrusive.
+
+### What `dejavue init` installs
+
+For context: `dejavue init` does more than create `.dejavue/`. It also:
+
+1. **Writes a `CLAUDE.md` boot stub** — appends (or creates) a minimal
+   section pointing agents at `dejavue context` on arrival. Idempotent:
+   if the marker (`<!-- dejavue:discovery -->`) or any `dejavue context`
+   reference already exists, the stub is skipped.
+
+2. **Copies skills to `.dejavue/`** — copies `dejavue/` and
+   `dejavue-workflow/` from the adjacent `skills/` directory into the
+   repo's `.dejavue/` as an in-repo fallback. Agents without the skills
+   in their global `~/.claude/skills/` can still load them from
+   `python3 .dejavue/dejavue install-skill`.
+
+3. **Installs git hooks** — post-commit hook for auto `file_changed`
+   recording; `.gitattributes` `merge=union` entries.
+
+Use `--wizard` to also interactively seed `context.md` for DCP export.
 
 ## What dejavue is NOT
 
