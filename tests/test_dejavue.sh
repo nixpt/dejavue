@@ -1986,6 +1986,24 @@ test_init_claude_md_idempotent() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 113. init still writes CLAUDE.md when dejavue.py has no adjacent skills/ dir
+#      (standalone downloaded script — skill copy silently skips, CLAUDE.md still created)
+test_init_discovery_without_skills_dir() {
+    TEST_DIR="$(setup_repo)"
+    SCRIPT_DIR="$(mktemp -d)"
+    trap 'cd /; rm -rf "$TEST_DIR" "$SCRIPT_DIR"' EXIT
+
+    # Copy dejavue.py to a temp dir that has no skills/ sibling
+    cp "$DEJAVUE" "$SCRIPT_DIR/dejavue.py"
+    cd "$TEST_DIR"
+    "$PYTHON" "$SCRIPT_DIR/dejavue.py" init >/dev/null 2>&1
+    assert_file_exists "CLAUDE.md created even without skills/" "CLAUDE.md" || return 1
+    local content
+    content="$(cat CLAUDE.md)"
+    assert_contains "boot stub present without skills/" "$content" "dejavue:discovery" || return 1
+    cd /; rm -rf "$TEST_DIR" "$SCRIPT_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2125,6 +2143,7 @@ main() {
     run_test "110 DCP diff --format patch machine-readable"  test_dcp_diff_patch
     run_test "111 init creates CLAUDE.md with boot stub"     test_init_creates_claude_md
     run_test "112 init CLAUDE.md boot stub is idempotent"    test_init_claude_md_idempotent
+    run_test "113 init discovery skips skills/ gracefully"   test_init_discovery_without_skills_dir
 
     echo ""
     echo "========================================"
