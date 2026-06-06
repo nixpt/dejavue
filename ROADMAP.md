@@ -221,7 +221,7 @@ Axiom-0 clean (stdlib, single-file, additive fields). Favors the core loop
 
 **P0 — do next (all small, additive)**
 - ✅ **`pattern` command + `patterns.md`** — *shipped (unreleased)*; the missing core memory file (decisions / patterns / invariants / glossary). First P0 item, done.
-- `entities: []` on events + `recall`/`blame` by entity — the relational primitive, no graph DB.
+- ✅ **`entities: []` on events + `--entity` + `entities` command** — *shipped (unreleased)*; the relational primitive (recall/blame by subject, no graph DB). Second P0 item, done.
 - `--confidence {speculative…verified}` on `decision`/`note` — copy the `--durability` plumbing.
 - `decision --artifacts <path>` — bind the files a decision is about, precisely.
 - Wire `--supersedes` read-back into `recall`/`since`/`context` — the field is written (event + decisions.md) but **inert**; nothing surfaces "later overridden by…" as v2.0.1 implied. Closing a shipped-but-broken contract beats new features.
@@ -253,7 +253,7 @@ Bigger ideas that are correct directionally but need DCP/v2.x to stabilize first
 - **Project epochs** (`dejavue epoch begin/end "<name>"`) — named eras that frame old decisions. "pre-plugin-architecture decisions" are not as authoritative as "post-capsule-runtime decisions." Prevents old context from misleading agents after major rewrites. Distinct slice: **ordered milestone anchors** (`dejavue milestone "M2 — Capsule ABI freeze"`) — discrete onboarding/historical checkpoints above sessions, vs open-ended eras. (scratch: `deja1.md`)
 - **`dejavue explain <file|commit>`** — causal reconstruction. Not just "who edited this" but "why does this exist": decision chain + rejected alternatives + incidents + constraints. The long-term killer command.
 - **Confidence levels** on decisions — `speculative / proposed / experimental / adopted / deprecated / verified`. Without this, brainstorms and firm decisions look identical in recall.
-- **Entity references** (`entities: ["auth-system", "redis-cache", …]` field) — an optional normalized subject array on events so `recall`/`blame` can link cross-event *by subject* without a graph DB or embeddings. The single-valued `tag` links by one label and `derived_from` links by event ID; neither links by subject. Lightweight normalized strings only — explicitly **not** a graph or entity registry. (scratch: `deja.md`)
+- ✅ **Entity references** (`entities: ["auth-system", "redis-cache", …]`) *(shipped, unreleased)* — an optional normalized subject array on events so `recall`/`blame` link cross-event *by subject* without a graph DB. `--entity` on the six memory commands; `entities [<name>]` lists/filters; FTS-indexed. Lightweight strings only — **not** a graph or registry. (scratch: `deja.md`)
 - **Decision artifacts** (`artifacts: [path, …]` on `decision`) — explicitly bind the files a decision is about so `blame <file>` is precise instead of relying on fuzzy path-in-summary matching. (scratch: `deja_ext.md`)
 
 ### Institutional cognition
