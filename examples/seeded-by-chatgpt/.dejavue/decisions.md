@@ -26,7 +26,7 @@ Reason:
 JSONL is simple, merge-friendly, streamable, and easy for agents to append to.
 
 Consequence:
-`.memory-service/timeline.jsonl` becomes the canonical event stream.
+`.dejavue/timeline.jsonl` becomes the canonical event stream.
 
 ---
 
