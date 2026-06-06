@@ -1515,6 +1515,19 @@ def cmd_since(args):
     elif re.match(r"^\d{4}-\d{2}-\d{2}", ref):
         since_ts = ref
         since_label = f"date {ref}"
+    elif ".." in ref:
+        # git revision range e.g. main..HEAD, v1.0..v2.0, origin/main..HEAD
+        base, _, tip = ref.partition("..")
+        tip = tip or "HEAD"
+        ts_raw = git_run("git", "log", "-1", "--format=%aI", base)
+        if not ts_raw:
+            print(f"Cannot resolve '{base}' in range '{ref}'.")
+            return
+        since_ts = ts_raw
+        since_commit = base
+        since_label = f"range {ref}"
+        # override git output to use the explicit range, not base..HEAD
+        _range_override = ref
     else:
         ts_raw = git_run("git", "log", "-1", "--format=%aI", ref)
         if not ts_raw:
@@ -1523,12 +1536,14 @@ def cmd_since(args):
         since_ts = ts_raw
         since_commit = ref
         since_label = f"commit {ref} ({since_ts[:10]})"
+    _range_override = locals().get("_range_override")
 
     print(f"Since {since_label}:\n")
 
     if since_commit:
-        git_log = git_run("git", "log", "--oneline", f"{since_commit}..HEAD")
-        git_stat = git_run("git", "diff", "--stat", f"{since_commit}..HEAD")
+        git_range = _range_override if _range_override else f"{since_commit}..HEAD"
+        git_log = git_run("git", "log", "--oneline", git_range)
+        git_stat = git_run("git", "diff", "--stat", git_range)
     elif since_ts:
         git_log = git_run("git", "log", "--oneline", f"--since={since_ts[:10]}")
         git_stat = ""
