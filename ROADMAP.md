@@ -156,8 +156,67 @@ Design + waves: `docs/plans/2026-06-05-dcp-maturation.md`.
 
 ---
 
+## 🔮 v2.x — agent workflow depth
+
+Concrete, low-effort, high agent-value. No new deps required for any of these.
+
+### Git integration deepening
+
+- **`post-checkout` hook** — print a one-line handoff/state summary whenever `git checkout` or `git switch` changes the branch. Zero friction; fires automatically; agents know the context before they start typing. Install alongside the existing post-commit hook via `dejavue init`.
+- **`dejavue since <ref>..<ref>`** — accept git revision-range syntax (`main..HEAD`, `v1.0..v2.0`, `origin/main`) in addition to dates and commits. Makes `since` feel like a native git companion rather than a separate tool.
+- **`--supersedes <event-id>`** on `decision` — explicit contradiction tracking. Record that a new decision supersedes an older one; `recall` and `since` can surface "this was later overridden by…" context. Prevents stale decisions from looking authoritative.
+- **Commit message trailers (opt-in)** — `dejavue note-commit` can optionally append a `Dejavue-Event: <id>` trailer to the current commit message so the link travels with the commit to GitHub/GitLab. Opt-in flag only; never mandatory.
+
+### New event types
+
+- **`dejavue trap "<text>"`** — first-class "known lie / trap" event. Every mature codebase has misleading names, fake abstractions, historical hacks. Agents waste real time rediscovering them. `trap` events surface prominently in `blame` and `context`. Stored as `event_type: trap`.
+- **`dejavue incident "<text>"`** — first-class operational trauma. Outages, data corruption, failed migrations, security incidents. High-value memory that projects routinely lose. Stored as `event_type: incident`; surfaced in `since` and `context`.
+- **`dejavue invariant "<text>"`** — first-class architectural invariant ("capsules never access host FS directly", "append-only always"). Populates a `invariants.md` alongside `decisions.md`; surfaces in `context` as a prominent section. Stored as `event_type: invariant`.
+
+### Decision richness
+
+- **`dejavue rejected "<query>"`** — dedicated query command over rejected alternatives. Show all decisions where `--rejected` mentions a topic. The "why not X?" question agents ask constantly, answered in one command.
+- **`--supersedes <id>` + `--durability {temporary,tactical,strategic,constitutional}`** on `decision` — classify how long-lived a decision is and whether it supersedes a prior one. Improves recall quality by letting agents filter out tactical decisions when doing architectural reasoning.
+
+---
+
+## 🌅 v3.x and beyond
+
+Bigger ideas that are correct directionally but need DCP/v2.x to stabilize first.
+
+### Cognitive continuity
+
+- **Intent lineage** (`derived_from: [event-id, ...]` field) — explicit chains of intent across events. Lets agents reconstruct reasoning trees: goal → experiment → failure → decision → migration. Without lineage, memory is flat.
+- **Project epochs** (`dejavue epoch begin/end "<name>"`) — named eras that frame old decisions. "pre-plugin-architecture decisions" are not as authoritative as "post-capsule-runtime decisions." Prevents old context from misleading agents after major rewrites.
+- **`dejavue explain <file|commit>`** — causal reconstruction. Not just "who edited this" but "why does this exist": decision chain + rejected alternatives + incidents + constraints. The long-term killer command.
+- **Confidence levels** on decisions — `speculative / proposed / experimental / adopted / deprecated / verified`. Without this, brainstorms and firm decisions look identical in recall.
+
+### Memory management
+
+- **Memory compression lineage** — `archive` already compacts `file_changed` events; extend the principle. Define what is immutable (timeline entries), what may be summarized (dense note clusters), what may be regenerated (FTS, embeddings). Preserve provenance of what was compressed into what.
+- **Scope layering** — DCP is currently repo-scoped (correct for v1/v2). Acknowledge workspace/org/personal scope in the spec so the protocol can grow without backward-incompatible changes.
+- **Capability negotiation in DCP** — agents can query `dejavue capabilities` and learn what optional layers (semantic recall, managed blocks, schema version) are active in a repo. Prevents silent degradation when adapters encounter older implementations.
+
+### External tool integrations
+
+Follow the architecture pattern: **tool produces signal → thin importer → canonical `.dejavue` event → recall/since/blame**. Never a hard dependency.
+
+Integration tiers (informational; implementation deferred):
+
+| Tier | Integrations |
+|---|---|
+| **Tier 1 — local dev tools** | lint waivers (clippy/ruff), test annotations (pytest/cargo test), coverage gaps, dependency decisions, task runner discovery, ADR import/export |
+| **Tier 2 — forge tools** | GitHub/GitLab PR memory, issue linking, CI failure ingestion, release memory (`dejavue release v2.1.0`) |
+| **Tier 3 — AI/runtime tools** | MCP thin adapter (6 tools: context/since/recall/decision/handoff/blame), additional export targets (aider, opencode, continue, cline), shell prompt integration |
+| **Tier 4 — org memory** | incident ingestion from observability tools, cross-repo workspace scope, compliance/license memory, ownership maps |
+
+One rule for any integration: it must answer one of — *what changed / why / what failed / what was rejected / what should the next agent know / what invariant must not be violated*. If it can't, it doesn't belong here.
+
+---
+
 ## 🛑 Out of scope (won't ship in dejavue itself)
 
+- **Hosted platform / cloud sync** — dejavue must stay filesystem-first, local-first, append-only. The moment it requires a server, hosted infra, or cloud sync, adoption collapses and Axiom 0 breaks. This is the constraint that makes the design coherent.
 - **`joker-memory` Rust crate consolidation** (audit §860-962) — that's a Squadron-side refactor (unify `agent-mem` / `agent-lib` / `librarian-cli` / `joker-core/embedding` into one trait-backed Rust crate). Dejavue's role there is "thin Python consumer of the same contract." Tracked at the workspace level, not here.
 - **Inferno-style 9P/Styx service-tree namespaces, capsule isolation, et al.** — exosphere-side work.
 - **Anything that breaks the contract:** new runtime dependencies beyond stdlib, multi-file rewrites of `dejavue.py`, MCP-mandatory operation, mandatory config files.
