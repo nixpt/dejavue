@@ -65,6 +65,7 @@ _dejavue() {
                         '--type[Event type]:type:(decision blocker claim question experiment checkpoint)' \
                         '--supersedes[ID or title of a prior decision this supersedes]:event-id' \
                         '--durability[How long-lived this decision is]:durability:(temporary tactical strategic constitutional)' \
+                        '--confidence[How firm this decision is]:confidence:(speculative proposed experimental adopted deprecated verified)' \
                         '*--entity[Subject this event is about, repeatable]:entity' \
                         '--tag[Tag]:tag' ;;
                 trap|incident|invariant|pattern)
@@ -77,6 +78,7 @@ _dejavue() {
                         '--agent[Agent name]:agent' \
                         '--tag[Tag]:tag' \
                         '*--entity[Subject this event is about, repeatable]:entity' \
+                        '--confidence[How firm this note/claim is]:confidence:(speculative proposed experimental adopted deprecated verified)' \
                         '--type[Note type]:type:(note blocker claim question observation)' ;;
                 export)
                     _arguments \
