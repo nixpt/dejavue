@@ -2080,6 +2080,28 @@ test_rejected_filters_by_query() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 121. decision --supersedes stored in event and decisions.md
+test_decision_supersedes() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "New approach" --reason "better" --supersedes "old-decision-id" >/dev/null 2>&1
+    assert_event_recorded "supersedes in event" ".dejavue/timeline.jsonl" "supersedes" "old-decision-id" || return 1
+    local doc; doc="$(cat .dejavue/decisions.md)"
+    assert_contains "supersedes in doc" "$doc" "Supersedes: old-decision-id" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 122. decision --durability stored in event and decisions.md heading
+test_decision_durability() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "Append-only timeline" --reason "git-friendly" --durability constitutional >/dev/null 2>&1
+    assert_event_recorded "durability in event" ".dejavue/timeline.jsonl" "durability" "constitutional" || return 1
+    local doc; doc="$(cat .dejavue/decisions.md)"
+    assert_contains "durability label in heading" "$doc" "[CONSTITUTIONAL]" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2227,6 +2249,8 @@ main() {
     run_test "118 context surfaces invariants.md"             test_context_shows_invariants
     run_test "119 rejected lists all rejected alternatives"   test_rejected_lists_all
     run_test "120 rejected filters by topic query"            test_rejected_filters_by_query
+    run_test "121 decision --supersedes stored in event+doc"  test_decision_supersedes
+    run_test "122 decision --durability stored in event+doc"  test_decision_durability
 
     echo ""
     echo "========================================"
