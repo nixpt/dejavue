@@ -51,6 +51,7 @@ _dejavue() {
                 'trap:Record a known lie / trap (misleading name, fake abstraction)'
                 'incident:Record an operational incident (outage, corruption, migration)'
                 'invariant:Record an architectural invariant that must always hold'
+                'pattern:Record a discovered convention/pattern (naming, idiom, structure)'
             )
             _describe 'subcommand' subcommands ;;
         args)
@@ -64,7 +65,7 @@ _dejavue() {
                         '--supersedes[ID or title of a prior decision this supersedes]:event-id' \
                         '--durability[How long-lived this decision is]:durability:(temporary tactical strategic constitutional)' \
                         '--tag[Tag]:tag' ;;
-                trap|incident|invariant)
+                trap|incident|invariant|pattern)
                     _arguments \
                         '--agent[Agent name]:agent' \
                         '--tag[Tag]:tag' ;;

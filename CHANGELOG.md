@@ -5,6 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 **The on-disk format is stable as of v1.0.0.** `.dejavue/` files written by
 any v1.x release can be read by any later v1.x release without migration.
 
+## [Unreleased]
+
+### Added
+
+- **`dejavue pattern "<text>"`** — record a discovered convention/pattern (naming,
+  idiom, structure). Appends to `.dejavue/patterns.md` — the missing core memory
+  file alongside `decisions.md` / `invariants.md` — and is surfaced by `context`,
+  indexed by `recall`, `merge=union` in `.gitattributes`, and scaffolded by `init`.
+  Same mold as `trap` / `invariant`. First P0 item from the design backlog roadmap audit.
+
 ## [2.0.2] — 2026-06-06
 
 **Correctness pass over the v2.0.1 feature set.** No new surface area; these fix

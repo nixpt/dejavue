@@ -220,6 +220,7 @@ Axiom-0 clean (stdlib, single-file, additive fields). Favors the core loop
 (capture the *why*, keep recall trustworthy) and high value / low effort.
 
 **P0 — do next (all small, additive)**
+- ✅ **`pattern` command + `patterns.md`** — *shipped (unreleased)*; the missing core memory file (decisions / patterns / invariants / glossary). First P0 item, done.
 - `entities: []` on events + `recall`/`blame` by entity — the relational primitive, no graph DB.
 - `--confidence {speculative…verified}` on `decision`/`note` — copy the `--durability` plumbing.
 - `decision --artifacts <path>` — bind the files a decision is about, precisely.
@@ -261,7 +262,7 @@ Multi-writer / project-identity ideas the scratch raised that nothing else recor
 (surfaced by the 2026-06-06 audit as the roadmap's main blind spot). All additive
 fields, Axiom-0 clean.
 
-- **`patterns.md` + `pattern`/`convention` command** — the missing 4th core memory file (decisions / patterns / failures / glossary); dejavue ships 3. Discovered naming/idiom/structure conventions, distinct from decisions; same mold as `trap`/`invariant`. (scratch: `deja_ext.md`)
+- ✅ **`pattern` command + `patterns.md`** *(shipped, unreleased)* — the previously-missing core memory file (decisions / patterns / invariants / glossary). Discovered naming/idiom/structure conventions, distinct from decisions; same mold as `trap`/`invariant`. (scratch: `deja_ext.md`)
 - **`author_type` field** (`human / agent / orchestrator / ci / bot`) — trust-typing for the multi-writer reality. Records *what kind* of writer, not just *who* (the existing `agent` string). Not access control. (scratch: `deja1.md`)
 - **Tension tracking** (`tension: [security, performance]`) — live *unresolved* architectural tensions as standing institutional memory; distinct from `--rejected` (discarded) and `--supersedes` (resolved). (scratch: `deja1.md`)
 - **Project values / philosophy layer** — a soft `values: []` array (capability-first / local-first / composability) so agents infer solution-fit; distinct from hard `invariant`s. (scratch: `deja1.md`)
