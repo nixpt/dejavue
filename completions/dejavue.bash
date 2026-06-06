@@ -15,17 +15,21 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
     local subcmd="${COMP_WORDS[1]}"
     case "$subcmd" in
         decision)
-            COMPREPLY=($(compgen -W "--reason --rejected --agent --type --tag --supersedes --durability --entity" -- "$cur"))
+            COMPREPLY=($(compgen -W "--reason --rejected --agent --type --tag --supersedes --durability --confidence --entity" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "decision blocker claim question experiment checkpoint" -- "$cur"))
             elif [[ "$prev" == "--durability" ]]; then
                 COMPREPLY=($(compgen -W "temporary tactical strategic constitutional" -- "$cur"))
+            elif [[ "$prev" == "--confidence" ]]; then
+                COMPREPLY=($(compgen -W "speculative proposed experimental adopted deprecated verified" -- "$cur"))
             fi ;;
         trap|incident|invariant|pattern) COMPREPLY=($(compgen -W "--agent --tag --entity" -- "$cur")) ;;
         note)
-            COMPREPLY=($(compgen -W "--agent --tag --type --entity" -- "$cur"))
+            COMPREPLY=($(compgen -W "--agent --tag --type --entity --confidence" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "note blocker claim question observation" -- "$cur"))
+            elif [[ "$prev" == "--confidence" ]]; then
+                COMPREPLY=($(compgen -W "speculative proposed experimental adopted deprecated verified" -- "$cur"))
             fi ;;
         start)    COMPREPLY=($(compgen -W "--agent --goal" -- "$cur")) ;;
         state)    COMPREPLY=($(compgen -W "--summary --agent" -- "$cur")) ;;
