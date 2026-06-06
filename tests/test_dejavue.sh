@@ -2142,6 +2142,106 @@ test_note_commit_trailer() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 126. note-commit --trailer keeps the git note on the SHIPPED (post-amend) commit
+test_note_commit_trailer_note_follows_amend() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    touch file.txt; git add .; git commit -qm "initial commit"
+    dv decision "Trailer note test" --reason "note must follow the amend" >/dev/null 2>&1
+    dv note-commit HEAD --trailer >/dev/null 2>&1
+    # the amend rewrote HEAD's SHA; the note must be on the new HEAD, not the orphaned old SHA
+    local note; note="$(git notes show HEAD 2>/dev/null)"
+    assert_contains "note present on shipped HEAD" "$note" "Dejavue-Event:" || return 1
+    local msg; msg="$(git log -1 --format='%B')"
+    assert_contains "trailer present on shipped HEAD" "$msg" "Dejavue-Event:" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 127. note-commit --trailer refuses a non-HEAD sha instead of corrupting HEAD's message
+test_note_commit_trailer_refuses_non_head() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    touch a.txt; git add .; git commit -qm "first commit"
+    local first; first="$(git rev-parse HEAD)"
+    touch b.txt; git add .; git commit -qm "second commit"
+    dv decision "Non-head test" --reason "must not corrupt HEAD" >/dev/null 2>&1
+    local out; out="$(dv note-commit "$first" --trailer 2>&1)"
+    assert_contains "refuses non-HEAD sha" "$out" "can only amend HEAD" || return 1
+    local head_msg; head_msg="$(git log -1 --format='%B')"
+    assert_contains "HEAD message untouched" "$head_msg" "second commit" || return 1
+    assert_not_contains "no trailer leaked onto HEAD" "$head_msg" "Dejavue-Event:" || return 1
+    assert_eq "first commit message unchanged" "$(git log -1 --format='%s' "$first")" "first commit" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 128. note-commit --trailer refuses to fold staged changes into the amended commit
+test_note_commit_trailer_refuses_staged() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    touch file.txt; git add .; git commit -qm "initial commit"
+    dv decision "Staged test" --reason "must not fold staged work" >/dev/null 2>&1
+    echo "new work" > unrelated.txt; git add unrelated.txt   # staged but not committed
+    local out; out="$(dv note-commit HEAD --trailer 2>&1)"
+    assert_contains "refuses with staged changes" "$out" "Refusing to amend" || return 1
+    assert_eq "staged file not folded into HEAD" "$(git ls-tree --name-only HEAD unrelated.txt)" "" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 129. invariant before init self-creates .dejavue/ instead of crashing
+test_invariant_before_init() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    # deliberately NO `dv init`
+    local rc; dv invariant "capsules never touch host FS" >/dev/null 2>&1; rc=$?
+    assert_eq "invariant exits 0 without prior init" "$rc" "0" || return 1
+    assert_file_exists "invariants.md created" ".dejavue/invariants.md" || return 1
+    assert_contains "invariant text written" "$(cat .dejavue/invariants.md)" "host FS" || return 1
+    assert_event_recorded "invariant event recorded" ".dejavue/timeline.jsonl" "event" "invariant" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 130. link tolerates timeline events with explicitly-null commit/summary/decision_reason fields
+test_link_tolerates_null_commit() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    # commit is not the queried short SHA, so the sibling summary/decision_reason predicates are evaluated too
+    printf '%s\n' '{"ts":"2026-01-01T00:00:00-00:00","event":"handoff","commit":null,"summary":"x"}'           >> .dejavue/timeline.jsonl
+    printf '%s\n' '{"ts":"2026-01-01T00:00:01-00:00","event":"handoff","commit":"abc1234","summary":null}'      >> .dejavue/timeline.jsonl
+    printf '%s\n' '{"ts":"2026-01-01T00:00:02-00:00","event":"decision","commit":"abc1234","decision_reason":null}' >> .dejavue/timeline.jsonl
+    local rc; dv link deadbee >/dev/null 2>&1; rc=$?
+    assert_eq "link does not crash on null commit/summary/decision_reason" "$rc" "0" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 131. since base..tip excludes events recorded after the tip (upper bound honored)
+test_since_range_excludes_after_tip() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    touch base.txt; git add .; git commit -qm "base commit"
+    local base; base="$(git rev-parse HEAD)"
+    dv decision "Inside range decision" --reason "within base..tip" >/dev/null 2>&1
+    touch mid.txt; git add .; git commit -qm "mid commit"
+    local mid; mid="$(git rev-parse HEAD)"
+    sleep 1   # ensure the next event's timestamp is strictly past the tip commit's date
+    dv decision "Outside range decision" --reason "after the tip" >/dev/null 2>&1
+    local out; out="$(dv since "${base}..${mid}" 2>/dev/null)"
+    assert_contains "in-range decision present" "$out" "Inside range decision" || return 1
+    assert_not_contains "post-tip decision excluded" "$out" "Outside range decision" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 132. context tolerates timeline lines that are valid JSON but not objects
+test_context_tolerates_non_dict_timeline_line() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv trap "AuthManager does not handle OAuth" >/dev/null 2>&1
+    printf '%s\n' '12345' >> .dejavue/timeline.jsonl   # valid JSON scalar, not a dict
+    printf '%s\n' 'null'  >> .dejavue/timeline.jsonl
+    local out rc; out="$(dv context 2>/dev/null)"; rc=$?
+    assert_eq "context survives non-dict timeline line" "$rc" "0" || return 1
+    assert_contains "trap still surfaces in context" "$out" "AuthManager does not handle OAuth" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2294,6 +2394,13 @@ main() {
     run_test "123 since accepts git revision range ref..ref"  test_since_revision_range
     run_test "124 init installs post-checkout hook"           test_init_installs_checkout_hook
     run_test "125 note-commit --trailer amends commit msg"    test_note_commit_trailer
+    run_test "126 note-commit --trailer note follows amend"   test_note_commit_trailer_note_follows_amend
+    run_test "127 note-commit --trailer refuses non-HEAD sha" test_note_commit_trailer_refuses_non_head
+    run_test "128 note-commit --trailer refuses staged work"  test_note_commit_trailer_refuses_staged
+    run_test "129 invariant before init self-creates dir"     test_invariant_before_init
+    run_test "130 link tolerates null commit field"           test_link_tolerates_null_commit
+    run_test "131 since base..tip excludes post-tip events"   test_since_range_excludes_after_tip
+    run_test "132 context tolerates non-dict timeline line"   test_context_tolerates_non_dict_timeline_line
 
     echo ""
     echo "========================================"
