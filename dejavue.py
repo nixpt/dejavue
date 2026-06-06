@@ -202,6 +202,19 @@ def normalize_entities(args):
     return out
 
 
+def normalize_artifacts(args):
+    """Normalize the optional repeatable --artifacts flag into a deduped list of stripped
+    file paths (kept verbatim — unlike entities, paths are not kebab-cased)."""
+    raw = getattr(args, "artifacts", None) or []
+    seen, out = set(), []
+    for a in raw:
+        p = str(a).strip()
+        if p and p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
 def supersession_lookup(events):
     """Reverse index for --supersedes (which was otherwise write-only). Returns
     overridden_by(decision_event) -> [(superseding_title, ts_date), ...]: a decision is
@@ -353,6 +366,7 @@ def rebuild_fts():
                         ev.get("event_type", ""),  # enables recall "blocker"/"question"/etc.
                         " ".join(ev.get("entities") or []),  # enables recall by entity
                         ev.get("confidence", ""),  # enables recall "speculative"/"verified"/etc.
+                        " ".join(ev.get("artifacts") or []),  # enables recall by artifact path
                     ]
                     text = " ".join(p for p in parts if p)
                     rows.append((ev.get("ts", ""), ev.get("event", ""), text, "timeline.jsonl"))
@@ -804,6 +818,7 @@ def cmd_decision(args):
     supersedes = getattr(args, "supersedes", None) or ""
     durability = getattr(args, "durability", None) or ""
     confidence = getattr(args, "confidence", None) or ""
+    artifacts = normalize_artifacts(args)
 
     type_label = f"[{event_type.upper()}] " if event_type != "decision" else ""
     dur_label = f"[{durability.upper()}] " if durability else ""
@@ -811,6 +826,8 @@ def cmd_decision(args):
     entry = f"\n## {ts} — {dur_label}{conf_label}{type_label}{args.title}\n\nReason:\n{args.reason}\n"
     if supersedes:
         entry += f"\nSupersedes: {supersedes}\n"
+    if artifacts:
+        entry += f"\nArtifacts: {', '.join(artifacts)}\n"
     if rejected:
         entry += "\nRejected alternatives:\n"
         for ra in rejected:
@@ -837,6 +854,7 @@ def cmd_decision(args):
         "durability": durability,
         "confidence": confidence,
         "entities": normalize_entities(args),
+        "artifacts": artifacts,
     })
     print(f"{event_type.capitalize()} recorded: {args.title}")
 
@@ -1488,6 +1506,7 @@ def cmd_blame(args):
             or path in ev.get("decision_title", ev.get("decision", ""))
             or path in ev.get("content", "")
             or ent_q in (ev.get("entities") or [])
+            or any(path == a or path in a or a in path for a in (ev.get("artifacts") or []))
         )
         if hit:
             relevant.append(ev)
@@ -3237,7 +3256,7 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
     local subcmd="${COMP_WORDS[1]}"
     case "$subcmd" in
         decision)
-            COMPREPLY=($(compgen -W "--reason --rejected --agent --type --tag --supersedes --durability --confidence --entity" -- "$cur"))
+            COMPREPLY=($(compgen -W "--reason --rejected --agent --type --tag --supersedes --durability --confidence --entity --artifacts" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "decision blocker claim question experiment checkpoint" -- "$cur"))
             elif [[ "$prev" == "--durability" ]]; then
@@ -3367,6 +3386,7 @@ _dejavue() {
                         '--supersedes[ID or title of a prior decision this supersedes]:event-id' \\
                         '--durability[How long-lived this decision is]:durability:(temporary tactical strategic constitutional)' \\
                         '--confidence[How firm this decision is]:confidence:(speculative proposed experimental adopted deprecated verified)' \\
+                        '*--artifacts[File this decision is about, repeatable]:file:_files' \\
                         '*--entity[Subject this event is about, repeatable]:entity' \\
                         '--tag[Tag]:tag' ;;
                 trap|incident|invariant|pattern)
@@ -3425,6 +3445,7 @@ complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l durability -a "temporary tactical strategic constitutional"
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l confidence -a "speculative proposed experimental adopted deprecated verified"
+complete -c dejavue -n "__fish_seen_subcommand_from decision" -l artifacts -rF
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l supersedes
 complete -c dejavue -n "__fish_seen_subcommand_from note" -l type -a "note blocker claim question observation"
 # export
@@ -3507,6 +3528,8 @@ def main():
                    help="How long-lived this decision is.")
     p.add_argument("--confidence", choices=["speculative", "proposed", "experimental", "adopted", "deprecated", "verified"],
                    help="How firm this decision is — a recall trust signal.")
+    p.add_argument("--artifacts", action="append", metavar="PATH",
+                   help="File this decision is about (repeatable; makes `blame <path>` precise).")
     p.add_argument("--agent", default=None)
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_decision)
