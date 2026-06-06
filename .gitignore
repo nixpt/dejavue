@@ -12,6 +12,11 @@ __pycache__/
 .dejavue/ingested.lock
 .dejavue/.locks/
 
+# Python packaging artifacts
+*.egg-info/
+dist/
+build/
+
 # Stray config not part of dejavue (flag to maintainer internal session)
 seahorse-server.toml
 

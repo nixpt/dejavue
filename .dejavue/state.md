@@ -1,5 +1,5 @@
 # State
 
-Updated: 2026-06-06T05:43:57-05:00
+Updated: 2026-06-06T06:43:55-05:00
 
-v2.0.0 RC1: DCP/1.0 spec Release Candidate; 35 commands, 121 tests; init auto-discovery (CLAUDE.md + skills); spec status promoted from Draft.
+v2.0.1 shipped: 43 commands, 134/134 tests, pyproject.toml, shell completions, trap/incident/invariant/rejected/since-range/decision-durability/post-checkout hook/note-commit --trailer. Skills installed at ~/.claude/skills/. Axiom 0 preserved.
