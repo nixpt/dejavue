@@ -26,7 +26,19 @@ On that base it does three things:
 
 ## Install
 
-Single Python 3 file, stdlib only. Copy it to any directory on your `PATH`:
+### pipx (recommended — auto-updates, isolated)
+
+```bash
+pipx install git+https://github.com/nixpt/dejavue
+```
+
+### pip / venv
+
+```bash
+pip install git+https://github.com/nixpt/dejavue
+```
+
+### Single-file (no Python tooling needed)
 
 ```bash
 curl -O https://raw.githubusercontent.com/nixpt/dejavue/main/dejavue.py
@@ -41,7 +53,27 @@ git clone https://github.com/nixpt/dejavue
 ln -s "$PWD/dejavue/dejavue.py" ~/.local/bin/dejavue
 ```
 
-No `pip install` required — single file is by design.
+### Shell completions
+
+After installing, add completions for your shell (one-time):
+
+```bash
+# bash
+dejavue completion bash | sudo tee /etc/bash_completion.d/dejavue
+# or per-user:
+dejavue completion bash >> ~/.bash_completion
+
+# zsh
+dejavue completion zsh | sudo tee /usr/share/zsh/site-functions/_dejavue
+# or per-user (fpath must include the dir):
+dejavue completion zsh > "${fpath[1]}/_dejavue"
+
+# fish
+dejavue completion fish > ~/.config/fish/completions/dejavue.fish
+```
+
+Pre-generated scripts are also available in [`completions/`](completions/) for
+distro packagers.
 
 
 ## Quickstart
