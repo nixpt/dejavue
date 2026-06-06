@@ -2387,6 +2387,44 @@ test_confidence_invalid_rejected() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 147. since surfaces "superseded by" for an overridden decision (read-back), not the superseder
+test_supersedes_readback_since() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    local base; base="$(git rev-list --max-parents=0 HEAD)"
+    dv decision "Use SQLite" --reason "stdlib" >/dev/null 2>&1
+    dv decision "Use Postgres" --reason "scale" --supersedes "Use SQLite" >/dev/null 2>&1
+    local out; out="$(dv since "${base}..HEAD" 2>/dev/null)"
+    assert_contains "overridden decision flagged" "$out" "superseded by 'Use Postgres'" || return 1
+    assert_not_contains "superseder itself not flagged" "$out" "superseded by 'Use SQLite'" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 148. recall surfaces "superseded by" for an overridden decision
+test_supersedes_readback_recall() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "Use SQLite" --reason "stdlib" >/dev/null 2>&1
+    dv decision "Use Postgres" --reason "scale" --supersedes "Use SQLite" >/dev/null 2>&1
+    local out; out="$(dv recall "Use SQLite" 2>/dev/null)"
+    assert_contains "recall flags superseded decision" "$out" "superseded by 'Use Postgres'" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 149. context lists superseded decisions; a self-referential superseder is NOT flagged
+test_supersedes_readback_context_no_self_match() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "Cache layer" --reason "v1" >/dev/null 2>&1
+    # the superseder's own ref ("Cache layer") is a substring of its own title — must not self-flag
+    dv decision "Cache layer v2" --reason "v2" --supersedes "Cache layer" >/dev/null 2>&1
+    local out; out="$(dv context 2>/dev/null)"
+    assert_contains "context has superseded section" "$out" "superseded decisions" || return 1
+    assert_contains "old decision flagged" "$out" "'Cache layer' → superseded by 'Cache layer v2'" || return 1
+    assert_not_contains "no self-supersession" "$out" "'Cache layer v2' → superseded" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2560,6 +2598,9 @@ main() {
     run_test "144 note --confidence stored"                   test_note_confidence
     run_test "145 recall by confidence"                       test_recall_by_confidence
     run_test "146 invalid --confidence rejected"              test_confidence_invalid_rejected
+    run_test "147 supersedes read-back in since"              test_supersedes_readback_since
+    run_test "148 supersedes read-back in recall"             test_supersedes_readback_recall
+    run_test "149 supersedes read-back in context (no self)"  test_supersedes_readback_context_no_self_match
 
     echo ""
     echo "========================================"
