@@ -52,10 +52,15 @@ reminder and the command quick-reference.
 | `dejavue config {list,get,set,unset}` | Manage per-repo `.dejavue/config` values |
 | `dejavue install-skill [--dir]` | Install SKILL.md to `~/.claude/skills/` (or custom dir) |
 | `dejavue stats` | Timeline statistics: counts by type, agent, date range |
-| `dejavue export --format {json,md}` | Export full memory snapshot |
-| `dejavue reference {create,list,update,view}` | Manage `.dejavue/references/` cards |
+| `dejavue export --format {json,md}` | Export full memory snapshot as JSON or Markdown |
+| `dejavue export --target {claude,codex,gemini,copilot,cursor,all}` | Generate adapter file from `context.md` (DCP — non-destructive) |
+| `dejavue import <FILE>` | Bootstrap `context.md` from an existing `AGENTS.md` / `CLAUDE.md` |
+| `dejavue promote --to jagent` | Graduate `.dejavue/` into a `.jagent/` planning system |
+| `dejavue reference {create,list,update,view} [--type T]` | Manage `.dejavue/references/` cards |
+| `dejavue diff <from> [<to>] [--format patch]` | Compare memory between two refs |
 | `dejavue link <sha>` | Show dejavue events recorded for a git commit |
 | `dejavue search "<query>"` | Alias for `recall` (same flags) |
+| `dejavue init [--wizard]` | Create `.dejavue/`, install hooks, write `CLAUDE.md` boot stub. `--wizard` seeds `context.md` interactively. |
 | `dejavue version` | Print the installed version |
 
 If the CLI isn't on PATH but the repo has a copy at `dejavue.py`:
