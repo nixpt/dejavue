@@ -219,6 +219,10 @@ Actionable ordering over the v3.x pool + the gaps the audit surfaced. All
 Axiom-0 clean (stdlib, single-file, additive fields). Favors the core loop
 (capture the *why*, keep recall trustworthy) and high value / low effort.
 
+> **Update (v2.1.0, 2026-06-06): the entire P0 wave shipped** — `pattern`, `entities`,
+> `--confidence`, `--supersedes` read-back, and `decision --artifacts`. See CHANGELOG `[2.1.0]`.
+> Next up is P1 (`changelog <range>`, freshness/expiry, `derived_from` lineage, stability classes).
+
 **P0 — do next (all small, additive)**
 - ✅ **`pattern` command + `patterns.md`** — *shipped (unreleased)*; the missing core memory file (decisions / patterns / invariants / glossary). First P0 item, done.
 - ✅ **`entities: []` on events + `--entity` + `entities` command** — *shipped (unreleased)*; the relational primitive (recall/blame by subject, no graph DB). Second P0 item, done.
