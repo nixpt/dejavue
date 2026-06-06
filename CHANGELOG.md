@@ -33,6 +33,10 @@ any v1.x release can be read by any later v1.x release without migration.
   self-exclusion (so a decision whose own ref is a substring of its title — e.g.
   "Cache layer" ⊂ "Cache layer v2" — isn't falsely flagged), robust to same-second
   decisions. Fourth P0 item, and closes the v2.0.1 contract.
+- **`decision --artifacts <path>`** (repeatable) — explicitly bind the files a decision
+  is about, so `blame <path>` matches it *precisely* instead of hoping the path appears in
+  the title/reason text. Stored as `artifacts: [...]`, written to `decisions.md`, and
+  FTS-indexed (`recall <path>` finds the decision). Fifth and final P0 item from the audit.
 
 ### Fixed
 
