@@ -2425,6 +2425,36 @@ test_supersedes_readback_context_no_self_match() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 150. decision --artifacts is stored and written to decisions.md
+test_decision_artifacts() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "Refactor auth" --reason "clarity" --artifacts src/auth.py --artifacts src/session.py >/dev/null 2>&1
+    assert_contains "artifacts line in decisions.md" "$(cat .dejavue/decisions.md)" "Artifacts: src/auth.py, src/session.py" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 151. blame <file> matches a decision precisely via its artifacts (not just fuzzy text)
+test_blame_by_artifacts() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    # title/reason do NOT mention the path — only --artifacts links it
+    dv decision "Rewrite the cache" --reason "perf" --artifacts lib/cache.py >/dev/null 2>&1
+    local out; out="$(dv blame lib/cache.py 2>/dev/null)"
+    assert_contains "blame matches decision via artifacts" "$out" "Rewrite the cache" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 152. recall finds a decision by its artifact path (FTS-indexed)
+test_recall_by_artifact() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "Tune the indexer" --reason "speed" --artifacts engine/indexer.py >/dev/null 2>&1
+    local out; out="$(dv recall indexer 2>/dev/null)"
+    assert_contains "recall finds decision by artifact path" "$out" "Tune the indexer" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2601,6 +2631,9 @@ main() {
     run_test "147 supersedes read-back in since"              test_supersedes_readback_since
     run_test "148 supersedes read-back in recall"             test_supersedes_readback_recall
     run_test "149 supersedes read-back in context (no self)"  test_supersedes_readback_context_no_self_match
+    run_test "150 decision --artifacts stored + in doc"       test_decision_artifacts
+    run_test "151 blame by artifacts (precise)"               test_blame_by_artifacts
+    run_test "152 recall by artifact path"                    test_recall_by_artifact
 
     echo ""
     echo "========================================"
