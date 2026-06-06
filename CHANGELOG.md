@@ -5,6 +5,37 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 **The on-disk format is stable as of v1.0.0.** `.dejavue/` files written by
 any v1.x release can be read by any later v1.x release without migration.
 
+## [2.0.2] — 2026-06-06
+
+**Correctness pass over the v2.0.1 feature set.** No new surface area; these fix
+bugs in the commands v2.0.1 introduced (Axiom 0 preserved). 141/141 tests.
+
+### Fixed
+
+- **`note-commit --trailer` no longer corrupts the link.** The old path wrote the
+  git note to the pre-amend SHA and then `git commit --amend` rewrote HEAD into a
+  new SHA, orphaning the note; passing a non-HEAD SHA amended HEAD's message anyway,
+  and any staged changes were silently folded into the commit. `--trailer` now
+  requires the SHA to be HEAD and the index to be clean, amends *first*, then
+  attaches the note to the shipped (post-amend) commit so note and trailer agree.
+- **`VERSION` and `pyproject.toml` were stuck at `2.0.0`** through the v2.0.1 tag —
+  `dejavue version` / `pip show` mislabelled the binary. Now report the real version.
+- **`link` no longer crashes** on timeline events whose `commit`, `summary`, or
+  `decision_reason` field is an explicit JSON `null` (`None[:7]` / `x in None`).
+- **`since <base>..<tip>` now honors the tip.** The event window was bounded only by
+  the base date, leaking everything after the tip into the listing; it now bounds
+  both ends (open-ended only when the tip is `HEAD`), at second granularity.
+- **`invariant` works before `init`** — it self-creates `.dejavue/` instead of
+  crashing with `FileNotFoundError`.
+- **`invariants.md` is now indexed by `recall`** (added to the FTS sources and the
+  rebuild trigger), matching the other core docs.
+- **`check` now verifies and repairs the `post-checkout` hook** that `init` installs.
+- **`context` surfaces traps & incidents prominently** in their own section, so the
+  highest-value memory no longer scrolls out of the recent-timeline tail. Tolerant
+  of non-object timeline lines.
+- **Shell completions cover the v2.0.1 commands** — `trap`, `incident`, `invariant`,
+  `rejected`, and `decision --supersedes/--durability` were missing from all three.
+
 ## [2.0.1] — 2026-06-06
 
 **v2.x agent workflow depth.** Six new commands and flags directly addressing
@@ -16,7 +47,7 @@ recurring agent friction points, from zero new dependencies (Axiom 0 preserved).
 
 - **`dejavue trap "<text>"`** — first-class known-lie / trap event. Agents waste
   real time rediscovering misleading names, fake abstractions, and historical hacks.
-  `trap` events surface in `blame` and `context`.
+  `trap` events surface prominently in `context` (and in `blame` when the trap text names the file).
 - **`dejavue incident "<text>"`** — first-class operational incident. Outages, data
   corruption, failed migrations. Stored as `event_type: incident`.
 - **`dejavue invariant "<text>"`** — architectural invariant. Appends a timestamped
