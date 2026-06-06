@@ -395,6 +395,18 @@ def cmd_init(args):
             _write_prepush_hook(prepush_path, prepush_marker)
             print(f"Installed pre-push hook at {prepush_path}")
 
+        # post-checkout hook — prints status on branch switch (not file checkout)
+        checkout_path = hooks_dir / "post-checkout"
+        checkout_marker = "#!/usr/bin/env bash\n# dejavue post-checkout"
+        if checkout_path.exists():
+            if not checkout_path.read_text(encoding="utf-8").startswith(checkout_marker):
+                if args.force:
+                    _write_checkout_hook(checkout_path, checkout_marker)
+                    print("Replaced existing post-checkout hook with dejavue hook.")
+        else:
+            _write_checkout_hook(checkout_path, checkout_marker)
+            print(f"Installed post-checkout hook at {checkout_path}")
+
         _install_gitattributes(force=args.force)
         _install_gitignore()
     else:
@@ -426,6 +438,18 @@ def _write_hook(hook_path, marker):
     script = (
         marker + "\n"
         f'exec python3 "{script_path}" changed --auto --commit "$(git rev-parse HEAD)" 2>/dev/null || true\n'
+    )
+    hook_path.write_text(script, encoding="utf-8")
+    hook_path.chmod(0o755)
+
+
+def _write_checkout_hook(hook_path, marker):
+    script_path = Path(sys.argv[0]).resolve()
+    # $3 == 1 means branch switch (not file checkout); skip otherwise to avoid noise.
+    script = (
+        marker + "\n"
+        "[ \"$3\" = \"1\" ] || exit 0\n"
+        f'python3 "{script_path}" status 2>/dev/null || true\n'
     )
     hook_path.write_text(script, encoding="utf-8")
     hook_path.chmod(0o755)
