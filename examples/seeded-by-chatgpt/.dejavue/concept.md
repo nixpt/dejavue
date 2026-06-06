@@ -8,7 +8,7 @@ Purpose: Repo-local déjà vu memory for coding agents.
 ## Core Idea
 Coding agents like Codex, Claude, and other MCP-connected workers often complete tasks and lose context afterward. Existing traces such as `.claude`, `.agents`, git history, and chat logs are fragmented.
 
-Deja Vue creates a structured `.memory-service/` memory layer that records relevant project changes, decisions, context, and handoff notes so future agents can instantly understand the project as if they had worked on it before.
+Deja Vue creates a structured `.dejavue/` memory layer that records relevant project changes, decisions, context, and handoff notes so future agents can instantly understand the project as if they had worked on it before.
 
 ## Concept
 Git captures mechanical history.
@@ -30,11 +30,9 @@ Deja Vue says:
 ## Proposed Layout
 
 ```txt
-.memory-service/
-  deja-vue.md
+.dejavue/
+  concept.md        (this file — origin document, non-standard)
   timeline.jsonl
-  current_state.md
+  state.md
   decisions.md
   handoff.md
-  agent_sessions/
-  diffs/
