@@ -2349,6 +2349,44 @@ test_entity_normalization() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 143. decision --confidence stored in event AND shown as a decisions.md heading label
+test_decision_confidence() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "Adopt event sourcing" --reason "auditability" --confidence experimental >/dev/null 2>&1
+    assert_event_recorded "confidence stored in event" ".dejavue/timeline.jsonl" "confidence" "experimental" || return 1
+    assert_contains "confidence label in decisions.md heading" "$(cat .dejavue/decisions.md)" "[EXPERIMENTAL]" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 144. note --confidence is stored on the event
+test_note_confidence() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv note "the cache might be the bottleneck" --type claim --confidence speculative >/dev/null 2>&1
+    assert_event_recorded "note confidence stored" ".dejavue/timeline.jsonl" "confidence" "speculative" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 145. recall finds events by confidence level (FTS-indexed)
+test_recall_by_confidence() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv decision "Freeze the capsule ABI" --reason "stability" --confidence verified >/dev/null 2>&1
+    local out; out="$(dv recall verified 2>/dev/null)"
+    assert_contains "recall by confidence finds the decision" "$out" "Freeze the capsule ABI" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 146. invalid --confidence value is rejected by argparse (exit != 0)
+test_confidence_invalid_rejected() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    local rc; dv decision "bad" --reason r --confidence definitely >/dev/null 2>&1; rc=$?
+    assert_eq "invalid confidence rejected" "$([ "$rc" -ne 0 ] && echo nonzero || echo zero)" "nonzero" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2518,6 +2556,10 @@ main() {
     run_test "140 entities lists with counts"                 test_entities_list
     run_test "141 entities <name> filters events"             test_entities_filter
     run_test "142 entity names normalized to kebab"           test_entity_normalization
+    run_test "143 decision --confidence stored + labeled"     test_decision_confidence
+    run_test "144 note --confidence stored"                   test_note_confidence
+    run_test "145 recall by confidence"                       test_recall_by_confidence
+    run_test "146 invalid --confidence rejected"              test_confidence_invalid_rejected
 
     echo ""
     echo "========================================"

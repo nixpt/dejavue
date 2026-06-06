@@ -322,6 +322,7 @@ def rebuild_fts():
                         ev.get("content", ""),
                         ev.get("event_type", ""),  # enables recall "blocker"/"question"/etc.
                         " ".join(ev.get("entities") or []),  # enables recall by entity
+                        ev.get("confidence", ""),  # enables recall "speculative"/"verified"/etc.
                     ]
                     text = " ".join(p for p in parts if p)
                     rows.append((ev.get("ts", ""), ev.get("event", ""), text, "timeline.jsonl"))
@@ -772,10 +773,12 @@ def cmd_decision(args):
 
     supersedes = getattr(args, "supersedes", None) or ""
     durability = getattr(args, "durability", None) or ""
+    confidence = getattr(args, "confidence", None) or ""
 
     type_label = f"[{event_type.upper()}] " if event_type != "decision" else ""
     dur_label = f"[{durability.upper()}] " if durability else ""
-    entry = f"\n## {ts} — {dur_label}{type_label}{args.title}\n\nReason:\n{args.reason}\n"
+    conf_label = f"[{confidence.upper()}] " if confidence else ""
+    entry = f"\n## {ts} — {dur_label}{conf_label}{type_label}{args.title}\n\nReason:\n{args.reason}\n"
     if supersedes:
         entry += f"\nSupersedes: {supersedes}\n"
     if rejected:
@@ -802,6 +805,7 @@ def cmd_decision(args):
         "outcome": args.outcome or "",
         "supersedes": supersedes,
         "durability": durability,
+        "confidence": confidence,
         "entities": normalize_entities(args),
     })
     print(f"{event_type.capitalize()} recorded: {args.title}")
@@ -1473,6 +1477,7 @@ def cmd_note(args):
         "event_type": event_type,
         "summary": args.text,
         "tag": args.tag or "",
+        "confidence": getattr(args, "confidence", None) or "",
         "entities": normalize_entities(args),
     })
     print(f"{event_type.capitalize()} recorded.")
@@ -3157,17 +3162,21 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
     local subcmd="${COMP_WORDS[1]}"
     case "$subcmd" in
         decision)
-            COMPREPLY=($(compgen -W "--reason --rejected --agent --type --tag --supersedes --durability --entity" -- "$cur"))
+            COMPREPLY=($(compgen -W "--reason --rejected --agent --type --tag --supersedes --durability --confidence --entity" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "decision blocker claim question experiment checkpoint" -- "$cur"))
             elif [[ "$prev" == "--durability" ]]; then
                 COMPREPLY=($(compgen -W "temporary tactical strategic constitutional" -- "$cur"))
+            elif [[ "$prev" == "--confidence" ]]; then
+                COMPREPLY=($(compgen -W "speculative proposed experimental adopted deprecated verified" -- "$cur"))
             fi ;;
         trap|incident|invariant|pattern) COMPREPLY=($(compgen -W "--agent --tag --entity" -- "$cur")) ;;
         note)
-            COMPREPLY=($(compgen -W "--agent --tag --type --entity" -- "$cur"))
+            COMPREPLY=($(compgen -W "--agent --tag --type --entity --confidence" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "note blocker claim question observation" -- "$cur"))
+            elif [[ "$prev" == "--confidence" ]]; then
+                COMPREPLY=($(compgen -W "speculative proposed experimental adopted deprecated verified" -- "$cur"))
             fi ;;
         start)    COMPREPLY=($(compgen -W "--agent --goal" -- "$cur")) ;;
         state)    COMPREPLY=($(compgen -W "--summary --agent" -- "$cur")) ;;
@@ -3282,6 +3291,7 @@ _dejavue() {
                         '--type[Event type]:type:(decision blocker claim question experiment checkpoint)' \\
                         '--supersedes[ID or title of a prior decision this supersedes]:event-id' \\
                         '--durability[How long-lived this decision is]:durability:(temporary tactical strategic constitutional)' \\
+                        '--confidence[How firm this decision is]:confidence:(speculative proposed experimental adopted deprecated verified)' \\
                         '*--entity[Subject this event is about, repeatable]:entity' \\
                         '--tag[Tag]:tag' ;;
                 trap|incident|invariant|pattern)
@@ -3294,6 +3304,7 @@ _dejavue() {
                         '--agent[Agent name]:agent' \\
                         '--tag[Tag]:tag' \\
                         '*--entity[Subject this event is about, repeatable]:entity' \\
+                        '--confidence[How firm this note/claim is]:confidence:(speculative proposed experimental adopted deprecated verified)' \\
                         '--type[Note type]:type:(note blocker claim question observation)' ;;
                 export)
                     _arguments \\
@@ -3338,6 +3349,7 @@ complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l durability -a "temporary tactical strategic constitutional"
+complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l confidence -a "speculative proposed experimental adopted deprecated verified"
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l supersedes
 complete -c dejavue -n "__fish_seen_subcommand_from note" -l type -a "note blocker claim question observation"
 # export
@@ -3418,6 +3430,8 @@ def main():
                    help="ID or title of a prior decision this supersedes.")
     p.add_argument("--durability", choices=["temporary", "tactical", "strategic", "constitutional"],
                    help="How long-lived this decision is.")
+    p.add_argument("--confidence", choices=["speculative", "proposed", "experimental", "adopted", "deprecated", "verified"],
+                   help="How firm this decision is — a recall trust signal.")
     p.add_argument("--agent", default=None)
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_decision)
@@ -3498,6 +3512,8 @@ def main():
                    help="Event sub-type (default: note).")
     p.add_argument("--agent", default=None)
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
+    p.add_argument("--confidence", choices=["speculative", "proposed", "experimental", "adopted", "deprecated", "verified"],
+                   help="How firm this note/claim is.")
     p.set_defaults(func=cmd_note)
 
     p = sub.add_parser("since", help="Temporal delta since a date, commit, or agent's last session.")
