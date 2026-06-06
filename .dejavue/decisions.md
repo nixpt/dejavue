@@ -163,3 +163,13 @@ Rejected alternatives:
 - **keep write-note-then-amend**: orphans the note every time --trailer runs (git notes show HEAD finds nothing)
 - **allow a non-HEAD sha with --trailer**: git commit --amend can only rewrite HEAD, so it corrupts the wrong commit message
 
+
+## 2026-06-06T11:33:49-05:00 — [TACTICAL] Prioritize v3.x backlog from scratch/deja audit; P0 = entities + confidence + decision artifacts
+
+Reason:
+Audited all 78 scratch ideas vs roadmap+shipped code. Cognitive-continuity and memory-mgmt clusters were captured well and dev-tools is parked at category level in the Tier 1-4 table, but two gaps existed: (1) git-native workflow commands (branch/merge-summary/changelog/squash/conflict) were nowhere, and (2) per-event metadata (entities[], decision artifacts[], freshness/expiry, stability classes) was missing or masked by --durability. Added a Prioritized-next-waves section + a Git-native ergonomics subsection + the missing metadata fields. P0 favors small additive fields that reinforce the core capture-the-why loop and reuse the existing --durability/FTS plumbing.
+
+Rejected alternatives:
+- **build dejavue explain first**: it is the killer command but composes lineage+confidence+entities, so it must come AFTER those inputs exist
+- **.dejavue/graph/ semantic graph store**: violates Axiom 0 (heavy) and the scratch itself warns no graph DB is needed
+
