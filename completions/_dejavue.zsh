@@ -66,6 +66,7 @@ _dejavue() {
                         '--supersedes[ID or title of a prior decision this supersedes]:event-id' \
                         '--durability[How long-lived this decision is]:durability:(temporary tactical strategic constitutional)' \
                         '--confidence[How firm this decision is]:confidence:(speculative proposed experimental adopted deprecated verified)' \
+                        '*--artifacts[File this decision is about, repeatable]:file:_files' \
                         '*--entity[Subject this event is about, repeatable]:entity' \
                         '--tag[Tag]:tag' ;;
                 trap|incident|invariant|pattern)
