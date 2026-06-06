@@ -224,7 +224,7 @@ Axiom-0 clean (stdlib, single-file, additive fields). Favors the core loop
 - ✅ **`entities: []` on events + `--entity` + `entities` command** — *shipped (unreleased)*; the relational primitive (recall/blame by subject, no graph DB). Second P0 item, done.
 - ✅ **`--confidence {speculative…verified}` on `decision`/`note`** — *shipped (unreleased)*; recall-trust signal (labeled in decisions.md, FTS-indexed). Third P0 item, done.
 - `decision --artifacts <path>` — bind the files a decision is about, precisely.
-- Wire `--supersedes` read-back into `recall`/`since`/`context` — the field is written (event + decisions.md) but **inert**; nothing surfaces "later overridden by…" as v2.0.1 implied. Closing a shipped-but-broken contract beats new features.
+- ✅ **`--supersedes` read-back** — *shipped (unreleased)*; `recall`/`since`/`context` now surface "⚠ superseded by …" on overridden decisions (event-identity self-exclusion, same-second-safe). Closed the inert v2.0.1 contract. Fourth P0 item, done.
 
 **P1**
 - `dejavue changelog <range>` — why-aware changelog from timeline + decisions.
