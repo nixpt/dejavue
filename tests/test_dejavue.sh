@@ -2242,6 +2242,57 @@ test_context_tolerates_non_dict_timeline_line() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 133. pattern records event AND appends to patterns.md
+test_pattern_records_event_and_doc() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv pattern "handlers return Result, never raise across the API boundary" >/dev/null 2>&1
+    assert_event_recorded "pattern event" ".dejavue/timeline.jsonl" "event" "pattern" || return 1
+    assert_file_exists "patterns.md created" ".dejavue/patterns.md" || return 1
+    assert_contains "pattern text in doc" "$(cat .dejavue/patterns.md)" "never raise across the API boundary" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 134. init creates patterns.md scaffold
+test_init_creates_patterns_md() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    assert_file_exists "patterns.md scaffolded by init" ".dejavue/patterns.md" || return 1
+    assert_contains "patterns.md has header" "$(cat .dejavue/patterns.md)" "# Patterns" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 135. context surfaces patterns.md
+test_context_shows_patterns() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv pattern "config keys are snake_case everywhere" >/dev/null 2>&1
+    local out; out="$(dv context 2>/dev/null)"
+    assert_contains "patterns section header" "$out" "patterns.md" || return 1
+    assert_contains "pattern text in context" "$out" "config keys are snake_case everywhere" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 136. pattern before init self-creates .dejavue/ instead of crashing
+test_pattern_before_init() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    # deliberately NO `dv init`
+    local rc; dv pattern "errors bubble up as structured events" >/dev/null 2>&1; rc=$?
+    assert_eq "pattern exits 0 without prior init" "$rc" "0" || return 1
+    assert_file_exists "patterns.md created" ".dejavue/patterns.md" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 137. recall finds patterns.md body text (FTS indexing wired)
+test_recall_finds_pattern_body() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv pattern "ZXQVNONCE marker convention for canary checks" >/dev/null 2>&1
+    local out; out="$(dv recall ZXQVNONCE 2>/dev/null)"
+    assert_contains "recall surfaces pattern text" "$out" "ZXQVNONCE" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2401,6 +2452,11 @@ main() {
     run_test "130 link tolerates null commit field"           test_link_tolerates_null_commit
     run_test "131 since base..tip excludes post-tip events"   test_since_range_excludes_after_tip
     run_test "132 context tolerates non-dict timeline line"   test_context_tolerates_non_dict_timeline_line
+    run_test "133 pattern records event + patterns.md"        test_pattern_records_event_and_doc
+    run_test "134 init scaffolds patterns.md"                 test_init_creates_patterns_md
+    run_test "135 context surfaces patterns.md"               test_context_shows_patterns
+    run_test "136 pattern before init self-creates dir"       test_pattern_before_init
+    run_test "137 recall finds patterns.md body"              test_recall_finds_pattern_body
 
     echo ""
     echo "========================================"
