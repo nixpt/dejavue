@@ -14,6 +14,13 @@ any v1.x release can be read by any later v1.x release without migration.
   file alongside `decisions.md` / `invariants.md` — and is surfaced by `context`,
   indexed by `recall`, `merge=union` in `.gitattributes`, and scaffolded by `init`.
   Same mold as `trap` / `invariant`. First P0 item from the scratch/deja roadmap audit.
+- **`--entity <name>` on `decision`/`note`/`trap`/`incident`/`invariant`/`pattern`** +
+  **`dejavue entities [<name>]`** — an optional repeatable subject field
+  (`entities: ["auth-system", …]`, normalized to kebab-case) that links events *by
+  subject*, complementing the single-valued `tag`. Entities are indexed by `recall`,
+  matched by `blame <name>`, and `entities` lists them with counts (or filters events
+  for one). Lightweight strings only — not a graph or registry (Axiom 0). Second P0
+  item from the scratch/deja audit; the relational primitive that unlocks lineage/explain.
 
 ## [2.0.2] — 2026-06-06
 
