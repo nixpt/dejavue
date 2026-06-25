@@ -4,10 +4,10 @@
 ## 2026-05-13T04:11:32-05:00 — Use .dejavue/ directory naming
 
 Reason:
-avoids collision with optional MCP memory service .memory-service/cache/ directories (design_perspective §10)
+avoids collision with existing tool cache directories documented during initial scoping
 
 Rejected alternatives:
-- **Use .memory-service/**: collision with existing optional MCP memory service cache dirs
+- **Use .memory-service/**: collision with existing tool cache dirs
 - **Use .memory/**: too generic, no project identity
 
 
@@ -45,27 +45,27 @@ Rejected alternatives:
 ## 2026-05-13T16:32:56-05:00 — Generalize SKILL.md content for public dejavue repo (no workspace-internal references)
 
 Reason:
-The skill was first authored under private source workspace/skill-creator/skills/dejavue-workflow/ with design lead/orchestration/private source workspace-specific cross-links and absolute local home paths. For the public dejavue repo it must stand alone: replace [[design lead-session-start]] / [[capture-before-redirect]] / [[agent-lifecycle]] cross-links (those skills don't exist outside the source workspace) with pointers to dejavue's own docs (README, docs/05-v0.1-scope.md, docs/04-design-perspective.md); drop private source workspace canonical-store references; replace 'install via orchestration tool symlink' with generic 'symlink dejavue.py into ~/.local/bin/'; add stable-role-name agent identity guidance pulled from README's Concurrency section. The two versions intentionally diverge on workspace specificity but stay in sync on dejavue protocol content.
+The skill was first authored in an private source workspace with orchestration-specific cross-links and absolute local paths. For the public dejavue repo it must stand alone: replace private workflow cross-links with pointers to dejavue's own docs (README, docs/05-v0.1-scope.md, docs/04-design-perspective.md); drop workspace-specific canonical-store references; replace local install instructions with generic 'symlink dejavue.py into ~/.local/bin/'; add stable-role-name agent identity guidance pulled from README's Concurrency section. The internal and public versions intentionally diverge on workspace specificity but stay in sync on dejavue protocol content.
 
 Rejected alternatives:
-- **Ship the workspace-internal version verbatim**: would leak nixpt/design lead/orchestration references into a public release the maintainer explicitly genericized last commit (ebf36db)
-- **Single canonical version in dejavue repo, private source workspace references via include**: dejavue is the substrate; making private source workspace depend on dejavue's SKILL.md for its own design lead cross-links inverts the dependency direction
+- **Ship the workspace-internal version verbatim**: would leak private orchestration references into a public release the maintainer explicitly genericized last commit (ebf36db)
+- **Single canonical version in dejavue repo, internal references via include**: dejavue is the substrate; making internal workflow docs depend on dejavue's SKILL.md for private cross-links inverts the dependency direction
 
 
 ## 2026-05-15T00:14:00-05:00 — Skill canonical source = dejavue repo (Option A)
 
 Reason:
-The dejavue project owns its own docs. Edit-once-propagate-everywhere via symlink chain. dejavue-repo skills/ is single source; .claude/skills/ relative-symlinks for in-repo Claude Code auto-discovery; private source workspace/skill-creator/skills/dejavue* and ~/.claude/skills/dejavue* are absolute symlinks pointing into the dejavue repo. Closes drift between previously-divergent workspace-internal version (in skill-creator/) and the public-adapted version (in dejavue-repo/skills/dejavue-workflow/).
+The dejavue project owns its own docs. Edit-once-propagate-everywhere via symlink chain. dejavue-repo skills/ is single source; .claude/skills/ relative-symlinks support in-repo Claude Code auto-discovery; external consumer skill installs point into the dejavue repo. Closes drift between previously-divergent internal and public-adapted versions.
 
 Rejected alternatives:
-- **Option B (sync UP to skill-creator, treat private source workspace as authoring source)**: manual sync overhead, drift will recur on every wording fix, the project ends up not owning its own docs
+- **Option B (sync UP to an internal authoring source)**: manual sync overhead, drift will recur on every wording fix, the project ends up not owning its own docs
 - **Option C (two intentional versions, one workspace-internal + one public)**: 2x maintenance for any wording fix, dishonest about which is canonical, no obvious win
 
 
 ## 2026-05-15T00:14:00-05:00 — Skills reach agents via TWO channels: clone-time + install-time
 
 Reason:
-Maintainer internal session: 'when a user installs dejavue, the skill is copied to claude or their choice of agents.' Two complementary delivery vectors: (1) clone-time — .claude/skills/ ships INSIDE the repo, any Claude Code session opening the repo auto-discovers; works for cloners/contributors. (2) install-time — when user runs pip install dejavue (future), a dejavue install-skill subcommand or post-install hook detects their agent system and installs the skill there; works for end-users who only invoke the CLI. Channel 1 done internal session; channel 2 specced in private source workspace PROJECT_THREADS dejavue-maturation-arc sub-bullet 5.
+The public install story needs two complementary delivery vectors: (1) clone-time — .claude/skills/ ships inside the repo, any Claude Code session opening the repo auto-discovers; works for cloners/contributors. (2) install-time — when a user runs pip install dejavue (future), a dejavue install-skill subcommand or post-install hook detects their agent system and installs the skill there; works for end-users who only invoke the CLI.
 
 Rejected alternatives:
 - **Single channel = clone-time only**: most users won't clone the repo, they'll pip install — they'd never see the skill
@@ -75,7 +75,7 @@ Rejected alternatives:
 ## 2026-05-15T02:21:41-05:00 — Use diff-tree -m --first-parent --root for merge-commit capture
 
 Reason:
-git show --name-only and even audit's recommended git diff-tree --no-commit-id -r --name-only silently emit nothing on merge commits (default --diff-merges=off). Real-world impact: ~70% capture loss in multi-agent projects per external agent's audit tool audit. -m --first-parent shows what came in via the merge; --root handles initial commits.
+git show --name-only and even audit-recommended git diff-tree --no-commit-id -r --name-only silently emit nothing on merge commits (default --diff-merges=off). Real-world impact: high capture loss in multi-agent projects. -m --first-parent shows what came in via the merge; --root handles initial commits.
 
 Rejected alternatives:
 - **git diff --name-only HEAD~1..HEAD**: works for merges but fails for root commits (no HEAD~1) and is two commands worth of parsing
@@ -85,7 +85,7 @@ Rejected alternatives:
 ## 2026-05-15T02:31:02-05:00 — Ship ROADMAP.md as canonical version tracker
 
 Reason:
-Maintainer internal session directive — dejavue needs an in-repo roadmap so contributors and adopters can see shipped vs in-flight vs candidate scope at a glance. CHANGELOG covers per-release detail; ROADMAP.md is the wide-angle view.
+dejavue needs an in-repo roadmap so contributors and adopters can see shipped vs in-flight vs candidate scope at a glance. CHANGELOG covers per-release detail; ROADMAP.md is the wide-angle view.
 
 Rejected alternatives:
 - **leave as GitHub Issues/Projects**: works for collaboration but loses the offline/portable invariant — anyone cloning the repo should see roadmap in-tree
@@ -141,7 +141,7 @@ v1.3.0 tagged. 36 commands, 100/100 tests.
 ## 2026-06-05T02:36:28-05:00 — context.md is the DCP source of truth; adapters are generated non-destructively
 
 Reason:
-Per ratified internal session plan (D2): export writes a marker-delimited managed block into the target tool's real file. Absent→create block-only; marked→replace fenced region; unmarked hand-written→append block + warn (never clobber); --replace converts whole file. Keeps Axiom 0 (zero new deps, base loop frozen).
+export writes a marker-delimited managed block into the target tool's real file. Absent→create block-only; marked→replace fenced region; unmarked hand-written→append block + warn (never clobber); --replace converts whole file. Keeps Axiom 0 (zero new deps, base loop frozen).
 
 Rejected alternatives:
 - **blind overwrite**: clobbers hand-written CLAUDE.md
@@ -164,10 +164,10 @@ Rejected alternatives:
 - **allow a non-HEAD sha with --trailer**: git commit --amend can only rewrite HEAD, so it corrupts the wrong commit message
 
 
-## 2026-06-06T11:33:49-05:00 — [TACTICAL] Prioritize v3.x backlog from design backlog audit; P0 = entities + confidence + decision artifacts
+## 2026-06-06T11:33:49-05:00 — [TACTICAL] Prioritize v3.x backlog; P0 = entities + confidence + decision artifacts
 
 Reason:
-Audited all 78 scratch ideas vs roadmap+shipped code. Cognitive-continuity and memory-mgmt clusters were captured well and dev-tools is parked at category level in the Tier 1-4 table, but two gaps existed: (1) git-native workflow commands (branch/merge-summary/changelog/squash/conflict) were nowhere, and (2) per-event metadata (entities[], decision artifacts[], freshness/expiry, stability classes) was missing or masked by --durability. Added a Prioritized-next-waves section + a Git-native ergonomics subsection + the missing metadata fields. P0 favors small additive fields that reinforce the core capture-the-why loop and reuse the existing --durability/FTS plumbing.
+Audited backlog ideas vs roadmap+shipped code. Cognitive-continuity and memory-mgmt clusters were captured well and dev-tools is parked at category level in the Tier 1-4 table, but two gaps existed: (1) git-native workflow commands (branch/merge-summary/changelog/squash/conflict) were nowhere, and (2) per-event metadata (entities[], decision artifacts[], freshness/expiry, stability classes) was missing or masked by --durability. Added a Prioritized-next-waves section + a Git-native ergonomics subsection + the missing metadata fields. P0 favors small additive fields that reinforce the core capture-the-why loop and reuse the existing --durability/FTS plumbing.
 
 Rejected alternatives:
 - **build dejavue explain first**: it is the killer command but composes lineage+confidence+entities, so it must come AFTER those inputs exist
@@ -180,4 +180,3 @@ Reason:
 v2.0.1's --supersedes was write-only (stored, never surfaced). v2.1.0 wires recall/since/context to show 'superseded by' via supersession_lookup() with EVENT-IDENTITY self-exclusion (ts is not unique — two decisions can share a second). The trap recorded earlier this session (tag:supersedes) is now historical.
 
 Artifacts: dejavue.py
-
