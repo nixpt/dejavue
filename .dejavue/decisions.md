@@ -14,11 +14,11 @@ Rejected alternatives:
 ## 2026-05-13T04:11:37-05:00 — FTS5 for v0.1 recall, not embeddings
 
 Reason:
-pipefish embedder offline; stdlib sqlite FTS5 ships on all modern Linux; zero install
+local embedder unavailable; stdlib sqlite FTS5 ships on all modern Linux; zero install
 
 Rejected alternatives:
 - **external_search_knowledge**: requires MCP dep, violates zero-ceremony principle
-- **external embeddings**: pipefish offline this session, adds infra dep
+- **external embeddings**: local embedder unavailable this session, adds infra dep
 
 
 ## 2026-05-13T04:11:41-05:00 — Single file, stdlib only
@@ -42,24 +42,24 @@ Rejected alternatives:
 - **AGENTS.md at root**: matches some ecosystems' conventions but loses the Claude Code SKILL.md format affordance (YAML frontmatter, auto-discoverability) — would force agents to translate
 
 
-## 2026-05-13T16:32:56-05:00 — Generalize SKILL.md content for public dejavue repo (no workspace-internal references)
+## 2026-05-13T16:32:56-05:00 — Generalize SKILL.md content for public dejavue repo (no environment-specific references)
 
 Reason:
-The skill was first authored in an private source workspace with orchestration-specific cross-links and absolute local paths. For the public dejavue repo it must stand alone: replace private workflow cross-links with pointers to dejavue's own docs (README, docs/05-v0.1-scope.md, docs/04-design-perspective.md); drop workspace-specific canonical-store references; replace local install instructions with generic 'symlink dejavue.py into ~/.local/bin/'; add stable-role-name agent identity guidance pulled from README's Concurrency section. The internal and public versions intentionally diverge on workspace specificity but stay in sync on dejavue protocol content.
+The skill was first authored in an earlier draft location with workflow-specific cross-links and absolute local paths. For the public dejavue repo it must stand alone: replace draft workflow cross-links with pointers to dejavue's own docs (README, docs/05-v0.1-scope.md, docs/04-design-perspective.md); drop environment-specific canonical-store references; replace local install instructions with generic 'symlink dejavue.py into ~/.local/bin/'; add stable-role-name agent identity guidance pulled from README's Concurrency section. The draft and public versions intentionally diverge on environment specificity but stay in sync on dejavue protocol content.
 
 Rejected alternatives:
-- **Ship the workspace-internal version verbatim**: would leak private orchestration references into a public release the maintainer explicitly genericized last commit (ebf36db)
-- **Single canonical version in dejavue repo, internal references via include**: dejavue is the substrate; making internal workflow docs depend on dejavue's SKILL.md for private cross-links inverts the dependency direction
+- **Ship the draft version verbatim**: would leak draft workflow references into a public release the maintainer explicitly genericized last commit (ebf36db)
+- **Single canonical version in dejavue repo, environment-specific references via include**: dejavue is the substrate; making draft workflow docs depend on dejavue's SKILL.md for draft cross-links inverts the dependency direction
 
 
 ## 2026-05-15T00:14:00-05:00 — Skill canonical source = dejavue repo (Option A)
 
 Reason:
-The dejavue project owns its own docs. Edit-once-propagate-everywhere via symlink chain. dejavue-repo skills/ is single source; .claude/skills/ relative-symlinks support in-repo Claude Code auto-discovery; external consumer skill installs point into the dejavue repo. Closes drift between previously-divergent internal and public-adapted versions.
+The dejavue project owns its own docs. Edit-once-propagate-everywhere via symlink chain. dejavue-repo skills/ is single source; .claude/skills/ relative-symlinks support in-repo Claude Code auto-discovery; external consumer skill installs point into the dejavue repo. Closes drift between previously-divergent draft and public-adapted versions.
 
 Rejected alternatives:
-- **Option B (sync UP to an internal authoring source)**: manual sync overhead, drift will recur on every wording fix, the project ends up not owning its own docs
-- **Option C (two intentional versions, one workspace-internal + one public)**: 2x maintenance for any wording fix, dishonest about which is canonical, no obvious win
+- **Option B (sync UP to a separate authoring source)**: manual sync overhead, drift will recur on every wording fix, the project ends up not owning its own docs
+- **Option C (two intentional versions, one draft + one public)**: 2x maintenance for any wording fix, dishonest about which is canonical, no obvious win
 
 
 ## 2026-05-15T00:14:00-05:00 — Skills reach agents via TWO channels: clone-time + install-time
@@ -180,3 +180,14 @@ Reason:
 v2.0.1's --supersedes was write-only (stored, never surfaced). v2.1.0 wires recall/since/context to show 'superseded by' via supersession_lookup() with EVENT-IDENTITY self-exclusion (ts is not unique — two decisions can share a second). The trap recorded earlier this session (tag:supersedes) is now historical.
 
 Artifacts: dejavue.py
+
+## 2026-06-25T01:42:00-05:00 — [STRATEGIC] [VERIFIED] Treat adopter usage as first-class design evidence
+
+Reason:
+The strongest validation for dejavue has come from use in other repositories, while this repo's own .dejavue files lagged behind the tool's real behavior. Going forward, public-safe lessons from adopter use should be folded back into this repo's state, handoff, roadmap, and tests without naming unrelated project details.
+
+Artifacts: .dejavue/context.md, .dejavue/state.md, .dejavue/handoff.md
+
+Rejected alternatives:
+- **Self-host memory only**: would miss real workflow pressure discovered in downstream repos
+- **Copy downstream histories verbatim**: would leak unrelated project context into the public reference repo
