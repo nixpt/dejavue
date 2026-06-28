@@ -495,6 +495,7 @@ Design documents in repo:
 - `docs/03-example.md` — early bash demo
 - `docs/04-design-perspective.md` — design rationale, overlap analysis, hook strategy
 - `docs/05-v0.1-scope.md` — v0.1 build spec and architecture ruling
+- `docs/08-thin-wrapper.md` — minimal shell-out wrapper contract for optional MCP/stdio adapters
 - `skills/dejavue-workflow/SKILL.md` — agent-facing workflow skill (Claude Code SKILL.md format, generic — symlink into `~/.claude/skills/` to load automatically)
 - `CHANGELOG.md` — release notes
 - `CONTRIBUTING.md` — contribution guidelines
