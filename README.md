@@ -293,12 +293,13 @@ next agent the most to rediscover. Use `--rejected "option: reason"` on every
 ```bash
 #!/usr/bin/env bash
 # dejavue auto-capture
-exec python3 /path/to/dejavue.py changed --auto --commit "$(git rev-parse HEAD)"
+if [ "${DEJAVUE_SKIP_AUTO_AMEND:-}" = "1" ]; then exit 0; fi
+exec python3 /path/to/dejavue.py changed --auto --commit "$(git rev-parse HEAD)" --amend
 ```
 
 After every `git commit`, dejavue records one `file_changed` event per touched
-file with the diff stat and commit message. No manual `changed` calls needed
-for committed work.
+file with the diff stat and commit message, then amends HEAD with the timeline
+update so the worktree returns clean instead of staying dirty.
 
 If a non-dejavue hook already exists, `init` will warn and refuse to overwrite
 unless `--force` is passed.

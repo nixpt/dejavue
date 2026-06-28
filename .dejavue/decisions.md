@@ -191,3 +191,13 @@ Artifacts: .dejavue/context.md, .dejavue/state.md, .dejavue/handoff.md
 Rejected alternatives:
 - **Self-host memory only**: would miss real workflow pressure discovered in downstream repos
 - **Copy downstream histories verbatim**: would leak unrelated project context into the public reference repo
+
+
+## 2026-06-28T00:00:00-05:00 — Make post-commit auto-capture amend HEAD so timeline capture does not leave the worktree dirty
+
+Reason:
+`timeline.jsonl` is tracked append-only memory, but the post-commit hook should not leave active worktrees dirty after every commit. Folding the captured timeline update back into HEAD keeps the repo clean while preserving automatic file-change capture.
+
+Rejected alternatives:
+- **Leave `timeline.jsonl` dirty after every commit**: keeps the capture path simple but forces constant manual cleanup and makes `git status` noisy.
+- **Move timeline capture out of git-tracked files entirely**: would avoid dirtiness but breaks the current repo-local memory contract and the merge-friendly append-only model.

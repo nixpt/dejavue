@@ -501,7 +501,8 @@ def _write_hook(hook_path, marker):
     script_path = Path(sys.argv[0]).resolve()
     script = (
         marker + "\n"
-        f'exec python3 "{script_path}" changed --auto --commit "$(git rev-parse HEAD)" 2>/dev/null || true\n'
+        'if [ "${DEJAVUE_SKIP_AUTO_AMEND:-}" = "1" ]; then exit 0; fi\n'
+        f'exec python3 "{script_path}" changed --auto --commit "$(git rev-parse HEAD)" --amend 2>/dev/null || true\n'
     )
     hook_path.write_text(script, encoding="utf-8")
     hook_path.chmod(0o755)
@@ -787,6 +788,8 @@ def cmd_changed(args):
             with TIMELINE.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(base, ensure_ascii=False) + "\n")
         print(f"Recorded {len(touched)} file_changed events for {sha[:7]}.")
+        if getattr(args, "amend", False):
+            _amend_auto_capture_commit(sha)
     else:
         maybe_show_worthiness()
         summary = args.summary or f"Changed {args.path}"
@@ -797,6 +800,34 @@ def cmd_changed(args):
             "summary": summary,
         })
         print("Change recorded.")
+
+
+def _amend_auto_capture_commit(sha):
+    """Fold auto-captured timeline changes back into the current HEAD commit."""
+    head_sha = git_run("git", "rev-parse", "--verify", "HEAD")
+    if not head_sha:
+        return
+
+    normalized_sha = git_run("git", "rev-parse", "--verify", sha)
+    if not normalized_sha or normalized_sha != head_sha:
+        return
+
+    env = os.environ.copy()
+    env["DEJAVUE_SKIP_AUTO_AMEND"] = "1"
+    try:
+        subprocess.check_call(
+            ["git", "add", "--", str(TIMELINE)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.check_call(
+            ["git", "commit", "--amend", "--no-edit", "--no-verify"],
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return
 
 
 def cmd_decision(args):
@@ -3582,6 +3613,8 @@ def main():
     p.add_argument("--agent", default=None)
     p.add_argument("--auto", action="store_true", help="Auto mode (from git hook).")
     p.add_argument("--commit", default=None, help="Commit SHA (used with --auto).")
+    p.add_argument("--amend", action="store_true",
+                   help="Fold auto-capture back into HEAD so the worktree stays clean.")
     p.set_defaults(func=cmd_changed)
 
     p = sub.add_parser("decision", help="Record architectural decision (or blocker/claim/question/experiment).")

@@ -43,6 +43,8 @@ fallback. No new runtime deps (`urllib.request`).
   of capture (audit tool case study, 9 of 13 commits missing). Fix:
   `git diff-tree --no-commit-id -r --name-only -m --first-parent --root`
   to handle merges + root commits uniformly.
+- Post-commit auto-capture now folds the timeline update back into HEAD so
+  active worktrees stay clean after commit instead of carrying post-hook noise.
 
 ---
 
