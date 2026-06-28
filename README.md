@@ -293,12 +293,13 @@ next agent the most to rediscover. Use `--rejected "option: reason"` on every
 ```bash
 #!/usr/bin/env bash
 # dejavue auto-capture
-exec python3 /path/to/dejavue.py changed --auto --commit "$(git rev-parse HEAD)"
+if [ "${DEJAVUE_SKIP_AUTO_AMEND:-}" = "1" ]; then exit 0; fi
+exec python3 /path/to/dejavue.py changed --auto --commit "$(git rev-parse HEAD)" --amend
 ```
 
 After every `git commit`, dejavue records one `file_changed` event per touched
-file with the diff stat and commit message. No manual `changed` calls needed
-for committed work.
+file with the diff stat and commit message, then amends HEAD with the timeline
+update so the worktree returns clean instead of staying dirty.
 
 If a non-dejavue hook already exists, `init` will warn and refuse to overwrite
 unless `--force` is passed.
@@ -494,6 +495,7 @@ Design documents in repo:
 - `docs/03-example.md` — early bash demo
 - `docs/04-design-perspective.md` — design rationale, overlap analysis, hook strategy
 - `docs/05-v0.1-scope.md` — v0.1 build spec and architecture ruling
+- `docs/08-thin-wrapper.md` — minimal shell-out wrapper contract for optional MCP/stdio adapters
 - `skills/dejavue-workflow/SKILL.md` — agent-facing workflow skill (Claude Code SKILL.md format, generic — symlink into `~/.claude/skills/` to load automatically)
 - `CHANGELOG.md` — release notes
 - `CONTRIBUTING.md` — contribution guidelines

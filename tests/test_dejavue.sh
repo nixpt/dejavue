@@ -150,7 +150,8 @@ test_init_installs_hook() {
     local content
     content="$(cat .git/hooks/post-commit)"
     assert_contains "hook has dejavue marker" "$content" "dejavue auto-capture"
-    assert_contains "hook has changed --auto" "$content" "changed --auto --commit"
+    assert_contains "hook keeps tree clean" "$content" "changed --auto --commit"
+    assert_contains "hook requests amend" "$content" "--amend"
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT
@@ -380,6 +381,7 @@ test_changed_auto_commit() {
     cd "$TEST_DIR"
 
     dv init >/dev/null 2>&1
+    git config core.hooksPath /dev/null
 
     # Create a real commit with two files
     mkdir -p src
@@ -390,12 +392,16 @@ test_changed_auto_commit() {
     sha="$(git -C "$TEST_DIR" rev-parse HEAD)"
 
     local out
-    out="$(dv changed --auto --commit "$sha" 2>&1)"
+    out="$(dv changed --auto --commit "$sha" --amend 2>&1)"
     assert_contains "reports 2 events" "$out" "2 file_changed events"
 
     # Both files should be recorded
     assert_event_recorded "src/a.txt recorded" ".dejavue/timeline.jsonl" "path" "src/a.txt"
     assert_event_recorded "src/b.txt recorded" ".dejavue/timeline.jsonl" "path" "src/b.txt"
+
+    local status
+    status="$(git -C "$TEST_DIR" status --short)"
+    assert_eq "worktree stays clean after amend" "$status" ""
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT
@@ -454,6 +460,10 @@ test_post_commit_hook_fires() {
 
     after="$(grep -c '"file_changed"' .dejavue/timeline.jsonl 2>/dev/null || echo 0)"
     [[ "$after" -ge 1 ]] || { echo "  ASSERT FAIL: no file_changed events after commit (hook didn't fire)" >&2; return 1; }
+
+    local status
+    status="$(git -C "$TEST_DIR" status --short)"
+    assert_eq "worktree clean after hook amend" "$status" ""
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT

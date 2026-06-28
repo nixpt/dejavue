@@ -43,6 +43,8 @@ fallback. No new runtime deps (`urllib.request`).
   of capture (audit tool case study, 9 of 13 commits missing). Fix:
   `git diff-tree --no-commit-id -r --name-only -m --first-parent --root`
   to handle merges + root commits uniformly.
+- Post-commit auto-capture now folds the timeline update back into HEAD so
+  active worktrees stay clean after commit instead of carrying post-hook noise.
 
 ---
 
@@ -153,6 +155,7 @@ Design + waves: `docs/plans/2026-06-05-dcp-maturation.md`.
 ### MCP-only (separate horizon, memory-service ecosystem)
 
 - MCP tool wrappers around the 13 CLI commands so MCP-native agents can call dejavue via structured tool-use instead of shell. Stays optional — never breaks the zero-ceremony / format-as-contract invariant.
+- Keep the wrapper thin: shell out to `dejavue`, do not embed state, routing, or indexing in the adapter layer.
 
 ---
 
