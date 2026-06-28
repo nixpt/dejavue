@@ -12,7 +12,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 VERSION = "2.1.0"
@@ -215,6 +215,180 @@ def normalize_artifacts(args):
     return out
 
 
+def normalize_derived_from(args):
+    """Normalize the optional repeatable --derived-from flag into a deduped list."""
+    raw = getattr(args, "derived_from", None) or []
+    seen, out = set(), []
+    for ref in raw:
+        item = str(ref).strip()
+        if item and item not in seen:
+            seen.add(item)
+            out.append(item)
+    return out
+
+
+def normalize_stability(args):
+    """Normalize the optional --stability label into lowercase if present."""
+    value = getattr(args, "stability", None) or ""
+    return value.strip().lower()
+
+
+def normalize_freshness(args):
+    """Normalize the optional --freshness label while preserving user vocabulary."""
+    value = getattr(args, "freshness", None) or ""
+    return value.strip().lower()
+
+
+def parse_duration_spec(spec):
+    """Parse a small duration string like 90d, 12h, 30m, or 10s into seconds."""
+    if not spec:
+        return None
+    m = re.match(r"^\s*(\d+)\s*([smhdw])\s*$", str(spec))
+    if not m:
+        return None
+    amount = int(m.group(1))
+    unit = m.group(2)
+    return {
+        "s": amount,
+        "m": amount * 60,
+        "h": amount * 3600,
+        "d": amount * 86400,
+        "w": amount * 7 * 86400,
+    }[unit]
+
+
+def _parse_iso_ts(ts):
+    if not ts:
+        return None
+    try:
+        dt = datetime.fromisoformat(ts)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def event_stability(ev):
+    """Return the explicit or inferred stability class for an event."""
+    explicit = (ev.get("stability") or "").strip().lower()
+    if explicit:
+        return explicit
+    et = ev.get("event", "")
+    if et in ("decision", "blocker", "claim", "question", "experiment", "checkpoint"):
+        return "architectural"
+    if et in ("state_update", "handoff"):
+        return "operational"
+    if et in ("import", "reference_updated"):
+        return "constitutional"
+    if et in ("note", "trap", "incident"):
+        return "ephemeral"
+    if et in ("invariant",):
+        return "constitutional"
+    if et in ("pattern",):
+        return "architectural"
+    return ""
+
+
+def event_expiry(ev):
+    """Return (expiry_dt, expired_bool) for an event with expires_after metadata."""
+    spec = (ev.get("expires_after") or "").strip()
+    if not spec:
+        return None, False
+    seconds = parse_duration_spec(spec)
+    started = _parse_iso_ts(ev.get("ts"))
+    if seconds is None or started is None:
+        return None, False
+    expiry = started + timedelta(seconds=seconds)
+    now_dt = datetime.now(timezone.utc)
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+    return expiry, now_dt >= expiry
+
+
+def resolve_event_refs(refs, events):
+    """Resolve lineage references to readable titles when possible."""
+    if not refs:
+        return []
+    if not events:
+        return list(refs)
+
+    by_id = {}
+    by_title = {}
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        eid = (ev.get("event_id") or "").strip().lower()
+        if eid:
+            by_id[eid] = ev
+        title = (ev.get("decision_title") or ev.get("summary") or "").strip().lower()
+        if title and title not in by_title:
+            by_title[title] = ev
+
+    out = []
+    for ref in refs:
+        q = str(ref).strip()
+        if not q:
+            continue
+        low = q.lower()
+        ev = by_id.get(low) or by_title.get(low)
+        if ev is None:
+            for cand in events:
+                if not isinstance(cand, dict):
+                    continue
+                title = (cand.get("decision_title") or cand.get("summary") or "").strip().lower()
+                if title and low in title:
+                    ev = cand
+                    break
+        if ev is not None:
+            label = ev.get("decision_title") or ev.get("summary") or q
+            ts = (ev.get("ts") or "")[:10]
+            if ts:
+                out.append(f"{label} ({ts})")
+            else:
+                out.append(label)
+        else:
+            out.append(q)
+    return out
+
+
+def event_meta_lines(ev, events=None):
+    """Return human-readable metadata lines for read-time annotations."""
+    lines = []
+    freshness = (ev.get("freshness") or "").strip()
+    if freshness:
+        lines.append(f"Freshness: {freshness}")
+    expiry, expired = event_expiry(ev)
+    expires_after = (ev.get("expires_after") or "").strip()
+    if expires_after:
+        line = f"Expires after: {expires_after}"
+        if expiry is not None:
+            expires_at = expiry.astimezone().isoformat(timespec="seconds")
+            line += f" (until {expires_at})"
+            if expired:
+                line += " [expired]"
+        lines.append(line)
+    derived_from = ev.get("derived_from") or []
+    if derived_from:
+        resolved = resolve_event_refs(derived_from, events or [])
+        lines.append("Derived from: " + ", ".join(resolved))
+    stability = event_stability(ev)
+    if stability:
+        lines.append(f"Stability: {stability}")
+    return lines
+
+
+def event_search_text(ev):
+    """Return extra searchable text derived from metadata labels."""
+    parts = [
+        ev.get("freshness", ""),
+        ev.get("expires_after", ""),
+        " ".join(ev.get("derived_from") or []),
+        event_stability(ev),
+    ]
+    return " ".join(p for p in parts if p)
+
+
 def supersession_lookup(events):
     """Reverse index for --supersedes (which was otherwise write-only). Returns
     overridden_by(decision_event) -> [(superseding_title, ts_date), ...]: a decision is
@@ -248,6 +422,9 @@ def supersession_lookup(events):
 def append_event(event):
     DEJAVUE_DIR.mkdir(exist_ok=True)
     base = {"ts": now(), **git_info(), **event}
+    if not base.get("event_id"):
+        payload = json.dumps(base, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        base["event_id"] = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
     with TIMELINE.open("a", encoding="utf-8") as f:
         f.write(json.dumps(base, ensure_ascii=False) + "\n")
 
@@ -303,6 +480,22 @@ def _staleness_warnings():
 
     if REFERENCES.exists() and not list(REFERENCES.glob("*.md")):
         warnings.append("references/ is empty — consider: dejavue init --map to scaffold map.md")
+
+    expired = []
+    for ev in reversed(_load_events()):
+        expiry, is_expired = event_expiry(ev)
+        if not is_expired:
+            continue
+        label = ev.get("decision_title") or ev.get("summary") or ev.get("event") or "(untitled)"
+        expires_at = expiry.astimezone().isoformat(timespec="seconds") if expiry else ""
+        if expires_at:
+            expired.append(f"{label} expired at {expires_at}")
+        else:
+            expired.append(f"{label} expired")
+        if len(expired) >= 3:
+            break
+    if expired:
+        warnings.append("timeline has expired entries — " + "; ".join(expired))
 
     return warnings
 
@@ -367,6 +560,10 @@ def rebuild_fts():
                         " ".join(ev.get("entities") or []),  # enables recall by entity
                         ev.get("confidence", ""),  # enables recall "speculative"/"verified"/etc.
                         " ".join(ev.get("artifacts") or []),  # enables recall by artifact path
+                        ev.get("freshness", ""),
+                        ev.get("expires_after", ""),
+                        " ".join(ev.get("derived_from") or []),
+                        event_stability(ev),
                     ]
                     text = " ".join(p for p in parts if p)
                     rows.append((ev.get("ts", ""), ev.get("event", ""), text, "timeline.jsonl"))
@@ -850,15 +1047,26 @@ def cmd_decision(args):
     durability = getattr(args, "durability", None) or ""
     confidence = getattr(args, "confidence", None) or ""
     artifacts = normalize_artifacts(args)
+    freshness = normalize_freshness(args)
+    expires_after = getattr(args, "expires_after", None) or ""
+    derived_from = normalize_derived_from(args)
+    stability = normalize_stability(args)
 
     type_label = f"[{event_type.upper()}] " if event_type != "decision" else ""
     dur_label = f"[{durability.upper()}] " if durability else ""
     conf_label = f"[{confidence.upper()}] " if confidence else ""
-    entry = f"\n## {ts} — {dur_label}{conf_label}{type_label}{args.title}\n\nReason:\n{args.reason}\n"
+    stab_label = f"[{stability.upper()}] " if stability else ""
+    entry = f"\n## {ts} — {dur_label}{conf_label}{stab_label}{type_label}{args.title}\n\nReason:\n{args.reason}\n"
     if supersedes:
         entry += f"\nSupersedes: {supersedes}\n"
     if artifacts:
         entry += f"\nArtifacts: {', '.join(artifacts)}\n"
+    if freshness:
+        entry += f"\nFreshness: {freshness}\n"
+    if expires_after:
+        entry += f"\nExpires after: {expires_after}\n"
+    if derived_from:
+        entry += f"\nDerived from: {', '.join(derived_from)}\n"
     if rejected:
         entry += "\nRejected alternatives:\n"
         for ra in rejected:
@@ -886,6 +1094,10 @@ def cmd_decision(args):
         "confidence": confidence,
         "entities": normalize_entities(args),
         "artifacts": artifacts,
+        "freshness": freshness,
+        "expires_after": expires_after,
+        "derived_from": derived_from,
+        "stability": stability,
     })
     print(f"{event_type.capitalize()} recorded: {args.title}")
 
@@ -997,10 +1209,13 @@ def cmd_context(args):
         n = getattr(args, "n", 10) or 10
         print(f"--- recent timeline (last {n}) ---\n")
         lines = TIMELINE.read_text(encoding="utf-8").splitlines()[-n:]
+        events = _load_events()
         for line in lines:
             try:
                 ev = json.loads(line)
                 print(f"  [{ev.get('ts','')}] {ev.get('event','')} — {ev.get('summary','')}")
+                for meta in event_meta_lines(ev, events):
+                    print(f"    {meta}")
             except Exception:
                 print(f"  {line}")
 
@@ -1576,6 +1791,10 @@ def cmd_note(args):
         "tag": args.tag or "",
         "confidence": getattr(args, "confidence", None) or "",
         "entities": normalize_entities(args),
+        "freshness": normalize_freshness(args),
+        "expires_after": getattr(args, "expires_after", None) or "",
+        "derived_from": normalize_derived_from(args),
+        "stability": normalize_stability(args),
     })
     print(f"{event_type.capitalize()} recorded.")
 
@@ -1843,6 +2062,8 @@ def cmd_since(args):
     print(f"\nTimeline events ({len(window)}):")
     for ev in reversed(window):
         print(f"  [{ev.get('ts','')}] {ev.get('event','')} — {ev.get('summary','')}")
+        for line in event_meta_lines(ev, events):
+            print(f"    {line}")
 
     overridden_by = supersession_lookup(events)
     print(f"\nDecisions made ({len(decisions_in_window)}):")
@@ -1853,11 +2074,15 @@ def cmd_since(args):
             print(f"    ⚠ superseded by '{sup_title}' ({sup_ts})")
         if ev.get("decision_reason"):
             print(f"    Reason: {ev['decision_reason']}")
+        for line in event_meta_lines(ev, events):
+            print(f"    {line}")
 
     print(f"\nState transitions ({len(state_updates)}):")
     if state_updates:
         for ev in state_updates:
             print(f"  [{ev.get('ts','')}] {ev.get('summary','')}")
+            for line in event_meta_lines(ev, events):
+                print(f"    {line}")
     else:
         print("  (none)")
 
@@ -1865,6 +2090,8 @@ def cmd_since(args):
     if handoffs_in_window:
         for ev in handoffs_in_window:
             print(f"  [{ev.get('ts','')}] {ev.get('summary','')}")
+            for line in event_meta_lines(ev, events):
+                print(f"    {line}")
     else:
         print("  (none)")
 
@@ -1876,6 +2103,8 @@ def cmd_since(args):
             tag = f" #{ev['tag']}" if ev.get("tag") else ""
             etype = f" [{ev['event_type']}]" if ev.get("event_type") and ev["event_type"] != "note" else ""
             print(f"  [{ts}]{etype}{tag} {ev.get('summary','')}")
+            for line in event_meta_lines(ev, events):
+                print(f"    {line}")
 
     stopwords = {"the","a","an","and","or","of","to","in","is","it","for","with","on","at","by","was"}
     freq = {}
@@ -2276,8 +2505,22 @@ def _cosine(a, b):
 
 
 def _semantic_text_for(event):
-    if event.get("summary"):
-        return event["summary"]
+    parts = [
+        event.get("summary", ""),
+        event.get("decision_title", ""),
+        event.get("decision_reason", event.get("reason", "")),
+        event.get("tag", ""),
+        event.get("confidence", ""),
+        event.get("freshness", ""),
+        event.get("expires_after", ""),
+        " ".join(event.get("derived_from") or []),
+        event_stability(event),
+        " ".join(event.get("entities") or []),
+        " ".join(event.get("artifacts") or []),
+    ]
+    joined = " ".join(p for p in parts if p)
+    if joined:
+        return joined
     if event.get("event") == "decision":
         bits = [event.get("title", ""), event.get("reason", "")]
         joined = " — ".join(b for b in bits if b)
@@ -2389,9 +2632,12 @@ def cmd_recall(args):
     sup_events = _load_events()
     overridden_by = supersession_lookup(sup_events)
     decs_by_ts = {}
+    notes_by_ts = {}
     for ev in sup_events:
         if ev.get("event") == "decision":
             decs_by_ts.setdefault(ev.get("ts"), []).append(ev)
+        if ev.get("event") == "note":
+            notes_by_ts.setdefault(ev.get("ts"), []).append(ev)
 
     def _decision_for(ts, summary):
         # disambiguate same-second decisions by which title appears in the FTS text
@@ -2404,6 +2650,16 @@ def cmd_recall(args):
                 return c
         return cands[0] if cands else None
 
+    def _note_for(ts, summary):
+        cands = notes_by_ts.get(ts, [])
+        if len(cands) == 1:
+            return cands[0]
+        for c in cands:
+            text = c.get("summary") or ""
+            if text and text in (summary or ""):
+                return c
+        return cands[0] if cands else None
+
     print(f"Recall results for '{query}':\n")
     for ts, event, summary, source in rows:
         ts_display = ts[:19] if ts else "(no ts)"
@@ -2411,8 +2667,17 @@ def cmd_recall(args):
         print(f"  [{ts_display}] {event} ({source})")
         print(f"    {snippet}")
         if event == "decision":
-            for sup_title, sup_ts in overridden_by(_decision_for(ts, summary)):
-                print(f"    ⚠ superseded by '{sup_title}' ({sup_ts})")
+            ev = _decision_for(ts, summary)
+            if ev:
+                for sup_title, sup_ts in overridden_by(ev):
+                    print(f"    ⚠ superseded by '{sup_title}' ({sup_ts})")
+                for line in event_meta_lines(ev, sup_events):
+                    print(f"    {line}")
+        elif event == "note":
+            ev = _note_for(ts, summary)
+            if ev:
+                for line in event_meta_lines(ev, sup_events):
+                    print(f"    {line}")
         print()
 
 
@@ -3358,21 +3623,25 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
     local subcmd="${COMP_WORDS[1]}"
     case "$subcmd" in
         decision)
-            COMPREPLY=($(compgen -W "--reason --rejected --agent --type --tag --supersedes --durability --confidence --entity --artifacts" -- "$cur"))
+            COMPREPLY=($(compgen -W "--reason --rejected --agent --type --tag --supersedes --durability --confidence --freshness --expires-after --derived-from --stability --entity --artifacts" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "decision blocker claim question experiment checkpoint" -- "$cur"))
             elif [[ "$prev" == "--durability" ]]; then
                 COMPREPLY=($(compgen -W "temporary tactical strategic constitutional" -- "$cur"))
             elif [[ "$prev" == "--confidence" ]]; then
                 COMPREPLY=($(compgen -W "speculative proposed experimental adopted deprecated verified" -- "$cur"))
+            elif [[ "$prev" == "--stability" ]]; then
+                COMPREPLY=($(compgen -W "ephemeral operational architectural constitutional historical" -- "$cur"))
             fi ;;
         trap|incident|invariant|pattern) COMPREPLY=($(compgen -W "--agent --tag --entity" -- "$cur")) ;;
         note)
-            COMPREPLY=($(compgen -W "--agent --tag --type --entity --confidence" -- "$cur"))
+            COMPREPLY=($(compgen -W "--agent --tag --type --entity --confidence --freshness --expires-after --derived-from --stability" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "note blocker claim question observation" -- "$cur"))
             elif [[ "$prev" == "--confidence" ]]; then
                 COMPREPLY=($(compgen -W "speculative proposed experimental adopted deprecated verified" -- "$cur"))
+            elif [[ "$prev" == "--stability" ]]; then
+                COMPREPLY=($(compgen -W "ephemeral operational architectural constitutional historical" -- "$cur"))
             fi ;;
         start)    COMPREPLY=($(compgen -W "--agent --goal" -- "$cur")) ;;
         state)    COMPREPLY=($(compgen -W "--summary --agent" -- "$cur")) ;;
@@ -3489,6 +3758,10 @@ _dejavue() {
                         '--supersedes[ID or title of a prior decision this supersedes]:event-id' \\
                         '--durability[How long-lived this decision is]:durability:(temporary tactical strategic constitutional)' \\
                         '--confidence[How firm this decision is]:confidence:(speculative proposed experimental adopted deprecated verified)' \\
+                        '--freshness[Freshness label for read-time staleness hints]:freshness' \\
+                        '--expires-after[Relative expiry such as 90d or 12h]:duration' \\
+                        '--derived-from[Lineage pointer to prior event title or event_id]:event-ref' \\
+                        '--stability[Retention / stability class]:stability:(ephemeral operational architectural constitutional historical)' \\
                         '*--artifacts[File this decision is about, repeatable]:file:_files' \\
                         '*--entity[Subject this event is about, repeatable]:entity' \\
                         '--tag[Tag]:tag' ;;
@@ -3503,6 +3776,10 @@ _dejavue() {
                         '--tag[Tag]:tag' \\
                         '*--entity[Subject this event is about, repeatable]:entity' \\
                         '--confidence[How firm this note/claim is]:confidence:(speculative proposed experimental adopted deprecated verified)' \\
+                        '--freshness[Freshness label for read-time staleness hints]:freshness' \\
+                        '--expires-after[Relative expiry such as 90d or 12h]:duration' \\
+                        '--derived-from[Lineage pointer to prior event title or event_id]:event-ref' \\
+                        '--stability[Retention / stability class]:stability:(ephemeral operational architectural constitutional historical)' \\
                         '--type[Note type]:type:(note blocker claim question observation)' ;;
                 export)
                     _arguments \\
@@ -3548,6 +3825,10 @@ complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l durability -a "temporary tactical strategic constitutional"
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l confidence -a "speculative proposed experimental adopted deprecated verified"
+complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l freshness
+complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l expires-after
+complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l derived-from
+complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l stability -a "ephemeral operational architectural constitutional historical"
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l artifacts -rF
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l supersedes
 complete -c dejavue -n "__fish_seen_subcommand_from note" -l type -a "note blocker claim question observation"
@@ -3633,6 +3914,14 @@ def main():
                    help="How long-lived this decision is.")
     p.add_argument("--confidence", choices=["speculative", "proposed", "experimental", "adopted", "deprecated", "verified"],
                    help="How firm this decision is — a recall trust signal.")
+    p.add_argument("--freshness", default=None,
+                   help="Freshness label for read-time staleness hints (e.g. volatile).")
+    p.add_argument("--expires-after", dest="expires_after", default=None,
+                   help="Relative expiry such as 90d, 12h, 30m, or 10s.")
+    p.add_argument("--derived-from", action="append", dest="derived_from", default=[],
+                   help="Repeatable lineage pointer to a prior event title or event_id.")
+    p.add_argument("--stability", choices=["ephemeral", "operational", "architectural", "constitutional", "historical"],
+                   help="Retention / stability class label.")
     p.add_argument("--artifacts", action="append", metavar="PATH",
                    help="File this decision is about (repeatable; makes `blame <path>` precise).")
     p.add_argument("--agent", default=None)
@@ -3717,6 +4006,14 @@ def main():
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.add_argument("--confidence", choices=["speculative", "proposed", "experimental", "adopted", "deprecated", "verified"],
                    help="How firm this note/claim is.")
+    p.add_argument("--freshness", default=None,
+                   help="Freshness label for read-time staleness hints (e.g. volatile).")
+    p.add_argument("--expires-after", dest="expires_after", default=None,
+                   help="Relative expiry such as 90d, 12h, 30m, or 10s.")
+    p.add_argument("--derived-from", action="append", dest="derived_from", default=[],
+                   help="Repeatable lineage pointer to a prior event title or event_id.")
+    p.add_argument("--stability", choices=["ephemeral", "operational", "architectural", "constitutional", "historical"],
+                   help="Retention / stability class label.")
     p.set_defaults(func=cmd_note)
 
     p = sub.add_parser("since", help="Temporal delta since a date, commit, or agent's last session.")

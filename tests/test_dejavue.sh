@@ -2397,6 +2397,69 @@ test_confidence_invalid_rejected() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 146a. decision freshness / expiry / lineage / stability are stored and read back
+test_decision_metadata_readback() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+
+    dv decision "Temporary fix" --reason "bridge the gap" \
+        --freshness volatile --expires-after 0d \
+        --derived-from "seed idea" --stability constitutional >/dev/null 2>&1
+
+    local timeline; timeline="$(cat .dejavue/timeline.jsonl)"
+    assert_contains "freshness stored" "$timeline" '"freshness": "volatile"' || return 1
+    assert_contains "expiry stored" "$timeline" '"expires_after": "0d"' || return 1
+    assert_contains "lineage stored" "$timeline" '"derived_from": ["seed idea"]' || return 1
+    assert_contains "stability stored" "$timeline" '"stability": "constitutional"' || return 1
+
+    local ctx; ctx="$(dv context 2>&1)"
+    assert_contains "context shows freshness" "$ctx" "Freshness: volatile" || return 1
+    assert_contains "context shows expiry" "$ctx" "Expires after: 0d" || return 1
+    assert_contains "context shows expired" "$ctx" "timeline has expired entries" || return 1
+    assert_contains "context shows lineage" "$ctx" "Derived from: seed idea" || return 1
+    assert_contains "context shows stability" "$ctx" "Stability: constitutional" || return 1
+
+    local recall_fresh; recall_fresh="$(dv recall volatile 2>&1)"
+    assert_contains "recall finds freshness label" "$recall_fresh" "Temporary fix" || return 1
+    assert_contains "recall shows freshness metadata" "$recall_fresh" "Freshness: volatile" || return 1
+
+    local recall_lineage; recall_lineage="$(dv recall "seed idea" 2>&1)"
+    assert_contains "recall finds lineage label" "$recall_lineage" "Temporary fix" || return 1
+    assert_contains "recall shows lineage metadata" "$recall_lineage" "Derived from: seed idea" || return 1
+
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 146b. note freshness / expiry / lineage / stability are stored and read back
+test_note_metadata_readback() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+
+    dv note "NOTE_META_123 scratch observation" \
+        --freshness volatile --expires-after 0d \
+        --derived-from "Temporary fix" --stability ephemeral >/dev/null 2>&1
+
+    local timeline; timeline="$(cat .dejavue/timeline.jsonl)"
+    assert_contains "note freshness stored" "$timeline" '"freshness": "volatile"' || return 1
+    assert_contains "note expiry stored" "$timeline" '"expires_after": "0d"' || return 1
+    assert_contains "note lineage stored" "$timeline" '"derived_from": ["Temporary fix"]' || return 1
+    assert_contains "note stability stored" "$timeline" '"stability": "ephemeral"' || return 1
+
+    local ctx; ctx="$(dv context 2>&1)"
+    assert_contains "note context shows freshness" "$ctx" "Freshness: volatile" || return 1
+    assert_contains "note context shows expiry" "$ctx" "Expires after: 0d" || return 1
+    assert_contains "note context shows lineage" "$ctx" "Derived from: Temporary fix" || return 1
+    assert_contains "note context shows stability" "$ctx" "Stability: ephemeral" || return 1
+
+    local recall_note; recall_note="$(dv recall NOTE_META_123 2>&1)"
+    assert_contains "recall finds note" "$recall_note" "NOTE_META_123 scratch observation" || return 1
+    assert_contains "recall shows note freshness" "$recall_note" "Freshness: volatile" || return 1
+    assert_contains "recall shows note lineage" "$recall_note" "Derived from: Temporary fix" || return 1
+    assert_contains "recall shows note stability" "$recall_note" "Stability: ephemeral" || return 1
+
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # 147. since surfaces "superseded by" for an overridden decision (read-back), not the superseder
 test_supersedes_readback_since() {
     TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
@@ -2676,6 +2739,8 @@ main() {
     run_test "144 note --confidence stored"                   test_note_confidence
     run_test "145 recall by confidence"                       test_recall_by_confidence
     run_test "146 invalid --confidence rejected"              test_confidence_invalid_rejected
+    run_test "146a decision metadata read-back"               test_decision_metadata_readback
+    run_test "146b note metadata read-back"                   test_note_metadata_readback
     run_test "147 supersedes read-back in since"              test_supersedes_readback_since
     run_test "148 supersedes read-back in recall"             test_supersedes_readback_recall
     run_test "149 supersedes read-back in context (no self)"  test_supersedes_readback_context_no_self_match

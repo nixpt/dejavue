@@ -224,7 +224,8 @@ Axiom-0 clean (stdlib, single-file, additive fields). Favors the core loop
 
 > **Update (v2.1.0, 2026-06-06): the entire P0 wave shipped** — `pattern`, `entities`,
 > `--confidence`, `--supersedes` read-back, and `decision --artifacts`. See CHANGELOG `[2.1.0]`.
-> Next up is P1 (`changelog <range>`, freshness/expiry, `derived_from` lineage, stability classes).
+> **Update (P1, 2026-06-28):** `changelog <range>`, freshness/expiry, `derived_from`
+> lineage, and stability classes are now shipped in the codebase but unreleased.
 
 **P0 — do next (all small, additive)**
 - ✅ **`pattern` command + `patterns.md`** — *shipped (unreleased)*; the missing core memory file (decisions / patterns / invariants / glossary). First P0 item, done.
@@ -235,9 +236,9 @@ Axiom-0 clean (stdlib, single-file, additive fields). Favors the core loop
 
 **P1**
 - ✅ **`dejavue changelog <range>`** — *shipped (unreleased)*; why-aware markdown changelog (decisions + confidence + superseded annotations + traps/incidents + notes + commits) over a git range. First P1 item, done.
-- Per-entry freshness / expiry with read-time staleness flagging.
-- `derived_from` intent lineage (after entities land).
-- Memory stability-class label.
+- ✅ **Per-entry freshness / expiry** — *shipped (unreleased)*; optional `freshness: volatile` plus `expires_after: 90d` metadata with read-time staleness flagging in `context` / `since` / `recall`.
+- ✅ **`derived_from` intent lineage** — *shipped (unreleased)*; repeatable lineage pointers on `decision` / `note`, surfaced at read time and indexed for recall.
+- ✅ **Memory stability-class label** — *shipped (unreleased)*; optional `--stability` labels plus inferred read-time classes for the core memory surfaces.
 
 **P2**
 - `branch` / `merge-summary` git-workflow memory; project epochs; capability negotiation.

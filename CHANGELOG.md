@@ -14,6 +14,15 @@ any v1.x release can be read by any later v1.x release without migration.
   (with confidence labels and "⚠ later superseded by" annotations), **Traps & incidents**,
   **Notes**, and the git **Commits**. A `since` + `export` composition. First P1 item from
   the design backlog audit.
+- **Per-entry freshness / expiry** — optional `freshness` plus `expires_after` metadata on
+  decisions and notes, with `context` / `since` / `recall` flagging expired entries at read
+  time. The base timeline stays append-only; no background expiry process.
+- **`derived_from` lineage** — repeatable lineage pointers on `decision` and `note`, surfaced
+  in read-time context and indexed by `recall` so reasoning chains stay queryable without a
+  graph store.
+- **Memory stability classes** — optional `--stability` labels plus inferred read-time classes
+  for the core memory surfaces. Keeps the retention taxonomy visible without changing the
+  on-disk format.
 
 ## [2.1.0] — 2026-06-06
 
