@@ -1,0 +1,133 @@
+{
+  "name": "dejavue-wrapper",
+  "transport": "shell",
+  "description": "Tiny shell-out wrapper for dejavue.",
+  "tools": [
+    {
+      "name": "context",
+      "description": "Print the DejaVue boot packet for the target repo.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "since",
+      "description": "Show the unified git + DejaVue delta since a ref.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "description": "Date, commit, or revision range."
+          }
+        },
+        "required": ["ref"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "recall",
+      "description": "Search DejaVue memory for a query.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "FTS or semantic recall query."
+          }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "state",
+      "description": "Write or inspect the current state snapshot.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string",
+            "description": "Current repo snapshot."
+          }
+        },
+        "required": ["summary"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "handoff",
+      "description": "Write or inspect the next-session handoff.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string",
+            "description": "What just happened."
+          },
+          "next": {
+            "type": "string",
+            "description": "What the next agent should do."
+          }
+        },
+        "required": ["summary", "next"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "blame",
+      "description": "Show why a path exists and which events touched it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Repository path to blame."
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "decision",
+      "description": "Record a decision, blocker, or other reasoning event.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {"type": "string"},
+          "reason": {"type": "string"}
+        },
+        "required": ["title", "reason"],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "start",
+      "description": "Record a session start.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "goal": {"type": "string"}
+        },
+        "required": ["goal"],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "changed",
+      "description": "Record a file change event.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {"type": "string"},
+          "summary": {"type": "string"}
+        },
+        "required": ["path"],
+        "additionalProperties": true
+      }
+    }
+  ]
+}
