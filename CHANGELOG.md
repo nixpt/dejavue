@@ -33,6 +33,9 @@ any v1.x release can be read by any later v1.x release without migration.
 - **`dejavue epoch {begin,end,list}`** and **`dejavue milestone <name>`** — record named
   project eras and checkpoint anchors as timeline events, surface open epochs/milestones in
   `context`, and list epoch history. Completes the current P2 roadmap set.
+- **`dejavue explain <file|commit>`** — compose git history with DejaVue decisions, notes,
+  artifacts, rejected alternatives, lineage, supersession, and linked commit events to answer
+  why a file or commit exists.
 
 ## [2.1.0] — 2026-06-06
 

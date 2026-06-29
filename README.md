@@ -222,6 +222,7 @@ git                — mechanical history (commits, diffs)
 | `dejavue since <ref>` | Delta since a date, commit hash, or agent's last session. **Killer command.** |
 | `dejavue log [--since] [--agent] [--type] [--oneline] [--reverse]` | Formatted timeline view with filters. |
 | `dejavue blame <file>` | "Why does this file exist?" — decisions and events mentioning the path. |
+| `dejavue explain <file\|commit>` | Causal explanation combining git history, decisions, notes, artifacts, rejected alternatives, and linked events. |
 | `dejavue recall QUERY [--semantic] [--limit N]` | FTS5 keyword (or cosine semantic) search over all artifacts. |
 | `dejavue get <doc>` | Direct fetch of `state`, `handoff`, `decisions`, or `references/<name>`. |
 | `dejavue list [--type events\|decisions\|references]` | List available artifacts with paths. |

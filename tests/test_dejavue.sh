@@ -2580,9 +2580,11 @@ assert "branch" in data["commands"]
 assert "merge-summary" in data["commands"]
 assert "epoch" in data["commands"]
 assert "milestone" in data["commands"]
+assert "explain" in data["commands"]
 assert data["features"]["managed_adapters"] is True
 assert data["features"]["git_workflow_memory"] is True
 assert data["features"]["project_epochs"] is True
+assert data["features"]["causal_explain"] is True
 assert data["repo"]["initialized"] is True
 assert "codex" in data["repo"]["adapters"]
 PYEOF
@@ -2662,6 +2664,39 @@ test_context_shows_epochs() {
     assert_contains "context epoch section" "$out" "epochs & milestones" || return 1
     assert_contains "context open epoch" "$out" "Public beta" || return 1
     assert_contains "context milestone" "$out" "Docs baseline" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 162. explain <file> composes decisions, rejected alternatives, and artifacts
+test_explain_file() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    mkdir -p src
+    echo "cache" > src/cache.py
+    git add . && git commit -qm "add cache file"
+    dv decision "Keep cache local" --reason "offline first" --rejected "remote cache: network dependency" --artifacts src/cache.py >/dev/null 2>&1
+    dv note "Cache warmup is intentionally lazy" --entity src/cache.py >/dev/null 2>&1
+    local out; out="$(dv explain src/cache.py 2>/dev/null)"
+    assert_contains "explain file header" "$out" "# Explanation: src/cache.py" || return 1
+    assert_contains "explain decision" "$out" "Keep cache local" || return 1
+    assert_contains "explain reason" "$out" "offline first" || return 1
+    assert_contains "explain rejected" "$out" "remote cache" || return 1
+    assert_contains "explain note" "$out" "Cache warmup is intentionally lazy" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 163. explain <commit> shows commit metadata and linked file_changed events
+test_explain_commit() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    echo "explain" > explain.txt
+    git add explain.txt && git commit -qm "add explain fixture"
+    local sha; sha="$(git rev-parse HEAD)"
+    local out; out="$(dv explain "$sha" 2>/dev/null)"
+    assert_contains "explain commit header" "$out" "# Explanation: commit" || return 1
+    assert_contains "explain commit subject" "$out" "add explain fixture" || return 1
+    assert_contains "explain commit file" "$out" "explain.txt" || return 1
+    assert_contains "explain commit memory" "$out" "DejaVue memory:" || return 1
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
@@ -2855,6 +2890,8 @@ main() {
     run_test "159 merge-summary summarizes branch"            test_merge_summary_branch
     run_test "160 epoch list shows epochs"                    test_epoch_list
     run_test "161 context surfaces epochs"                    test_context_shows_epochs
+    run_test "162 explain file composes memory"               test_explain_file
+    run_test "163 explain commit composes memory"             test_explain_commit
 
     echo ""
     echo "========================================"

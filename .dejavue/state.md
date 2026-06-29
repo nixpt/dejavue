@@ -1,5 +1,5 @@
 # State
 
-Updated: 2026-06-28T23:14:56-05:00
+Updated: 2026-06-28T23:18:40-05:00
 
-P2 is complete: capabilities, branch/merge-summary git-workflow memory, and project epochs/milestones are implemented and tested. The next roadmap item is the later-phase explain <file|commit> command, followed by remaining git ergonomics like squash-summary and conflict record.
+The explain <file|commit> roadmap item is implemented and tested. It composes git history, commit metadata, decisions, artifacts, rejected alternatives, lineage, supersession, notes/patterns, hazards, and file_changed events. Next sequential roadmap items are squash-summary and conflict record from git-native ergonomics.
