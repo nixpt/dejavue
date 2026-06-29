@@ -27,6 +27,9 @@ any v1.x release can be read by any later v1.x release without migration.
   DCP capabilities: version, supported commands, optional feature support, hook status,
   and managed adapter status. First P2 item: capability negotiation for agents and thin
   adapters.
+- **`dejavue branch {start,summary,close}`** and **`dejavue merge-summary <base> <branch>`**
+  — capture branch intent/closeout as normal timeline events and replay branch-scoped memory
+  plus commits before a merge. Second P2 item: git-workflow memory for multi-agent branches.
 
 ## [2.1.0] — 2026-06-06
 
