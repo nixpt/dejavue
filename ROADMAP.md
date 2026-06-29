@@ -242,7 +242,8 @@ Axiom-0 clean (stdlib, single-file, additive fields). Favors the core loop
 
 **P2**
 - ✅ `capabilities` — *shipped (unreleased)*; machine-readable DCP capability report for agents and thin adapters.
-- `branch` / `merge-summary` git-workflow memory; project epochs.
+- ✅ `branch` / `merge-summary` git-workflow memory — *shipped (unreleased)*; capture/replay branch intent, closeout, decisions, notes, and commits before merge.
+- Project epochs.
 
 **Later — composes its inputs**
 - `dejavue explain <file|commit>` — the killer command; build after lineage / confidence / entities exist.
@@ -294,7 +295,7 @@ The git-companion commands from `deja-git.md` not yet shipped (`blame`, `since r
 over a git range — thin views, no new storage.
 
 - ✅ **`dejavue changelog <range>`** *(shipped, unreleased)* — why-aware markdown changelog (decisions + notes + traps/incidents + commits) over a git range, with confidence + superseded annotations. A `since` + `export` composition. (scratch: `deja-git.md`)
-- **`dejavue branch start|summary|close`** + **`merge-summary <base> <branch>`** — capture and replay the intent of a branch and what a merge brought in. Useful across multi-agent worktrees.
+- ✅ **`dejavue branch start|summary|close`** + **`merge-summary <base> <branch>`** *(shipped, unreleased)* — capture and replay the intent of a branch and what a merge brought in. Useful across multi-agent worktrees.
 - **`dejavue squash-summary <branch>`** — synthesize a single commit message from a branch's dejavue events before a squash-merge.
 - **`dejavue conflict record --reason`** — first-class capture of why a merge conflict was resolved a given way (today expressible only as a free-text `note`).
 

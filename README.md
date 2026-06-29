@@ -244,6 +244,8 @@ git                — mechanical history (commits, diffs)
 | `dejavue search QUERY [--semantic] [--limit N]` | Alias for `recall` (discoverable name). |
 | `dejavue diff <from> [<to>] [--format patch]` | Compare memory between two refs — decisions added, state diff, event window. |
 | `dejavue timeline [--by day/week/month]` | ASCII activity chart — events per time period. |
+| `dejavue branch {start,summary,close}` | Capture and replay branch intent, closeout, decisions, notes, and commits. |
+| `dejavue merge-summary <base> <branch>` | Summarize what a branch brings into a base ref before merge. |
 | `dejavue tag {list, filter <tag>}` | List tags with counts or filter events by tag. |
 | `dejavue note-commit <sha>` | Write a git note on a commit linking it to the last dejavue event. |
 | `dejavue version` | Print installed version. |

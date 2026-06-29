@@ -212,3 +212,14 @@ Artifacts: dejavue.py, tests/test_dejavue.sh, ROADMAP.md
 Outcome:
 Added dejavue capabilities with JSON default and text view, plus tests, docs, roadmap, changelog, completions, and repo memory.
 
+
+## 2026-06-28T22:00:14-05:00 — [ADOPTED] [ARCHITECTURAL] Ship branch and merge-summary git-workflow memory
+
+Reason:
+Multi-agent branches need a lightweight way to record branch intent and closeout, then replay the relevant DejaVue memory with commits before merge. Normal timeline events plus explicit base..branch summaries satisfy the P2 roadmap item without adding storage or orchestration responsibilities.
+
+Artifacts: dejavue.py, tests/test_dejavue.sh, ROADMAP.md
+
+Outcome:
+Added dejavue branch start|summary|close and merge-summary <base> <branch>, with tests, docs, roadmap, changelog, completions, and capabilities updates.
+

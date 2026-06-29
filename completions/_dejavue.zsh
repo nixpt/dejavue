@@ -55,6 +55,8 @@ _dejavue() {
                 'pattern:Record a discovered convention/pattern (naming, idiom, structure)'
                 'entities:List entities, or show events referencing one entity'
                 'capabilities:Report implementation and repo-local DCP capabilities'
+                'branch:Capture or replay branch intent and closeout'
+                'merge-summary:Summarize what a branch brings into a base ref'
             )
             _describe 'subcommand' subcommands ;;
         args)
@@ -89,6 +91,11 @@ _dejavue() {
                         '--target[Adapter target]:target:(claude codex gemini copilot cursor all)' ;;
                 capabilities)
                     _arguments '--format[Output format]:format:(json text)' ;;
+                branch)
+                    local branch_cmds=('start:Record branch intent' 'summary:Replay branch memory' 'close:Record branch closeout')
+                    _describe 'branch subcommand' branch_cmds ;;
+                merge-summary)
+                    _arguments '1:base ref:' '2:branch ref:' ;;
                 promote)
                     _arguments '--to[Target system]:system:(planning)' ;;
                 diff)

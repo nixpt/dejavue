@@ -2576,7 +2576,10 @@ import json, sys
 data = json.loads(sys.argv[1])
 assert data["dcp_version"] == "DCP/1.0"
 assert "capabilities" in data["commands"]
+assert "branch" in data["commands"]
+assert "merge-summary" in data["commands"]
 assert data["features"]["managed_adapters"] is True
+assert data["features"]["git_workflow_memory"] is True
 assert data["repo"]["initialized"] is True
 assert "codex" in data["repo"]["adapters"]
 PYEOF
@@ -2591,6 +2594,43 @@ test_capabilities_text() {
     assert_contains "text has dcp version" "$out" "DCP/1.0" || return 1
     assert_contains "text has features" "$out" "Features:" || return 1
     assert_contains "text has initialized" "$out" "Repo initialized: yes" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 158. branch summary replays branch intent, closeout, decisions, and commits
+test_branch_summary() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    local base; base="$(git rev-list --max-parents=0 HEAD)"
+    git checkout -qb feature/intent
+    dv branch start --goal "Ship branch memory" --base "$base" --agent tester >/dev/null 2>&1
+    dv decision "Keep branch memory in timeline" --reason "no new storage" --agent tester >/dev/null 2>&1
+    dv branch close --summary "Ready for merge" --next "Tag release" --agent tester >/dev/null 2>&1
+    echo "feature" > feature.txt
+    git add . && git commit -qm "branch work"
+    local out; out="$(dv branch summary feature/intent --base "$base" 2>/dev/null)"
+    assert_contains "branch intent section" "$out" "### Branch intent" || return 1
+    assert_contains "branch goal" "$out" "Ship branch memory" || return 1
+    assert_contains "branch decision" "$out" "Keep branch memory in timeline" || return 1
+    assert_contains "branch closeout" "$out" "Ready for merge" || return 1
+    assert_contains "branch next step" "$out" "Next: Tag release" || return 1
+    assert_contains "branch commit" "$out" "branch work" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 159. merge-summary summarizes what a branch brings into a base ref
+test_merge_summary_branch() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    local base; base="$(git rev-list --max-parents=0 HEAD)"
+    git checkout -qb feature/merge-summary
+    dv branch start --goal "Prepare merge report" --base "$base" --agent tester >/dev/null 2>&1
+    echo "merge" > merge.txt
+    git add . && git commit -qm "add merge summary fixture"
+    local out; out="$(dv merge-summary "$base" feature/merge-summary 2>/dev/null)"
+    assert_contains "merge summary header" "$out" "## Merge summary:" || return 1
+    assert_contains "merge branch goal" "$out" "Prepare merge report" || return 1
+    assert_contains "merge commit" "$out" "add merge summary fixture" || return 1
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
@@ -2780,6 +2820,8 @@ main() {
     run_test "155 changelog annotates superseded"             test_changelog_superseded
     run_test "156 capabilities emits JSON"                    test_capabilities_json
     run_test "157 capabilities text view"                     test_capabilities_text
+    run_test "158 branch summary replays intent"              test_branch_summary
+    run_test "159 merge-summary summarizes branch"            test_merge_summary_branch
 
     echo ""
     echo "========================================"

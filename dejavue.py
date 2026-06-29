@@ -1971,6 +1971,153 @@ def cmd_changelog(args):
         print("_(no dejavue events or commits in range)_")
 
 
+def _current_branch():
+    return git_run("git", "rev-parse", "--abbrev-ref", "HEAD") or "unknown"
+
+
+def _branch_event_matches(ev, branch):
+    return ev.get("branch") == branch or ev.get("target_branch") == branch
+
+
+def _events_for_git_window(base_ts, tip_ts, branch=None):
+    lo = base_ts[:19]
+    hi = tip_ts[:19] if tip_ts else None
+    events = []
+    for ev in _load_events():
+        ts = ev.get("ts", "")[:19]
+        if ts < lo or (hi is not None and ts > hi):
+            continue
+        if branch and not _branch_event_matches(ev, branch):
+            continue
+        events.append(ev)
+    return events
+
+
+def _print_branch_memory(events):
+    starts = [e for e in events if e.get("event") == "branch_start"]
+    closes = [e for e in events if e.get("event") == "branch_close"]
+    decisions = [e for e in events if e.get("event") == "decision"]
+    hazards = [e for e in events if e.get("event") in ("trap", "incident")]
+    notes = [e for e in events if e.get("event") == "note"]
+
+    if starts:
+        print("### Branch intent\n")
+        for e in starts:
+            print(f"- {e.get('goal') or e.get('summary', '')}")
+        print()
+    if closes:
+        print("### Branch closeout\n")
+        for e in closes:
+            print(f"- {e.get('summary', '')}")
+            for nxt in e.get("next") or []:
+                print(f"  - Next: {nxt}")
+        print()
+    if decisions:
+        print("### Decisions\n")
+        for e in decisions:
+            title = e.get("decision_title") or "(untitled)"
+            reason = e.get("decision_reason") or ""
+            print(f"- **{title}**" + (f" — {reason}" if reason else ""))
+        print()
+    if hazards:
+        print("### Traps & incidents\n")
+        for e in hazards:
+            print(f"- [{e.get('event', '')}] {e.get('summary', '')}")
+        print()
+    if notes:
+        print("### Notes\n")
+        for e in notes:
+            print(f"- {e.get('summary', '')}")
+        print()
+    return bool(starts or closes or decisions or hazards or notes)
+
+
+def cmd_branch(args):
+    """Capture or replay branch intent from normal timeline events."""
+    action = args.action
+    branch = getattr(args, "name", None) or _current_branch()
+
+    if action == "start":
+        base = getattr(args, "base", None) or ""
+        append_event({
+            "agent": resolve_agent(getattr(args, "agent", None)),
+            "event": "branch_start",
+            "target_branch": branch,
+            "base_ref": base,
+            "goal": args.goal,
+            "summary": f"Branch {branch} started: {args.goal}",
+        })
+        print(f"Branch intent recorded for {branch}.")
+        return
+
+    if action == "close":
+        next_steps = getattr(args, "next", None) or []
+        append_event({
+            "agent": resolve_agent(getattr(args, "agent", None)),
+            "event": "branch_close",
+            "target_branch": branch,
+            "summary": args.summary,
+            "next": next_steps,
+        })
+        print(f"Branch closeout recorded for {branch}.")
+        return
+
+    base = getattr(args, "base", None)
+    print(f"## Branch summary: {branch}\n")
+    if base:
+        base_ts = git_run("git", "log", "-1", "--format=%aI", base)
+        tip_ts = git_run("git", "log", "-1", "--format=%aI", branch)
+        if not base_ts:
+            print(f"Cannot resolve base ref '{base}'.")
+            return
+        if not tip_ts:
+            print(f"Cannot resolve branch ref '{branch}'.")
+            return
+        events = _events_for_git_window(base_ts, tip_ts, branch)
+    else:
+        events = [ev for ev in _load_events() if _branch_event_matches(ev, branch)]
+
+    printed = _print_branch_memory(events)
+    if base:
+        git_log = git_run("git", "log", "--oneline", f"{base}..{branch}")
+        if git_log:
+            print("### Commits\n")
+            for line in git_log.splitlines():
+                print(f"- {line}")
+            printed = True
+            print()
+    if not printed:
+        print("_(no branch-scoped dejavue events or commits found)_")
+
+
+def cmd_merge_summary(args):
+    """Summarize what a branch brings into a base ref."""
+    base = args.base
+    branch = args.branch
+    base_ts = git_run("git", "log", "-1", "--format=%aI", base)
+    tip_ts = git_run("git", "log", "-1", "--format=%aI", branch)
+    if not base_ts:
+        print(f"Cannot resolve base ref '{base}'.")
+        return
+    if not tip_ts:
+        print(f"Cannot resolve branch ref '{branch}'.")
+        return
+
+    print(f"## Merge summary: {base}..{branch}\n")
+    events = _events_for_git_window(base_ts, tip_ts, branch)
+    printed = _print_branch_memory(events)
+
+    git_log = git_run("git", "log", "--oneline", f"{base}..{branch}")
+    if git_log:
+        print("### Commits\n")
+        for line in git_log.splitlines():
+            print(f"- {line}")
+        print()
+        printed = True
+    if not printed:
+        print("_(no branch-scoped dejavue events or commits found)_")
+
+
 def _probe_fts5():
     """Return whether this Python sqlite build supports FTS5 without touching repo files."""
     global HAS_FTS5
@@ -2028,6 +2175,7 @@ def _capabilities_data():
         "promote", "import", "export", "reference", "link", "search", "diff",
         "timeline", "tag", "note-commit", "completion", "rejected", "trap",
         "incident", "invariant", "pattern", "entities", "capabilities",
+        "branch", "merge-summary",
     ]
     return {
         "dejavue_version": VERSION,
@@ -2045,6 +2193,7 @@ def _capabilities_data():
             "managed_adapters": True,
             "git_hooks": True,
             "git_notes": True,
+            "git_workflow_memory": True,
             "per_entry_metadata": True,
             "freshness_expiry": True,
             "intent_lineage": True,
@@ -3724,7 +3873,7 @@ _dejavue() {
     local cmds="version init start changed decision state handoff context status \\
 check archive roster config install-skill log blame note since changelog ingest recall \\
 worthiness get list annotate stats promote import export reference link search \\
-diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities"
+diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary"
     if [[ $COMP_CWORD -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$cmds" -- "$cur"))
         return
@@ -3776,6 +3925,8 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
             if [[ "$prev" == "--format" ]]; then
                 COMPREPLY=($(compgen -W "json text" -- "$cur"))
             fi ;;
+        branch)   COMPREPLY=($(compgen -W "start summary close --base --goal --summary --next --agent" -- "$cur")) ;;
+        merge-summary) COMPREPLY=($(compgen -f -- "$cur")) ;;
         import)   COMPREPLY=($(compgen -f -- "$cur")) ;;
         promote)
             COMPREPLY=($(compgen -W "--to" -- "$cur"))
@@ -3860,6 +4011,8 @@ _dejavue() {
                 'pattern:Record a discovered convention/pattern (naming, idiom, structure)'
                 'entities:List entities, or show events referencing one entity'
                 'capabilities:Report implementation and repo-local DCP capabilities'
+                'branch:Capture or replay branch intent and closeout'
+                'merge-summary:Summarize what a branch brings into a base ref'
             )
             _describe 'subcommand' subcommands ;;
         args)
@@ -3902,6 +4055,11 @@ _dejavue() {
                         '--target[Adapter target]:target:(claude codex gemini copilot cursor all)' ;;
                 capabilities)
                     _arguments '--format[Output format]:format:(json text)' ;;
+                branch)
+                    local branch_cmds=('start:Record branch intent' 'summary:Replay branch memory' 'close:Record branch closeout')
+                    _describe 'branch subcommand' branch_cmds ;;
+                merge-summary)
+                    _arguments '1:base ref:' '2:branch ref:' ;;
                 promote)
                     _arguments '--to[Target system]:system:(planning)' ;;
                 diff)
@@ -3936,7 +4094,7 @@ _FISH_COMPLETION = """\
 set -l cmds version init start changed decision state handoff context status \\
     check archive roster config install-skill log blame note since changelog ingest recall \\
     worthiness get list annotate stats promote import export reference link search \\
-    diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities
+    diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
@@ -3954,6 +4112,13 @@ complete -c dejavue -n "__fish_seen_subcommand_from export" -l format -a "json m
 complete -c dejavue -n "__fish_seen_subcommand_from export" -l target -a "claude codex gemini copilot cursor all"
 # capabilities
 complete -c dejavue -n "__fish_seen_subcommand_from capabilities" -l format -a "json text"
+# branch / merge-summary
+complete -c dejavue -n "__fish_seen_subcommand_from branch" -a "start summary close"
+complete -c dejavue -n "__fish_seen_subcommand_from branch" -l base
+complete -c dejavue -n "__fish_seen_subcommand_from branch" -l goal
+complete -c dejavue -n "__fish_seen_subcommand_from branch" -l summary
+complete -c dejavue -n "__fish_seen_subcommand_from branch" -l next
+complete -c dejavue -n "__fish_seen_subcommand_from branch" -l agent -d "Agent name"
 # promote
 complete -c dejavue -n "__fish_seen_subcommand_from promote" -l to -a "planning"
 # diff
@@ -4148,6 +4313,28 @@ def main():
     p.add_argument("--format", choices=["json", "text"], default="json",
                    help="Output format (default: json).")
     p.set_defaults(func=cmd_capabilities)
+
+    p = sub.add_parser("branch", help="Capture or replay branch intent and closeout.")
+    branch_sub = p.add_subparsers(dest="action", required=True)
+    bs = branch_sub.add_parser("start", help="Record branch intent.")
+    bs.add_argument("name", nargs="?", help="Branch name (default: current branch).")
+    bs.add_argument("--goal", required=True, help="What this branch is meant to accomplish.")
+    bs.add_argument("--base", default=None, help="Base ref this branch starts from.")
+    bs.add_argument("--agent", default=None)
+    bs = branch_sub.add_parser("summary", help="Replay branch-scoped memory and commits.")
+    bs.add_argument("name", nargs="?", help="Branch name/ref (default: current branch).")
+    bs.add_argument("--base", default=None, help="Base ref for commit and event window.")
+    bs = branch_sub.add_parser("close", help="Record branch closeout.")
+    bs.add_argument("name", nargs="?", help="Branch name (default: current branch).")
+    bs.add_argument("--summary", required=True, help="What is ready, blocked, or left over.")
+    bs.add_argument("--next", action="append", default=[], help="Repeatable next step.")
+    bs.add_argument("--agent", default=None)
+    p.set_defaults(func=cmd_branch)
+
+    p = sub.add_parser("merge-summary", help="Summarize what a branch brings into a base ref.")
+    p.add_argument("base", help="Base ref.")
+    p.add_argument("branch", help="Branch/ref to summarize.")
+    p.set_defaults(func=cmd_merge_summary)
 
     p = sub.add_parser("ingest", help="Scrape .claude/, CHANGELOG, ADRs, git log into timeline.")
     p.add_argument("--force", action="store_true", help="Re-run even if ingested.lock exists.")
