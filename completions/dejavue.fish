@@ -4,7 +4,7 @@
 set -l cmds version init start changed decision state handoff context status \
     check archive roster config install-skill log blame note since changelog ingest recall \
     worthiness get list annotate stats promote import export reference link search \
-    diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary squash-summary epoch milestone explain conflict
+    diff timeline tag note-commit completion rejected trap incident invariant pattern entities owners capabilities branch merge-summary squash-summary epoch milestone explain conflict
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
@@ -13,6 +13,7 @@ complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l confidence
 complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l author-type -a "human agent orchestrator ci bot"
 complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l tension
 complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l value
+complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l domain-owner
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l freshness
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l expires-after
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l derived-from

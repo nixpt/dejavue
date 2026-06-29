@@ -47,6 +47,9 @@ any v1.x release can be read by any later v1.x release without migration.
 - **`--value LABEL`** — repeatable soft project philosophy metadata on core memory-writing
   commands (for example `local-first` / `capability-first`), surfaced in context/recall
   without turning values into enforced invariants.
+- **`--domain-owner NAME`** and **`dejavue owners [NAME]`** — assign one normalized owner
+  to core memory events, index it for recall, and list/filter owner-scoped memory without
+  introducing a graph or registry.
 - **`dejavue conflict record --reason TEXT [--path PATH]`** — record conflict-resolution
   rationale as timeline memory and surface it in `explain <file>`.
 

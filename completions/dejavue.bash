@@ -7,7 +7,7 @@ _dejavue() {
     local cmds="version init start changed decision state handoff context status \
 check archive roster config install-skill log blame note since changelog ingest recall \
 worthiness get list annotate stats promote import export reference link search \
-diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary squash-summary epoch milestone explain conflict"
+diff timeline tag note-commit completion rejected trap incident invariant pattern entities owners capabilities branch merge-summary squash-summary epoch milestone explain conflict"
     if [[ $COMP_CWORD -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$cmds" -- "$cur"))
         return
@@ -19,7 +19,7 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
     fi
     case "$subcmd" in
         decision)
-            COMPREPLY=($(compgen -W "--reason --rejected --agent --author-type --tension --value --type --tag --supersedes --durability --confidence --freshness --expires-after --derived-from --stability --entity --artifacts" -- "$cur"))
+            COMPREPLY=($(compgen -W "--reason --rejected --agent --author-type --tension --value --domain-owner --type --tag --supersedes --durability --confidence --freshness --expires-after --derived-from --stability --entity --artifacts" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "decision blocker claim question experiment checkpoint" -- "$cur"))
             elif [[ "$prev" == "--durability" ]]; then
@@ -29,9 +29,9 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
             elif [[ "$prev" == "--stability" ]]; then
                 COMPREPLY=($(compgen -W "ephemeral operational architectural constitutional historical" -- "$cur"))
             fi ;;
-        trap|incident|invariant|pattern) COMPREPLY=($(compgen -W "--agent --author-type --tension --value --tag --entity" -- "$cur")) ;;
+        trap|incident|invariant|pattern) COMPREPLY=($(compgen -W "--agent --author-type --tension --value --domain-owner --tag --entity" -- "$cur")) ;;
         note)
-            COMPREPLY=($(compgen -W "--agent --author-type --tension --value --tag --type --entity --confidence --freshness --expires-after --derived-from --stability" -- "$cur"))
+            COMPREPLY=($(compgen -W "--agent --author-type --tension --value --domain-owner --tag --type --entity --confidence --freshness --expires-after --derived-from --stability" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "note blocker claim question observation" -- "$cur"))
             elif [[ "$prev" == "--confidence" ]]; then
@@ -39,10 +39,10 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
             elif [[ "$prev" == "--stability" ]]; then
                 COMPREPLY=($(compgen -W "ephemeral operational architectural constitutional historical" -- "$cur"))
             fi ;;
-        start)    COMPREPLY=($(compgen -W "--agent --author-type --tension --value --goal" -- "$cur")) ;;
-        changed)  COMPREPLY=($(compgen -W "--summary --agent --author-type --tension --value --auto --commit --amend" -- "$cur")) ;;
-        state)    COMPREPLY=($(compgen -W "--summary --agent --author-type --tension --value" -- "$cur")) ;;
-        handoff)  COMPREPLY=($(compgen -W "--summary --next --agent --author-type --tension --value" -- "$cur")) ;;
+        start)    COMPREPLY=($(compgen -W "--agent --author-type --tension --value --domain-owner --goal" -- "$cur")) ;;
+        changed)  COMPREPLY=($(compgen -W "--summary --agent --author-type --tension --value --domain-owner --auto --commit --amend" -- "$cur")) ;;
+        state)    COMPREPLY=($(compgen -W "--summary --agent --author-type --tension --value --domain-owner" -- "$cur")) ;;
+        handoff)  COMPREPLY=($(compgen -W "--summary --next --agent --author-type --tension --value --domain-owner" -- "$cur")) ;;
         context)  COMPREPLY=($(compgen -W "--lines" -- "$cur")) ;;
         since)    COMPREPLY=($(compgen -W "--agent --format" -- "$cur")) ;;
         log)      COMPREPLY=($(compgen -W "--since --agent --type --oneline --limit" -- "$cur")) ;;
@@ -64,13 +64,13 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
             if [[ "$prev" == "--format" ]]; then
                 COMPREPLY=($(compgen -W "json text" -- "$cur"))
             fi ;;
-        branch)   COMPREPLY=($(compgen -W "start summary close --base --goal --summary --next --agent --author-type --tension --value" -- "$cur")) ;;
+        branch)   COMPREPLY=($(compgen -W "start summary close --base --goal --summary --next --agent --author-type --tension --value --domain-owner" -- "$cur")) ;;
         merge-summary) COMPREPLY=($(compgen -f -- "$cur")) ;;
         squash-summary) COMPREPLY=($(compgen -W "--base" -- "$cur")) ;;
-        epoch)    COMPREPLY=($(compgen -W "begin end list --summary --agent --author-type --tension --value" -- "$cur")) ;;
-        milestone) COMPREPLY=($(compgen -W "--summary --agent --author-type --tension --value" -- "$cur")) ;;
+        epoch)    COMPREPLY=($(compgen -W "begin end list --summary --agent --author-type --tension --value --domain-owner" -- "$cur")) ;;
+        milestone) COMPREPLY=($(compgen -W "--summary --agent --author-type --tension --value --domain-owner" -- "$cur")) ;;
         explain)  COMPREPLY=($(compgen -f -- "$cur")) ;;
-        conflict) COMPREPLY=($(compgen -W "record list --path --reason --resolution --agent --author-type --tension --value" -- "$cur")) ;;
+        conflict) COMPREPLY=($(compgen -W "record list --path --reason --resolution --agent --author-type --tension --value --domain-owner" -- "$cur")) ;;
         import)   COMPREPLY=($(compgen -f -- "$cur")) ;;
         promote)
             COMPREPLY=($(compgen -W "--to" -- "$cur"))

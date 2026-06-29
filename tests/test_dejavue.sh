@@ -2583,6 +2583,7 @@ assert "epoch" in data["commands"]
 assert "milestone" in data["commands"]
 assert "explain" in data["commands"]
 assert "conflict" in data["commands"]
+assert "owners" in data["commands"]
 assert data["features"]["managed_adapters"] is True
 assert data["features"]["git_workflow_memory"] is True
 assert data["features"]["project_epochs"] is True
@@ -2591,6 +2592,7 @@ assert data["features"]["conflict_memory"] is True
 assert data["features"]["author_type"] is True
 assert data["features"]["tension_tracking"] is True
 assert data["features"]["project_values"] is True
+assert data["features"]["domain_owner"] is True
 assert data["repo"]["initialized"] is True
 assert "codex" in data["repo"]["adapters"]
 PYEOF
@@ -2822,6 +2824,39 @@ test_value_metadata() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 169. --domain-owner stores owner metadata and owners filters by normalized owner
+test_domain_owner_metadata() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+
+    dv decision "Auth owns tokens" --reason "token policy is auth-owned" \
+        --domain-owner "Auth Team" >/dev/null 2>&1
+    dv note "Schedulers are platform-owned" --domain-owner "Platform Core" >/dev/null 2>&1
+
+    local timeline; timeline="$(cat .dejavue/timeline.jsonl)"
+    assert_contains "decision owner stored" "$timeline" '"domain_owner": "auth-team"' || return 1
+    assert_contains "note owner stored" "$timeline" '"domain_owner": "platform-core"' || return 1
+    assert_contains "decision doc shows owner" "$(cat .dejavue/decisions.md)" "Domain owner: auth-team" || return 1
+
+    local ctx; ctx="$(dv context -n 6 2>&1)"
+    assert_contains "context shows decision owner" "$ctx" "Domain owner: auth-team" || return 1
+    assert_contains "context shows note owner" "$ctx" "Domain owner: platform-core" || return 1
+
+    local owners; owners="$(dv owners 2>&1)"
+    assert_contains "owners lists auth" "$owners" "@auth-team" || return 1
+    assert_contains "owners lists platform" "$owners" "@platform-core" || return 1
+
+    local filtered; filtered="$(dv owners 'Auth Team' 2>&1)"
+    assert_contains "owners filters by normalized name" "$filtered" "Auth owns tokens" || return 1
+    assert_not_contains "owners filter excludes other owner" "$filtered" "Schedulers are platform-owned" || return 1
+
+    local recall; recall="$(dv recall auth 2>&1)"
+    assert_contains "recall finds owner" "$recall" "Auth owns tokens" || return 1
+    assert_contains "recall shows owner metadata" "$recall" "Domain owner: auth-team" || return 1
+
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -3019,6 +3054,7 @@ main() {
     run_test "166 author type metadata read-back"             test_author_type_metadata
     run_test "167 tension metadata read-back"                 test_tension_metadata
     run_test "168 value metadata read-back"                   test_value_metadata
+    run_test "169 domain owner metadata read-back"            test_domain_owner_metadata
 
     echo ""
     echo "========================================"
