@@ -2220,6 +2220,60 @@ def cmd_merge_summary(args):
         print("_(no branch-scoped dejavue events or commits found)_")
 
 
+def _resolve_branch_range(branch, base=None):
+    if base:
+        return base, branch
+    merge_base = git_run("git", "merge-base", "HEAD", branch)
+    return merge_base, branch
+
+
+def cmd_squash_summary(args):
+    """Synthesize a squash-merge commit message from branch memory and commits."""
+    branch = args.branch
+    base, tip = _resolve_branch_range(branch, getattr(args, "base", None))
+    if not base:
+        print(f"Cannot resolve merge base for '{branch}'. Pass --base explicitly.")
+        return
+    base_ts = git_run("git", "log", "-1", "--format=%aI", base)
+    tip_ts = git_run("git", "log", "-1", "--format=%aI", tip)
+    if not base_ts:
+        print(f"Cannot resolve base ref '{base}'.")
+        return
+    if not tip_ts:
+        print(f"Cannot resolve branch ref '{tip}'.")
+        return
+
+    events = _events_for_git_window(base_ts, tip_ts, branch)
+    starts = [e for e in events if e.get("event") == "branch_start"]
+    decisions = [e for e in events if e.get("event") == "decision"]
+    notes = [e for e in events if e.get("event") == "note"]
+    commits = git_run("git", "log", "--oneline", f"{base}..{tip}").splitlines()
+    goal = (starts[-1].get("goal") if starts else "") or (commits[-1].split(" ", 1)[1] if commits and " " in commits[-1] else f"merge {branch}")
+
+    print(goal.strip())
+    print()
+    display_base = base[:7] if re.fullmatch(r"[0-9a-f]{40}", base) else base
+    print(f"Branch: {display_base}..{branch}")
+    if starts:
+        print("\nIntent:")
+        for ev in starts:
+            print(f"- {ev.get('goal') or ev.get('summary', '')}")
+    if decisions:
+        print("\nDecisions:")
+        for ev in decisions:
+            title = ev.get("decision_title") or "(untitled)"
+            reason = ev.get("decision_reason") or ""
+            print(f"- {title}" + (f": {reason}" if reason else ""))
+    if notes:
+        print("\nNotes:")
+        for ev in notes:
+            print(f"- {ev.get('summary', '')}")
+    if commits:
+        print("\nCommits:")
+        for line in commits:
+            print(f"- {line}")
+
+
 def _epoch_records(events):
     epochs = {}
     milestones = []
@@ -2366,7 +2420,7 @@ def _capabilities_data():
         "promote", "import", "export", "reference", "link", "search", "diff",
         "timeline", "tag", "note-commit", "completion", "rejected", "trap",
         "incident", "invariant", "pattern", "entities", "capabilities",
-        "branch", "merge-summary", "epoch", "milestone", "explain",
+        "branch", "merge-summary", "squash-summary", "epoch", "milestone", "explain",
     ]
     return {
         "dejavue_version": VERSION,
@@ -4066,7 +4120,7 @@ _dejavue() {
     local cmds="version init start changed decision state handoff context status \\
 check archive roster config install-skill log blame note since changelog ingest recall \\
 worthiness get list annotate stats promote import export reference link search \\
-diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary epoch milestone explain"
+diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary squash-summary epoch milestone explain"
     if [[ $COMP_CWORD -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$cmds" -- "$cur"))
         return
@@ -4120,6 +4174,7 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
             fi ;;
         branch)   COMPREPLY=($(compgen -W "start summary close --base --goal --summary --next --agent" -- "$cur")) ;;
         merge-summary) COMPREPLY=($(compgen -f -- "$cur")) ;;
+        squash-summary) COMPREPLY=($(compgen -W "--base" -- "$cur")) ;;
         epoch)    COMPREPLY=($(compgen -W "begin end list --summary --agent" -- "$cur")) ;;
         milestone) COMPREPLY=($(compgen -W "--summary --agent" -- "$cur")) ;;
         explain)  COMPREPLY=($(compgen -f -- "$cur")) ;;
@@ -4209,6 +4264,7 @@ _dejavue() {
                 'capabilities:Report implementation and repo-local DCP capabilities'
                 'branch:Capture or replay branch intent and closeout'
                 'merge-summary:Summarize what a branch brings into a base ref'
+                'squash-summary:Synthesize a squash-merge commit message'
                 'epoch:Record or list project epochs'
                 'milestone:Record a named project milestone'
                 'explain:Explain why a file or commit exists'
@@ -4259,6 +4315,8 @@ _dejavue() {
                     _describe 'branch subcommand' branch_cmds ;;
                 merge-summary)
                     _arguments '1:base ref:' '2:branch ref:' ;;
+                squash-summary)
+                    _arguments '--base[Base ref]:base ref' '1:branch ref:' ;;
                 epoch)
                     local epoch_cmds=('begin:Open a named project epoch' 'end:Close a named project epoch' 'list:List epochs and milestones')
                     _describe 'epoch subcommand' epoch_cmds ;;
@@ -4300,7 +4358,7 @@ _FISH_COMPLETION = """\
 set -l cmds version init start changed decision state handoff context status \\
     check archive roster config install-skill log blame note since changelog ingest recall \\
     worthiness get list annotate stats promote import export reference link search \\
-    diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary epoch milestone explain
+    diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary squash-summary epoch milestone explain
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
@@ -4325,6 +4383,7 @@ complete -c dejavue -n "__fish_seen_subcommand_from branch" -l goal
 complete -c dejavue -n "__fish_seen_subcommand_from branch" -l summary
 complete -c dejavue -n "__fish_seen_subcommand_from branch" -l next
 complete -c dejavue -n "__fish_seen_subcommand_from branch" -l agent -d "Agent name"
+complete -c dejavue -n "__fish_seen_subcommand_from squash-summary" -l base
 # epoch / milestone
 complete -c dejavue -n "__fish_seen_subcommand_from epoch" -a "begin end list"
 complete -c dejavue -n "__fish_seen_subcommand_from epoch milestone" -l summary
@@ -4546,6 +4605,11 @@ def main():
     p.add_argument("base", help="Base ref.")
     p.add_argument("branch", help="Branch/ref to summarize.")
     p.set_defaults(func=cmd_merge_summary)
+
+    p = sub.add_parser("squash-summary", help="Synthesize a squash-merge commit message from branch memory.")
+    p.add_argument("branch", help="Branch/ref to summarize.")
+    p.add_argument("--base", default=None, help="Base ref (default: git merge-base HEAD <branch>).")
+    p.set_defaults(func=cmd_squash_summary)
 
     p = sub.add_parser("epoch", help="Record or list project epochs.")
     epoch_sub = p.add_subparsers(dest="action", required=True)

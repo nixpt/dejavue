@@ -36,6 +36,8 @@ any v1.x release can be read by any later v1.x release without migration.
 - **`dejavue explain <file|commit>`** — compose git history with DejaVue decisions, notes,
   artifacts, rejected alternatives, lineage, supersession, and linked commit events to answer
   why a file or commit exists.
+- **`dejavue squash-summary <branch> [--base REF]`** — synthesize a squash-merge commit
+  message from branch intent, decisions, notes, and commits.
 
 ## [2.1.0] — 2026-06-06
 

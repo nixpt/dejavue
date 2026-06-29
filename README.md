@@ -247,6 +247,7 @@ git                — mechanical history (commits, diffs)
 | `dejavue timeline [--by day/week/month]` | ASCII activity chart — events per time period. |
 | `dejavue branch {start,summary,close}` | Capture and replay branch intent, closeout, decisions, notes, and commits. |
 | `dejavue merge-summary <base> <branch>` | Summarize what a branch brings into a base ref before merge. |
+| `dejavue squash-summary <branch> [--base REF]` | Synthesize a squash-merge commit message from branch memory and commits. |
 | `dejavue epoch {begin,end,list}` | Record named project eras that frame old decisions. |
 | `dejavue milestone NAME [--summary TEXT]` | Record a named project checkpoint. |
 | `dejavue tag {list, filter <tag>}` | List tags with counts or filter events by tag. |

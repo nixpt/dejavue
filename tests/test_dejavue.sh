@@ -2578,6 +2578,7 @@ assert data["dcp_version"] == "DCP/1.0"
 assert "capabilities" in data["commands"]
 assert "branch" in data["commands"]
 assert "merge-summary" in data["commands"]
+assert "squash-summary" in data["commands"]
 assert "epoch" in data["commands"]
 assert "milestone" in data["commands"]
 assert "explain" in data["commands"]
@@ -2697,6 +2698,25 @@ test_explain_commit() {
     assert_contains "explain commit subject" "$out" "add explain fixture" || return 1
     assert_contains "explain commit file" "$out" "explain.txt" || return 1
     assert_contains "explain commit memory" "$out" "DejaVue memory:" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 164. squash-summary synthesizes a commit-message draft from branch memory
+test_squash_summary_branch() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    local base; base="$(git rev-list --max-parents=0 HEAD)"
+    git checkout -qb feature/squash-summary
+    dv branch start --goal "Ship squash summaries" --base "$base" --agent tester >/dev/null 2>&1
+    dv decision "Use branch events for squash" --reason "keeps commit messages grounded" --agent tester >/dev/null 2>&1
+    dv note "Squash message should include commits" --agent tester >/dev/null 2>&1
+    echo "squash" > squash.txt
+    git add . && git commit -qm "add squash fixture"
+    local out; out="$(dv squash-summary feature/squash-summary --base "$base" 2>/dev/null)"
+    assert_contains "squash subject" "$out" "Ship squash summaries" || return 1
+    assert_contains "squash decisions" "$out" "Use branch events for squash" || return 1
+    assert_contains "squash notes" "$out" "Squash message should include commits" || return 1
+    assert_contains "squash commits" "$out" "add squash fixture" || return 1
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
@@ -2892,6 +2912,7 @@ main() {
     run_test "161 context surfaces epochs"                    test_context_shows_epochs
     run_test "162 explain file composes memory"               test_explain_file
     run_test "163 explain commit composes memory"             test_explain_commit
+    run_test "164 squash-summary synthesizes message"         test_squash_summary_branch
 
     echo ""
     echo "========================================"

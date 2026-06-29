@@ -245,3 +245,14 @@ Artifacts: dejavue.py, tests/test_dejavue.sh, ROADMAP.md
 Outcome:
 Added dejavue explain <file|commit>, tests, docs, roadmap/changelog updates, completions, capabilities flag, and repo memory.
 
+
+## 2026-06-28T23:22:50-05:00 — [ADOPTED] [ARCHITECTURAL] Ship squash-summary for branch commit messages
+
+Reason:
+Squash merges need a grounded commit-message draft that preserves branch intent, decisions, notes, and commits. Reusing branch timeline events keeps the command thin and avoids adding orchestration or storage.
+
+Artifacts: dejavue.py, tests/test_dejavue.sh, ROADMAP.md
+
+Outcome:
+Added squash-summary <branch> [--base REF], tests, docs, roadmap/changelog updates, completions, and repo memory.
+
