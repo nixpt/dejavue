@@ -57,6 +57,7 @@ _dejavue() {
                 'capabilities:Report implementation and repo-local DCP capabilities'
                 'branch:Capture or replay branch intent and closeout'
                 'merge-summary:Summarize what a branch brings into a base ref'
+                'squash-summary:Synthesize a squash-merge commit message'
                 'epoch:Record or list project epochs'
                 'milestone:Record a named project milestone'
                 'explain:Explain why a file or commit exists'
@@ -99,6 +100,8 @@ _dejavue() {
                     _describe 'branch subcommand' branch_cmds ;;
                 merge-summary)
                     _arguments '1:base ref:' '2:branch ref:' ;;
+                squash-summary)
+                    _arguments '--base[Base ref]:base ref' '1:branch ref:' ;;
                 epoch)
                     local epoch_cmds=('begin:Open a named project epoch' 'end:Close a named project epoch' 'list:List epochs and milestones')
                     _describe 'epoch subcommand' epoch_cmds ;;
