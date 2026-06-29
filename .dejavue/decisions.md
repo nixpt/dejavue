@@ -201,3 +201,14 @@ Reason:
 Rejected alternatives:
 - **Leave `timeline.jsonl` dirty after every commit**: keeps the capture path simple but forces constant manual cleanup and makes `git status` noisy.
 - **Move timeline capture out of git-tracked files entirely**: would avoid dirtiness but breaks the current repo-local memory contract and the merge-friendly append-only model.
+
+## 2026-06-28T21:34:58-05:00 — [ADOPTED] [ARCHITECTURAL] Ship capabilities as first P2 negotiation slice
+
+Reason:
+Agents and thin adapters need a stable machine-readable way to discover DCP version, supported commands, optional feature support, hook status, and managed adapter state before choosing workflows. This is the smallest useful P2 item and avoids prematurely designing branch lifecycle semantics.
+
+Artifacts: dejavue.py, tests/test_dejavue.sh, ROADMAP.md
+
+Outcome:
+Added dejavue capabilities with JSON default and text view, plus tests, docs, roadmap, changelog, completions, and repo memory.
+

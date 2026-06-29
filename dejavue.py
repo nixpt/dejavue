@@ -1971,6 +1971,115 @@ def cmd_changelog(args):
         print("_(no dejavue events or commits in range)_")
 
 
+def _probe_fts5():
+    """Return whether this Python sqlite build supports FTS5 without touching repo files."""
+    global HAS_FTS5
+    if HAS_FTS5 is not None:
+        return HAS_FTS5
+    conn = sqlite3.connect(":memory:")
+    try:
+        conn.execute("CREATE VIRTUAL TABLE temp.probe USING fts5(x)")
+        conn.execute("DROP TABLE temp.probe")
+        HAS_FTS5 = True
+    except sqlite3.OperationalError:
+        HAS_FTS5 = False
+    finally:
+        conn.close()
+    return HAS_FTS5
+
+
+def _hook_status():
+    git_dir_raw = git_run("git", "rev-parse", "--git-dir")
+    if not git_dir_raw:
+        return {}
+    git_dir = Path(git_dir_raw)
+    markers = {
+        "post_commit": ("post-commit", "dejavue auto-capture"),
+        "pre_push": ("pre-push", "dejavue pre-push"),
+        "post_checkout": ("post-checkout", "dejavue post-checkout"),
+    }
+    status = {}
+    for key, (name, marker) in markers.items():
+        path = git_dir / "hooks" / name
+        status[key] = path.exists() and marker in path.read_text(encoding="utf-8")
+    return status
+
+
+def _adapter_status():
+    cfg = _load_config()
+    out = {}
+    for target, default_path in EXPORT_TARGETS.items():
+        path = Path(cfg.get(f"target_{target}", default_path))
+        content = path.read_text(encoding="utf-8") if path.exists() else ""
+        out[target] = {
+            "path": str(path),
+            "present": path.exists(),
+            "managed_block": bool(_DCP_BEGIN_RE.search(content)),
+        }
+    return out
+
+
+def _capabilities_data():
+    commands = [
+        "version", "init", "start", "changed", "decision", "state", "handoff",
+        "context", "status", "check", "archive", "roster", "config",
+        "install-skill", "log", "blame", "note", "since", "changelog",
+        "ingest", "recall", "worthiness", "get", "list", "annotate", "stats",
+        "promote", "import", "export", "reference", "link", "search", "diff",
+        "timeline", "tag", "note-commit", "completion", "rejected", "trap",
+        "incident", "invariant", "pattern", "entities", "capabilities",
+    ]
+    return {
+        "dejavue_version": VERSION,
+        "dcp_version": DCP_VERSION,
+        "format": {
+            "timeline": "jsonl",
+            "context_protocol": DCP_VERSION,
+            "base_loop": ["init", "start", "decision", "state", "handoff"],
+            "runtime_dependencies": "python-stdlib",
+        },
+        "commands": sorted(commands),
+        "features": {
+            "fts5": _probe_fts5(),
+            "semantic_recall": True,
+            "managed_adapters": True,
+            "git_hooks": True,
+            "git_notes": True,
+            "per_entry_metadata": True,
+            "freshness_expiry": True,
+            "intent_lineage": True,
+            "stability_classes": True,
+        },
+        "repo": {
+            "initialized": DEJAVUE_DIR.exists(),
+            "context_md": CONTEXT.exists(),
+            "references": REFERENCES.exists(),
+            "embeddings_cache": EMBEDDINGS.exists(),
+            "hooks": _hook_status(),
+            "adapters": _adapter_status(),
+        },
+    }
+
+
+def cmd_capabilities(args):
+    """Report implementation and repo-local DCP capabilities for adapters/agents."""
+    data = _capabilities_data()
+    fmt = getattr(args, "format", "json") or "json"
+    if fmt == "json":
+        print(json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False))
+        return
+    print(f"dejavue {data['dejavue_version']} — {data['dcp_version']}")
+    print(f"Commands: {len(data['commands'])}")
+    enabled = [name for name, enabled in data["features"].items() if enabled]
+    print(f"Features: {', '.join(enabled)}")
+    repo = data["repo"]
+    print(f"Repo initialized: {'yes' if repo['initialized'] else 'no'}")
+    print(f"context.md: {'yes' if repo['context_md'] else 'no'}")
+    if repo["hooks"]:
+        hooks = ", ".join(f"{k}={'yes' if v else 'no'}" for k, v in repo["hooks"].items())
+        print(f"Hooks: {hooks}")
+
+
 def cmd_since(args):
     ref = args.ref
     since_ts = None
@@ -3615,7 +3724,7 @@ _dejavue() {
     local cmds="version init start changed decision state handoff context status \\
 check archive roster config install-skill log blame note since changelog ingest recall \\
 worthiness get list annotate stats promote import export reference link search \\
-diff timeline tag note-commit completion rejected trap incident invariant pattern entities"
+diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities"
     if [[ $COMP_CWORD -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$cmds" -- "$cur"))
         return
@@ -3661,6 +3770,11 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
                 COMPREPLY=($(compgen -W "json md" -- "$cur"))
             elif [[ "$prev" == "--target" ]]; then
                 COMPREPLY=($(compgen -W "claude codex gemini copilot cursor all" -- "$cur"))
+            fi ;;
+        capabilities)
+            COMPREPLY=($(compgen -W "--format" -- "$cur"))
+            if [[ "$prev" == "--format" ]]; then
+                COMPREPLY=($(compgen -W "json text" -- "$cur"))
             fi ;;
         import)   COMPREPLY=($(compgen -f -- "$cur")) ;;
         promote)
@@ -3745,6 +3859,7 @@ _dejavue() {
                 'invariant:Record an architectural invariant that must always hold'
                 'pattern:Record a discovered convention/pattern (naming, idiom, structure)'
                 'entities:List entities, or show events referencing one entity'
+                'capabilities:Report implementation and repo-local DCP capabilities'
             )
             _describe 'subcommand' subcommands ;;
         args)
@@ -3785,6 +3900,8 @@ _dejavue() {
                     _arguments \\
                         '--format[Output format]:format:(json md)' \\
                         '--target[Adapter target]:target:(claude codex gemini copilot cursor all)' ;;
+                capabilities)
+                    _arguments '--format[Output format]:format:(json text)' ;;
                 promote)
                     _arguments '--to[Target system]:system:(planning)' ;;
                 diff)
@@ -3819,7 +3936,7 @@ _FISH_COMPLETION = """\
 set -l cmds version init start changed decision state handoff context status \\
     check archive roster config install-skill log blame note since changelog ingest recall \\
     worthiness get list annotate stats promote import export reference link search \\
-    diff timeline tag note-commit completion rejected trap incident invariant pattern entities
+    diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
@@ -3835,6 +3952,8 @@ complete -c dejavue -n "__fish_seen_subcommand_from note" -l type -a "note block
 # export
 complete -c dejavue -n "__fish_seen_subcommand_from export" -l format -a "json md"
 complete -c dejavue -n "__fish_seen_subcommand_from export" -l target -a "claude codex gemini copilot cursor all"
+# capabilities
+complete -c dejavue -n "__fish_seen_subcommand_from capabilities" -l format -a "json text"
 # promote
 complete -c dejavue -n "__fish_seen_subcommand_from promote" -l to -a "planning"
 # diff
@@ -4024,6 +4143,11 @@ def main():
     p = sub.add_parser("changelog", help="Generate a why-aware markdown changelog from dejavue events over a git range.")
     p.add_argument("range", help="Git range (e.g. v2.0.1..HEAD) or a single ref (= ref..HEAD).")
     p.set_defaults(func=cmd_changelog)
+
+    p = sub.add_parser("capabilities", help="Report implementation and repo-local DCP capabilities.")
+    p.add_argument("--format", choices=["json", "text"], default="json",
+                   help="Output format (default: json).")
+    p.set_defaults(func=cmd_capabilities)
 
     p = sub.add_parser("ingest", help="Scrape .claude/, CHANGELOG, ADRs, git log into timeline.")
     p.add_argument("--force", action="store_true", help="Re-run even if ingested.lock exists.")

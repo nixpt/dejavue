@@ -254,6 +254,7 @@ git                — mechanical history (commits, diffs)
 |---|---|
 | `dejavue import <FILE>` | Bootstrap `context.md` losslessly from an existing `AGENTS.md` / `CLAUDE.md`; records provenance. Safe first step before `export`. |
 | `dejavue export --target {claude,codex,gemini,copilot,cursor,all}` | Generate the tool's instruction file from `context.md` non-destructively. Absent → create; managed block → replace region; hand-written → append + warn; `--replace` to convert. |
+| `dejavue capabilities [--format json\|text]` | Report supported commands, DCP version, optional features, hooks, and adapter status for agents/tooling. |
 | `dejavue promote --to planning` | Graduate `.dejavue/` into a `.planning/` planning system without losing history — copies artifacts, records provenance, leaves `.dejavue/` canonical. |
 
 Each command accepts `--help`. See `dejavue --help` for the full flag list.
