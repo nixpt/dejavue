@@ -267,6 +267,8 @@ git                — mechanical history (commits, diffs)
 Each command accepts `--help`. See `dejavue --help` for the full flag list.
 Core memory-writing commands accept `--author-type {human,agent,orchestrator,ci,bot}`
 to record the kind of writer separately from the `--agent` identity string.
+They also accept repeatable `--tension LABEL` for unresolved tradeoff axes such as
+`security` or `performance`.
 
 
 ## Worthiness

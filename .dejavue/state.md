@@ -1,5 +1,5 @@
 # State
 
-Updated: 2026-06-28T23:36:47-05:00
+Updated: 2026-06-28T23:42:19-05:00
 
-Roadmap author_type field shipped: --author-type records human/agent/orchestrator/ci/bot metadata, surfaces it in context/recall/read paths, advertises it in capabilities, and is covered by the full integration suite.
+Roadmap tension tracking shipped: repeatable --tension labels store unresolved tradeoff axes, display in decisions/context/recall, index through FTS/semantic text, advertise tension_tracking capability, and pass the full integration suite.
