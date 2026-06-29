@@ -295,3 +295,13 @@ Values: local-first, capability-first
 
 Author type: agent
 
+
+## 2026-06-28T23:55:22-05:00 — Ship domain owner metadata
+
+Reason:
+Owner-scoped recall needs one normalized ownership field and a list/filter command without introducing a graph registry.
+
+Domain owner: institutional-memory
+
+Author type: agent
+

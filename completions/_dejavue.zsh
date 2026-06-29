@@ -54,6 +54,7 @@ _dejavue() {
                 'invariant:Record an architectural invariant that must always hold'
                 'pattern:Record a discovered convention/pattern (naming, idiom, structure)'
                 'entities:List entities, or show events referencing one entity'
+                'owners:List domain owners, or show events owned by one domain'
                 'capabilities:Report implementation and repo-local DCP capabilities'
                 'branch:Capture or replay branch intent and closeout'
                 'merge-summary:Summarize what a branch brings into a base ref'
@@ -74,6 +75,7 @@ _dejavue() {
                         '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \
                         '*--tension[Unresolved tradeoff axis]:tension' \
                         '*--value[Project value / philosophy label]:value' \
+                        '--domain-owner[Domain owner]:owner' \
                         '--type[Event type]:type:(decision blocker claim question experiment checkpoint)' \
                         '--supersedes[ID or title of a prior decision this supersedes]:event-id' \
                         '--durability[How long-lived this decision is]:durability:(temporary tactical strategic constitutional)' \
@@ -91,6 +93,7 @@ _dejavue() {
                         '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \
                         '*--tension[Unresolved tradeoff axis]:tension' \
                         '*--value[Project value / philosophy label]:value' \
+                        '--domain-owner[Domain owner]:owner' \
                         '*--entity[Subject this event is about, repeatable]:entity' \
                         '--tag[Tag]:tag' ;;
                 note)
@@ -99,6 +102,7 @@ _dejavue() {
                         '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \
                         '*--tension[Unresolved tradeoff axis]:tension' \
                         '*--value[Project value / philosophy label]:value' \
+                        '--domain-owner[Domain owner]:owner' \
                         '--tag[Tag]:tag' \
                         '*--entity[Subject this event is about, repeatable]:entity' \
                         '--confidence[How firm this note/claim is]:confidence:(speculative proposed experimental adopted deprecated verified)' \
@@ -124,7 +128,7 @@ _dejavue() {
                     local epoch_cmds=('begin:Open a named project epoch' 'end:Close a named project epoch' 'list:List epochs and milestones')
                     _describe 'epoch subcommand' epoch_cmds ;;
                 milestone)
-                    _arguments '--summary[Milestone summary]:summary' '--agent[Agent name]:agent' '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' '*--tension[Unresolved tradeoff axis]:tension' '*--value[Project value / philosophy label]:value' ;;
+                    _arguments '--summary[Milestone summary]:summary' '--agent[Agent name]:agent' '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' '*--tension[Unresolved tradeoff axis]:tension' '*--value[Project value / philosophy label]:value' '--domain-owner[Domain owner]:owner' ;;
                 explain)
                     _arguments '1:file or commit:_files' ;;
                 conflict)

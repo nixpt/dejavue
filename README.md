@@ -224,6 +224,7 @@ git                — mechanical history (commits, diffs)
 | `dejavue blame <file>` | "Why does this file exist?" — decisions and events mentioning the path. |
 | `dejavue explain <file\|commit>` | Causal explanation combining git history, decisions, notes, artifacts, rejected alternatives, and linked events. |
 | `dejavue recall QUERY [--semantic] [--limit N]` | FTS5 keyword (or cosine semantic) search over all artifacts. |
+| `dejavue owners [NAME]` | List domain owners or show timeline events owned by one normalized owner. |
 | `dejavue get <doc>` | Direct fetch of `state`, `handoff`, `decisions`, or `references/<name>`. |
 | `dejavue list [--type events\|decisions\|references]` | List available artifacts with paths. |
 | `dejavue roster` | Agent activity summary — who worked here and when. |
@@ -271,6 +272,7 @@ They also accept repeatable `--tension LABEL` for unresolved tradeoff axes such 
 `security` or `performance`.
 Use repeatable `--value LABEL` for soft project philosophy labels such as
 `local-first` or `capability-first`.
+Use `--domain-owner NAME` to assign one normalized owner for owner-based recall/filtering.
 
 
 ## Worthiness
