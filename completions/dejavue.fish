@@ -4,7 +4,7 @@
 set -l cmds version init start changed decision state handoff context status \
     check archive roster config install-skill log blame note since changelog ingest recall \
     worthiness get list annotate stats promote import export reference link search \
-    diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary squash-summary epoch milestone explain
+    diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary squash-summary epoch milestone explain conflict
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
@@ -31,6 +31,11 @@ complete -c dejavue -n "__fish_seen_subcommand_from epoch" -a "begin end list"
 complete -c dejavue -n "__fish_seen_subcommand_from epoch milestone" -l summary
 complete -c dejavue -n "__fish_seen_subcommand_from epoch milestone" -l agent -d "Agent name"
 complete -c dejavue -n "__fish_seen_subcommand_from explain" -rF
+complete -c dejavue -n "__fish_seen_subcommand_from conflict" -a "record list"
+complete -c dejavue -n "__fish_seen_subcommand_from conflict" -l path -rF
+complete -c dejavue -n "__fish_seen_subcommand_from conflict" -l reason
+complete -c dejavue -n "__fish_seen_subcommand_from conflict" -l resolution
+complete -c dejavue -n "__fish_seen_subcommand_from conflict" -l agent -d "Agent name"
 # promote
 complete -c dejavue -n "__fish_seen_subcommand_from promote" -l to -a "planning"
 # diff

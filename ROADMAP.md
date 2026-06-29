@@ -297,7 +297,7 @@ over a git range — thin views, no new storage.
 - ✅ **`dejavue changelog <range>`** *(shipped, unreleased)* — why-aware markdown changelog (decisions + notes + traps/incidents + commits) over a git range, with confidence + superseded annotations. A `since` + `export` composition. (scratch: `deja-git.md`)
 - ✅ **`dejavue branch start|summary|close`** + **`merge-summary <base> <branch>`** *(shipped, unreleased)* — capture and replay the intent of a branch and what a merge brought in. Useful across multi-agent worktrees.
 - ✅ **`dejavue squash-summary <branch>`** *(shipped, unreleased)* — synthesize a single commit message from a branch's dejavue events before a squash-merge.
-- **`dejavue conflict record --reason`** — first-class capture of why a merge conflict was resolved a given way (today expressible only as a free-text `note`).
+- ✅ **`dejavue conflict record --reason`** *(shipped, unreleased)* — first-class capture of why a merge conflict was resolved a given way.
 
 ### External tool integrations
 

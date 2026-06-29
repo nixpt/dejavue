@@ -2582,10 +2582,12 @@ assert "squash-summary" in data["commands"]
 assert "epoch" in data["commands"]
 assert "milestone" in data["commands"]
 assert "explain" in data["commands"]
+assert "conflict" in data["commands"]
 assert data["features"]["managed_adapters"] is True
 assert data["features"]["git_workflow_memory"] is True
 assert data["features"]["project_epochs"] is True
 assert data["features"]["causal_explain"] is True
+assert data["features"]["conflict_memory"] is True
 assert data["repo"]["initialized"] is True
 assert "codex" in data["repo"]["adapters"]
 PYEOF
@@ -2717,6 +2719,22 @@ test_squash_summary_branch() {
     assert_contains "squash decisions" "$out" "Use branch events for squash" || return 1
     assert_contains "squash notes" "$out" "Squash message should include commits" || return 1
     assert_contains "squash commits" "$out" "add squash fixture" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 165. conflict record stores rationale and is surfaced by explain
+test_conflict_record() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    mkdir -p src
+    echo "merged" > src/conflicted.py
+    git add . && git commit -qm "add conflict fixture"
+    dv conflict record --path src/conflicted.py --reason "keep parser fast path" --resolution "kept ours, ported validation" --agent tester >/dev/null 2>&1
+    local listed; listed="$(dv conflict list 2>/dev/null)"
+    assert_contains "conflict listed" "$listed" "keep parser fast path" || return 1
+    local explained; explained="$(dv explain src/conflicted.py 2>/dev/null)"
+    assert_contains "conflict in explain" "$explained" "conflict_record" || return 1
+    assert_contains "conflict reason in explain" "$explained" "keep parser fast path" || return 1
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
@@ -2913,6 +2931,7 @@ main() {
     run_test "162 explain file composes memory"               test_explain_file
     run_test "163 explain commit composes memory"             test_explain_commit
     run_test "164 squash-summary synthesizes message"         test_squash_summary_branch
+    run_test "165 conflict record surfaces rationale"         test_conflict_record
 
     echo ""
     echo "========================================"

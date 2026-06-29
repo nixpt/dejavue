@@ -1,5 +1,5 @@
 # State
 
-Updated: 2026-06-28T23:22:50-05:00
+Updated: 2026-06-28T23:26:13-05:00
 
-squash-summary <branch> is implemented and tested. It generates a squash-merge commit-message draft from branch intent, decisions, notes, and commits. Next sequential roadmap item is conflict record --reason.
+conflict record --reason is implemented and tested. It records conflict-resolution rationale as timeline memory, supports conflict list, and surfaces path-linked records in explain <file>. Git-native ergonomics now has changelog, branch/merge-summary, squash-summary, and conflict record shipped.

@@ -256,3 +256,14 @@ Artifacts: dejavue.py, tests/test_dejavue.sh, ROADMAP.md
 Outcome:
 Added squash-summary <branch> [--base REF], tests, docs, roadmap/changelog updates, completions, and repo memory.
 
+
+## 2026-06-28T23:26:13-05:00 — [ADOPTED] [ARCHITECTURAL] Ship conflict resolution records
+
+Reason:
+Merge conflicts often encode important local reasoning that is lost in the final diff. A first-class conflict record keeps why a resolution was chosen queryable and lets explain <file> surface it without requiring a separate conflict database.
+
+Artifacts: dejavue.py, tests/test_dejavue.sh, ROADMAP.md
+
+Outcome:
+Added conflict record/list, explain surfacing, tests, docs, roadmap/changelog updates, completions, capabilities flag, and repo memory.
+

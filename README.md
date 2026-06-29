@@ -248,6 +248,7 @@ git                — mechanical history (commits, diffs)
 | `dejavue branch {start,summary,close}` | Capture and replay branch intent, closeout, decisions, notes, and commits. |
 | `dejavue merge-summary <base> <branch>` | Summarize what a branch brings into a base ref before merge. |
 | `dejavue squash-summary <branch> [--base REF]` | Synthesize a squash-merge commit message from branch memory and commits. |
+| `dejavue conflict record --reason TEXT [--path PATH]` | Record why a merge conflict was resolved a certain way. |
 | `dejavue epoch {begin,end,list}` | Record named project eras that frame old decisions. |
 | `dejavue milestone NAME [--summary TEXT]` | Record a named project checkpoint. |
 | `dejavue tag {list, filter <tag>}` | List tags with counts or filter events by tag. |

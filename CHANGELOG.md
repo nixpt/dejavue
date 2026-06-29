@@ -38,6 +38,8 @@ any v1.x release can be read by any later v1.x release without migration.
   why a file or commit exists.
 - **`dejavue squash-summary <branch> [--base REF]`** — synthesize a squash-merge commit
   message from branch intent, decisions, notes, and commits.
+- **`dejavue conflict record --reason TEXT [--path PATH]`** — record conflict-resolution
+  rationale as timeline memory and surface it in `explain <file>`.
 
 ## [2.1.0] — 2026-06-06
 
