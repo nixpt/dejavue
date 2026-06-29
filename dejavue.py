@@ -1750,24 +1750,27 @@ def cmd_log(args):
             print()
 
 
+def _event_touches_target(ev, target):
+    ent_q = "-".join(target.strip().lower().split())
+    return (
+        target in ev.get("path", "")
+        or target in ev.get("summary", "")
+        or target in ev.get("decision_reason", ev.get("reason", ""))
+        or target in ev.get("decision_title", ev.get("decision", ""))
+        or target in ev.get("content", "")
+        or ent_q in (ev.get("entities") or [])
+        or any(target == a or target in a or a in target for a in (ev.get("artifacts") or []))
+    )
+
+
 def cmd_blame(args):
     """Show decisions and events that touch a given file path."""
     path = args.path
     events = _load_events()
-    ent_q = "-".join(path.strip().lower().split())  # also match a normalized entity name
 
     relevant = []
     for ev in events:
-        hit = (
-            path in ev.get("path", "")
-            or path in ev.get("summary", "")
-            or path in ev.get("decision_reason", ev.get("reason", ""))
-            or path in ev.get("decision_title", ev.get("decision", ""))
-            or path in ev.get("content", "")
-            or ent_q in (ev.get("entities") or [])
-            or any(path == a or path in a or a in path for a in (ev.get("artifacts") or []))
-        )
-        if hit:
+        if _event_touches_target(ev, path):
             relevant.append(ev)
 
     if not relevant:
@@ -1787,6 +1790,92 @@ def cmd_blame(args):
             reason = ev["decision_reason"][:120]
             print(f"    Reason: {reason}")
         print()
+
+
+def _print_explain_events(events, all_events):
+    if not events:
+        print("  (none)")
+        return
+    overridden_by = supersession_lookup(all_events)
+    for ev in events:
+        ts = (ev.get("ts") or "")[:19]
+        kind = ev.get("event", "")
+        label = ev.get("decision_title") or ev.get("summary") or ev.get("path") or "(untitled)"
+        print(f"- [{ts}] {kind}: {label}")
+        if ev.get("decision_reason"):
+            print(f"  Reason: {ev['decision_reason']}")
+        for ra in ev.get("rejected_alternatives") or []:
+            opt = ra.get("option", "")
+            reason = ra.get("reason", "")
+            print(f"  Rejected: {opt}" + (f" - {reason}" if reason else ""))
+        for sup_title, sup_ts in overridden_by(ev):
+            print(f"  Superseded by: {sup_title} ({sup_ts})")
+        for line in event_meta_lines(ev, all_events):
+            print(f"  {line}")
+
+
+def _explain_commit(target, events):
+    full_sha = git_run("git", "rev-parse", "--verify", target)
+    short = full_sha[:7]
+    subject = git_run("git", "show", "-s", "--format=%s", full_sha)
+    author_date = git_run("git", "show", "-s", "--format=%aI", full_sha)
+    stat = git_run("git", "show", "--stat", "--oneline", "--summary", full_sha)
+    files = git_run("git", "diff-tree", "--no-commit-id", "--name-only", "-r", full_sha)
+    related = [
+        ev for ev in events
+        if (ev.get("commit") or "").startswith(short)
+        or short in (ev.get("summary") or "")
+        or short in (ev.get("decision_reason") or "")
+    ]
+
+    print(f"# Explanation: commit {short}\n")
+    print(f"Subject: {subject}")
+    if author_date:
+        print(f"Date: {author_date[:19]}")
+    if files:
+        print("\nFiles:")
+        for path in files.splitlines():
+            print(f"- {path}")
+    if stat:
+        print("\nGit context:")
+        for line in stat.splitlines()[:20]:
+            print(f"  {line}")
+    print("\nDejaVue memory:")
+    _print_explain_events(related, events)
+
+
+def _explain_file(path, events):
+    relevant = [ev for ev in events if _event_touches_target(ev, path)]
+    decisions = [ev for ev in relevant if ev.get("event") == "decision"]
+    hazards = [ev for ev in relevant if ev.get("event") in ("trap", "incident", "invariant")]
+    notes = [ev for ev in relevant if ev.get("event") in ("note", "pattern")]
+    changes = [ev for ev in relevant if ev.get("event") == "file_changed"]
+    git_log = git_run("git", "log", "--oneline", "--follow", "--", path)
+
+    print(f"# Explanation: {path}\n")
+    if git_log:
+        print("Git history:")
+        for line in git_log.splitlines()[:8]:
+            print(f"- {line}")
+        print()
+    print("Decisions:")
+    _print_explain_events(decisions, events)
+    print("\nConstraints / hazards:")
+    _print_explain_events(hazards, events)
+    print("\nNotes / patterns:")
+    _print_explain_events(notes, events)
+    print("\nFile changes:")
+    _print_explain_events(changes[-8:], events)
+
+
+def cmd_explain(args):
+    """Explain why a file or commit exists by composing git history and DejaVue memory."""
+    target = args.target
+    events = _load_events()
+    if git_run("git", "rev-parse", "--verify", target):
+        _explain_commit(target, events)
+    else:
+        _explain_file(target, events)
 
 
 def cmd_note(args):
@@ -2277,7 +2366,7 @@ def _capabilities_data():
         "promote", "import", "export", "reference", "link", "search", "diff",
         "timeline", "tag", "note-commit", "completion", "rejected", "trap",
         "incident", "invariant", "pattern", "entities", "capabilities",
-        "branch", "merge-summary", "epoch", "milestone",
+        "branch", "merge-summary", "epoch", "milestone", "explain",
     ]
     return {
         "dejavue_version": VERSION,
@@ -2297,6 +2386,7 @@ def _capabilities_data():
             "git_notes": True,
             "git_workflow_memory": True,
             "project_epochs": True,
+            "causal_explain": True,
             "per_entry_metadata": True,
             "freshness_expiry": True,
             "intent_lineage": True,
@@ -3976,7 +4066,7 @@ _dejavue() {
     local cmds="version init start changed decision state handoff context status \\
 check archive roster config install-skill log blame note since changelog ingest recall \\
 worthiness get list annotate stats promote import export reference link search \\
-diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary epoch milestone"
+diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary epoch milestone explain"
     if [[ $COMP_CWORD -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$cmds" -- "$cur"))
         return
@@ -4032,6 +4122,7 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
         merge-summary) COMPREPLY=($(compgen -f -- "$cur")) ;;
         epoch)    COMPREPLY=($(compgen -W "begin end list --summary --agent" -- "$cur")) ;;
         milestone) COMPREPLY=($(compgen -W "--summary --agent" -- "$cur")) ;;
+        explain)  COMPREPLY=($(compgen -f -- "$cur")) ;;
         import)   COMPREPLY=($(compgen -f -- "$cur")) ;;
         promote)
             COMPREPLY=($(compgen -W "--to" -- "$cur"))
@@ -4120,6 +4211,7 @@ _dejavue() {
                 'merge-summary:Summarize what a branch brings into a base ref'
                 'epoch:Record or list project epochs'
                 'milestone:Record a named project milestone'
+                'explain:Explain why a file or commit exists'
             )
             _describe 'subcommand' subcommands ;;
         args)
@@ -4172,6 +4264,8 @@ _dejavue() {
                     _describe 'epoch subcommand' epoch_cmds ;;
                 milestone)
                     _arguments '--summary[Milestone summary]:summary' '--agent[Agent name]:agent' ;;
+                explain)
+                    _arguments '1:file or commit:_files' ;;
                 promote)
                     _arguments '--to[Target system]:system:(planning)' ;;
                 diff)
@@ -4206,7 +4300,7 @@ _FISH_COMPLETION = """\
 set -l cmds version init start changed decision state handoff context status \\
     check archive roster config install-skill log blame note since changelog ingest recall \\
     worthiness get list annotate stats promote import export reference link search \\
-    diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary epoch milestone
+    diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary epoch milestone explain
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
@@ -4235,6 +4329,7 @@ complete -c dejavue -n "__fish_seen_subcommand_from branch" -l agent -d "Agent n
 complete -c dejavue -n "__fish_seen_subcommand_from epoch" -a "begin end list"
 complete -c dejavue -n "__fish_seen_subcommand_from epoch milestone" -l summary
 complete -c dejavue -n "__fish_seen_subcommand_from epoch milestone" -l agent -d "Agent name"
+complete -c dejavue -n "__fish_seen_subcommand_from explain" -rF
 # promote
 complete -c dejavue -n "__fish_seen_subcommand_from promote" -l to -a "planning"
 # diff
@@ -4470,6 +4565,10 @@ def main():
     p.add_argument("--summary", default=None, help="What this milestone means.")
     p.add_argument("--agent", default=None)
     p.set_defaults(func=cmd_milestone)
+
+    p = sub.add_parser("explain", help="Explain why a file or commit exists.")
+    p.add_argument("target", help="File path or commit SHA/ref.")
+    p.set_defaults(func=cmd_explain)
 
     p = sub.add_parser("ingest", help="Scrape .claude/, CHANGELOG, ADRs, git log into timeline.")
     p.add_argument("--force", action="store_true", help="Re-run even if ingested.lock exists.")

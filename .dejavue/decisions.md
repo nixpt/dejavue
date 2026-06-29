@@ -234,3 +234,14 @@ Artifacts: dejavue.py, tests/test_dejavue.sh, ROADMAP.md
 Outcome:
 Added epoch begin|end|list and milestone commands, context surfacing, capabilities updates, tests, docs, roadmap, changelog, completions, and repo memory.
 
+
+## 2026-06-28T23:18:40-05:00 — [ADOPTED] [ARCHITECTURAL] Ship explain for files and commits
+
+Reason:
+The roadmap's explain command can now compose existing sources instead of needing a graph store: git history, linked commit events, decision artifacts, rejected alternatives, lineage, supersession, notes, patterns, hazards, and file changes. This answers why a file or commit exists while preserving the single-file stdlib contract.
+
+Artifacts: dejavue.py, tests/test_dejavue.sh, ROADMAP.md
+
+Outcome:
+Added dejavue explain <file|commit>, tests, docs, roadmap/changelog updates, completions, capabilities flag, and repo memory.
+

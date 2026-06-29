@@ -59,6 +59,7 @@ _dejavue() {
                 'merge-summary:Summarize what a branch brings into a base ref'
                 'epoch:Record or list project epochs'
                 'milestone:Record a named project milestone'
+                'explain:Explain why a file or commit exists'
             )
             _describe 'subcommand' subcommands ;;
         args)
@@ -103,6 +104,8 @@ _dejavue() {
                     _describe 'epoch subcommand' epoch_cmds ;;
                 milestone)
                     _arguments '--summary[Milestone summary]:summary' '--agent[Agent name]:agent' ;;
+                explain)
+                    _arguments '1:file or commit:_files' ;;
                 promote)
                     _arguments '--to[Target system]:system:(planning)' ;;
                 diff)
