@@ -11,6 +11,7 @@ complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decisi
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l durability -a "temporary tactical strategic constitutional"
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l confidence -a "speculative proposed experimental adopted deprecated verified"
 complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l author-type -a "human agent orchestrator ci bot"
+complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l tension
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l freshness
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l expires-after
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l derived-from

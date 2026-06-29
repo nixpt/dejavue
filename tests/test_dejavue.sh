@@ -2589,6 +2589,7 @@ assert data["features"]["project_epochs"] is True
 assert data["features"]["causal_explain"] is True
 assert data["features"]["conflict_memory"] is True
 assert data["features"]["author_type"] is True
+assert data["features"]["tension_tracking"] is True
 assert data["repo"]["initialized"] is True
 assert "codex" in data["repo"]["adapters"]
 PYEOF
@@ -2766,6 +2767,31 @@ test_author_type_metadata() {
 
     local rc; dv note "bad author" --author-type daemon >/dev/null 2>&1; rc=$?
     assert_eq "invalid author type rejected" "$([ "$rc" -ne 0 ] && echo nonzero || echo zero)" "nonzero" || return 1
+
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 167. --tension stores unresolved tradeoff metadata and surfaces it in read paths
+test_tension_metadata() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+
+    dv decision "Balance secrecy and speed" --reason "both matter" \
+        --tension security --tension performance >/dev/null 2>&1
+    dv note "UX accessibility tradeoff" --tension "User Experience" >/dev/null 2>&1
+
+    local timeline; timeline="$(cat .dejavue/timeline.jsonl)"
+    assert_contains "decision tensions stored" "$timeline" '"tension": ["security", "performance"]' || return 1
+    assert_contains "note tension normalized" "$timeline" '"tension": ["user-experience"]' || return 1
+    assert_contains "decision doc shows tensions" "$(cat .dejavue/decisions.md)" "Tensions: security, performance" || return 1
+
+    local ctx; ctx="$(dv context -n 6 2>&1)"
+    assert_contains "context shows tensions" "$ctx" "Tensions: security, performance" || return 1
+    assert_contains "context shows normalized tension" "$ctx" "Tensions: user-experience" || return 1
+
+    local recall; recall="$(dv recall performance 2>&1)"
+    assert_contains "recall finds tension" "$recall" "Balance secrecy and speed" || return 1
+    assert_contains "recall shows tension metadata" "$recall" "Tensions: security, performance" || return 1
 
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
@@ -2965,6 +2991,7 @@ main() {
     run_test "164 squash-summary synthesizes message"         test_squash_summary_branch
     run_test "165 conflict record surfaces rationale"         test_conflict_record
     run_test "166 author type metadata read-back"             test_author_type_metadata
+    run_test "167 tension metadata read-back"                 test_tension_metadata
 
     echo ""
     echo "========================================"

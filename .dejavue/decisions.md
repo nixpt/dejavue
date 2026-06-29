@@ -275,3 +275,13 @@ Core memory commands need to distinguish writer class from agent identity for mu
 
 Author type: agent
 
+
+## 2026-06-28T23:42:09-05:00 — Ship tension tracking metadata
+
+Reason:
+Unresolved architectural tradeoffs need first-class labels that stay distinct from rejected alternatives and supersession.
+
+Tensions: institutional-memory, tradeoffs
+
+Author type: agent
+

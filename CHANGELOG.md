@@ -41,6 +41,9 @@ any v1.x release can be read by any later v1.x release without migration.
 - **`--author-type {human,agent,orchestrator,ci,bot}`** — core memory-writing commands
   can record writer class metadata separately from the `--agent` identity string, and
   read paths surface/index it for trust-aware recall.
+- **`--tension LABEL`** — repeatable unresolved tradeoff metadata on core memory-writing
+  commands (for example `security` / `performance`), surfaced in context/recall and kept
+  distinct from rejected alternatives or supersession.
 - **`dejavue conflict record --reason TEXT [--path PATH]`** — record conflict-resolution
   rationale as timeline memory and surface it in `explain <file>`.
 
