@@ -1179,6 +1179,19 @@ def cmd_context(args):
                 print(f"  [{ev.get('event','')}] {ev.get('summary','')}")
             print()
 
+    if TIMELINE.exists():
+        epoch_events = _load_events()
+        epochs, milestones = _epoch_records(epoch_events)
+        open_epochs = [rec for rec in epochs if rec.get("begin") and not rec.get("end")]
+        if open_epochs or milestones:
+            print("--- epochs & milestones ---\n")
+            for rec in open_epochs:
+                begin = rec.get("begin") or {}
+                print(f"  [epoch] {rec['name']} — {(begin.get('summary') or '')}")
+            for ev in milestones[-5:]:
+                print(f"  [milestone] {ev.get('milestone','')} — {ev.get('summary','')}")
+            print()
+
     # Superseded-decision warnings — the reverse of --supersedes (previously write-only),
     # so a stale decision in decisions.md no longer looks authoritative at boot.
     if TIMELINE.exists():
@@ -2118,6 +2131,95 @@ def cmd_merge_summary(args):
         print("_(no branch-scoped dejavue events or commits found)_")
 
 
+def _epoch_records(events):
+    epochs = {}
+    milestones = []
+    for ev in events:
+        kind = ev.get("event")
+        if kind in ("epoch_begin", "epoch_end"):
+            name = ev.get("epoch") or ev.get("summary") or "(unnamed)"
+            key = name.strip().lower()
+            rec = epochs.setdefault(key, {"name": name, "begin": None, "end": None})
+            if kind == "epoch_begin":
+                rec["begin"] = ev
+                rec["name"] = name
+            else:
+                rec["end"] = ev
+        elif kind == "milestone":
+            milestones.append(ev)
+    return list(epochs.values()), milestones
+
+
+def _print_epoch_records(events):
+    epochs, milestones = _epoch_records(events)
+    printed = False
+    if epochs:
+        print("## Epochs\n")
+        for rec in sorted(epochs, key=lambda r: (r.get("begin") or r.get("end") or {}).get("ts", "")):
+            begin = rec.get("begin") or {}
+            end = rec.get("end") or {}
+            status = "closed" if end else "open"
+            begin_ts = (begin.get("ts") or "")[:10]
+            end_ts = (end.get("ts") or "")[:10]
+            span = begin_ts if not end_ts else f"{begin_ts} -> {end_ts}"
+            summary = end.get("summary") or begin.get("summary") or ""
+            print(f"- **{rec['name']}** ({status}, {span})")
+            if summary:
+                print(f"  {summary}")
+        print()
+        printed = True
+    if milestones:
+        print("## Milestones\n")
+        for ev in milestones:
+            ts = (ev.get("ts") or "")[:10]
+            name = ev.get("milestone") or ev.get("summary") or "(unnamed)"
+            summary = ev.get("summary") or ""
+            print(f"- {ts} **{name}**" + (f" - {summary}" if summary and summary != name else ""))
+        print()
+        printed = True
+    return printed
+
+
+def cmd_epoch(args):
+    """Record or list project epochs."""
+    action = args.action
+    if action == "begin":
+        summary = getattr(args, "summary", None) or f"Epoch began: {args.name}"
+        append_event({
+            "agent": resolve_agent(getattr(args, "agent", None)),
+            "event": "epoch_begin",
+            "epoch": args.name,
+            "summary": summary,
+        })
+        print(f"Epoch began: {args.name}")
+        return
+    if action == "end":
+        summary = getattr(args, "summary", None) or f"Epoch ended: {args.name}"
+        append_event({
+            "agent": resolve_agent(getattr(args, "agent", None)),
+            "event": "epoch_end",
+            "epoch": args.name,
+            "summary": summary,
+        })
+        print(f"Epoch ended: {args.name}")
+        return
+
+    if not _print_epoch_records(_load_events()):
+        print("No epochs or milestones recorded yet.")
+
+
+def cmd_milestone(args):
+    """Record a named project milestone."""
+    summary = getattr(args, "summary", None) or args.name
+    append_event({
+        "agent": resolve_agent(getattr(args, "agent", None)),
+        "event": "milestone",
+        "milestone": args.name,
+        "summary": summary,
+    })
+    print(f"Milestone recorded: {args.name}")
+
+
 def _probe_fts5():
     """Return whether this Python sqlite build supports FTS5 without touching repo files."""
     global HAS_FTS5
@@ -2175,7 +2277,7 @@ def _capabilities_data():
         "promote", "import", "export", "reference", "link", "search", "diff",
         "timeline", "tag", "note-commit", "completion", "rejected", "trap",
         "incident", "invariant", "pattern", "entities", "capabilities",
-        "branch", "merge-summary",
+        "branch", "merge-summary", "epoch", "milestone",
     ]
     return {
         "dejavue_version": VERSION,
@@ -2194,6 +2296,7 @@ def _capabilities_data():
             "git_hooks": True,
             "git_notes": True,
             "git_workflow_memory": True,
+            "project_epochs": True,
             "per_entry_metadata": True,
             "freshness_expiry": True,
             "intent_lineage": True,
@@ -3873,7 +3976,7 @@ _dejavue() {
     local cmds="version init start changed decision state handoff context status \\
 check archive roster config install-skill log blame note since changelog ingest recall \\
 worthiness get list annotate stats promote import export reference link search \\
-diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary"
+diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary epoch milestone"
     if [[ $COMP_CWORD -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$cmds" -- "$cur"))
         return
@@ -3927,6 +4030,8 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
             fi ;;
         branch)   COMPREPLY=($(compgen -W "start summary close --base --goal --summary --next --agent" -- "$cur")) ;;
         merge-summary) COMPREPLY=($(compgen -f -- "$cur")) ;;
+        epoch)    COMPREPLY=($(compgen -W "begin end list --summary --agent" -- "$cur")) ;;
+        milestone) COMPREPLY=($(compgen -W "--summary --agent" -- "$cur")) ;;
         import)   COMPREPLY=($(compgen -f -- "$cur")) ;;
         promote)
             COMPREPLY=($(compgen -W "--to" -- "$cur"))
@@ -4013,6 +4118,8 @@ _dejavue() {
                 'capabilities:Report implementation and repo-local DCP capabilities'
                 'branch:Capture or replay branch intent and closeout'
                 'merge-summary:Summarize what a branch brings into a base ref'
+                'epoch:Record or list project epochs'
+                'milestone:Record a named project milestone'
             )
             _describe 'subcommand' subcommands ;;
         args)
@@ -4060,6 +4167,11 @@ _dejavue() {
                     _describe 'branch subcommand' branch_cmds ;;
                 merge-summary)
                     _arguments '1:base ref:' '2:branch ref:' ;;
+                epoch)
+                    local epoch_cmds=('begin:Open a named project epoch' 'end:Close a named project epoch' 'list:List epochs and milestones')
+                    _describe 'epoch subcommand' epoch_cmds ;;
+                milestone)
+                    _arguments '--summary[Milestone summary]:summary' '--agent[Agent name]:agent' ;;
                 promote)
                     _arguments '--to[Target system]:system:(planning)' ;;
                 diff)
@@ -4094,7 +4206,7 @@ _FISH_COMPLETION = """\
 set -l cmds version init start changed decision state handoff context status \\
     check archive roster config install-skill log blame note since changelog ingest recall \\
     worthiness get list annotate stats promote import export reference link search \\
-    diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary
+    diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary epoch milestone
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
@@ -4119,6 +4231,10 @@ complete -c dejavue -n "__fish_seen_subcommand_from branch" -l goal
 complete -c dejavue -n "__fish_seen_subcommand_from branch" -l summary
 complete -c dejavue -n "__fish_seen_subcommand_from branch" -l next
 complete -c dejavue -n "__fish_seen_subcommand_from branch" -l agent -d "Agent name"
+# epoch / milestone
+complete -c dejavue -n "__fish_seen_subcommand_from epoch" -a "begin end list"
+complete -c dejavue -n "__fish_seen_subcommand_from epoch milestone" -l summary
+complete -c dejavue -n "__fish_seen_subcommand_from epoch milestone" -l agent -d "Agent name"
 # promote
 complete -c dejavue -n "__fish_seen_subcommand_from promote" -l to -a "planning"
 # diff
@@ -4335,6 +4451,25 @@ def main():
     p.add_argument("base", help="Base ref.")
     p.add_argument("branch", help="Branch/ref to summarize.")
     p.set_defaults(func=cmd_merge_summary)
+
+    p = sub.add_parser("epoch", help="Record or list project epochs.")
+    epoch_sub = p.add_subparsers(dest="action", required=True)
+    es = epoch_sub.add_parser("begin", help="Open a named project epoch.")
+    es.add_argument("name", help="Epoch name.")
+    es.add_argument("--summary", default=None, help="Why this epoch begins.")
+    es.add_argument("--agent", default=None)
+    es = epoch_sub.add_parser("end", help="Close a named project epoch.")
+    es.add_argument("name", help="Epoch name.")
+    es.add_argument("--summary", default=None, help="What changed by the end of this epoch.")
+    es.add_argument("--agent", default=None)
+    epoch_sub.add_parser("list", help="List epochs and milestones.")
+    p.set_defaults(func=cmd_epoch)
+
+    p = sub.add_parser("milestone", help="Record a named project milestone.")
+    p.add_argument("name", help="Milestone name.")
+    p.add_argument("--summary", default=None, help="What this milestone means.")
+    p.add_argument("--agent", default=None)
+    p.set_defaults(func=cmd_milestone)
 
     p = sub.add_parser("ingest", help="Scrape .claude/, CHANGELOG, ADRs, git log into timeline.")
     p.add_argument("--force", action="store_true", help="Re-run even if ingested.lock exists.")

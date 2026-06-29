@@ -30,6 +30,9 @@ any v1.x release can be read by any later v1.x release without migration.
 - **`dejavue branch {start,summary,close}`** and **`dejavue merge-summary <base> <branch>`**
   — capture branch intent/closeout as normal timeline events and replay branch-scoped memory
   plus commits before a merge. Second P2 item: git-workflow memory for multi-agent branches.
+- **`dejavue epoch {begin,end,list}`** and **`dejavue milestone <name>`** — record named
+  project eras and checkpoint anchors as timeline events, surface open epochs/milestones in
+  `context`, and list epoch history. Completes the current P2 roadmap set.
 
 ## [2.1.0] — 2026-06-06
 

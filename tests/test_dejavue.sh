@@ -2578,8 +2578,11 @@ assert data["dcp_version"] == "DCP/1.0"
 assert "capabilities" in data["commands"]
 assert "branch" in data["commands"]
 assert "merge-summary" in data["commands"]
+assert "epoch" in data["commands"]
+assert "milestone" in data["commands"]
 assert data["features"]["managed_adapters"] is True
 assert data["features"]["git_workflow_memory"] is True
+assert data["features"]["project_epochs"] is True
 assert data["repo"]["initialized"] is True
 assert "codex" in data["repo"]["adapters"]
 PYEOF
@@ -2631,6 +2634,34 @@ test_merge_summary_branch() {
     assert_contains "merge summary header" "$out" "## Merge summary:" || return 1
     assert_contains "merge branch goal" "$out" "Prepare merge report" || return 1
     assert_contains "merge commit" "$out" "add merge summary fixture" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 160. epoch list shows open/closed epochs and milestones
+test_epoch_list() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv epoch begin "MVP" --summary "Start MVP era" --agent tester >/dev/null 2>&1
+    dv milestone "ABI freeze" --summary "Capsule ABI frozen" --agent tester >/dev/null 2>&1
+    dv epoch end "MVP" --summary "MVP shipped" --agent tester >/dev/null 2>&1
+    local out; out="$(dv epoch list 2>/dev/null)"
+    assert_contains "epoch listed" "$out" "MVP" || return 1
+    assert_contains "epoch closed" "$out" "closed" || return 1
+    assert_contains "milestone listed" "$out" "ABI freeze" || return 1
+    assert_contains "milestone summary" "$out" "Capsule ABI frozen" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 161. context surfaces open epochs and milestones
+test_context_shows_epochs() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv epoch begin "Public beta" --summary "Beta constraints apply" --agent tester >/dev/null 2>&1
+    dv milestone "Docs baseline" --summary "Docs are canonical" --agent tester >/dev/null 2>&1
+    local out; out="$(dv context 2>/dev/null)"
+    assert_contains "context epoch section" "$out" "epochs & milestones" || return 1
+    assert_contains "context open epoch" "$out" "Public beta" || return 1
+    assert_contains "context milestone" "$out" "Docs baseline" || return 1
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
@@ -2822,6 +2853,8 @@ main() {
     run_test "157 capabilities text view"                     test_capabilities_text
     run_test "158 branch summary replays intent"              test_branch_summary
     run_test "159 merge-summary summarizes branch"            test_merge_summary_branch
+    run_test "160 epoch list shows epochs"                    test_epoch_list
+    run_test "161 context surfaces epochs"                    test_context_shows_epochs
 
     echo ""
     echo "========================================"

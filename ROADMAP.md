@@ -243,7 +243,7 @@ Axiom-0 clean (stdlib, single-file, additive fields). Favors the core loop
 **P2**
 - ✅ `capabilities` — *shipped (unreleased)*; machine-readable DCP capability report for agents and thin adapters.
 - ✅ `branch` / `merge-summary` git-workflow memory — *shipped (unreleased)*; capture/replay branch intent, closeout, decisions, notes, and commits before merge.
-- Project epochs.
+- ✅ Project epochs / milestones — *shipped (unreleased)*; named eras and checkpoint anchors that frame old decisions. **P2 wave complete.**
 
 **Later — composes its inputs**
 - `dejavue explain <file|commit>` — the killer command; build after lineage / confidence / entities exist.
@@ -260,7 +260,7 @@ Bigger ideas that are correct directionally but need DCP/v2.x to stabilize first
 ### Cognitive continuity
 
 - **Intent lineage** (`derived_from: [event-id, ...]` field) — explicit chains of intent across events. Lets agents reconstruct reasoning trees: goal → experiment → failure → decision → migration. Without lineage, memory is flat.
-- **Project epochs** (`dejavue epoch begin/end "<name>"`) — named eras that frame old decisions. "pre-plugin-architecture decisions" are not as authoritative as "post-capsule-runtime decisions." Prevents old context from misleading agents after major rewrites. Distinct slice: **ordered milestone anchors** (`dejavue milestone "M2 — Capsule ABI freeze"`) — discrete onboarding/historical checkpoints above sessions, vs open-ended eras. (scratch: `deja1.md`)
+- ✅ **Project epochs** (`dejavue epoch begin/end "<name>"`) *(shipped, unreleased)* — named eras that frame old decisions. "pre-plugin-architecture decisions" are not as authoritative as "post-capsule-runtime decisions." Prevents old context from misleading agents after major rewrites. Distinct slice: **ordered milestone anchors** (`dejavue milestone "M2 — Capsule ABI freeze"`) — discrete onboarding/historical checkpoints above sessions, vs open-ended eras. (scratch: `deja1.md`)
 - **`dejavue explain <file|commit>`** — causal reconstruction. Not just "who edited this" but "why does this exist": decision chain + rejected alternatives + incidents + constraints. The long-term killer command.
 - ✅ **Confidence levels** on `decision`/`note` *(shipped, unreleased)* — `--confidence {speculative / proposed / experimental / adopted / deprecated / verified}`; labeled in `decisions.md`, FTS-indexed so `recall verified` works. Stops brainstorms and firm decisions looking identical in recall.
 - ✅ **Entity references** (`entities: ["auth-system", "redis-cache", …]`) *(shipped, unreleased)* — an optional normalized subject array on events so `recall`/`blame` link cross-event *by subject* without a graph DB. `--entity` on the six memory commands; `entities [<name>]` lists/filters; FTS-indexed. Lightweight strings only — **not** a graph or registry. (scratch: `deja.md`)

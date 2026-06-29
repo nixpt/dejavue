@@ -7,7 +7,7 @@ _dejavue() {
     local cmds="version init start changed decision state handoff context status \
 check archive roster config install-skill log blame note since changelog ingest recall \
 worthiness get list annotate stats promote import export reference link search \
-diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary"
+diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary epoch milestone"
     if [[ $COMP_CWORD -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$cmds" -- "$cur"))
         return
@@ -57,6 +57,8 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
             fi ;;
         branch)   COMPREPLY=($(compgen -W "start summary close --base --goal --summary --next --agent" -- "$cur")) ;;
         merge-summary) COMPREPLY=($(compgen -f -- "$cur")) ;;
+        epoch)    COMPREPLY=($(compgen -W "begin end list --summary --agent" -- "$cur")) ;;
+        milestone) COMPREPLY=($(compgen -W "--summary --agent" -- "$cur")) ;;
         import)   COMPREPLY=($(compgen -f -- "$cur")) ;;
         promote)
             COMPREPLY=($(compgen -W "--to" -- "$cur"))

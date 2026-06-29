@@ -223,3 +223,14 @@ Artifacts: dejavue.py, tests/test_dejavue.sh, ROADMAP.md
 Outcome:
 Added dejavue branch start|summary|close and merge-summary <base> <branch>, with tests, docs, roadmap, changelog, completions, and capabilities updates.
 
+
+## 2026-06-28T23:14:56-05:00 — [ADOPTED] [ARCHITECTURAL] Ship project epochs and milestones
+
+Reason:
+Old decisions need era context after major rewrites, and milestones provide ordered checkpoint anchors without creating a new storage layer. Encoding both as timeline events preserves Axiom 0 while giving context and recall a way to frame historical memory.
+
+Artifacts: dejavue.py, tests/test_dejavue.sh, ROADMAP.md
+
+Outcome:
+Added epoch begin|end|list and milestone commands, context surfacing, capabilities updates, tests, docs, roadmap, changelog, completions, and repo memory.
+
