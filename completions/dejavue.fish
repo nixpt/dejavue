@@ -4,7 +4,7 @@
 set -l cmds version init start changed decision state handoff context status \
     check archive roster config install-skill log blame note since changelog ingest recall \
     worthiness get list annotate stats promote import export reference link search \
-    diff timeline tag note-commit completion rejected trap incident invariant pattern entities
+    diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
@@ -16,6 +16,8 @@ complete -c dejavue -n "__fish_seen_subcommand_from note" -l type -a "note block
 # export
 complete -c dejavue -n "__fish_seen_subcommand_from export" -l format -a "json md"
 complete -c dejavue -n "__fish_seen_subcommand_from export" -l target -a "claude codex gemini copilot cursor all"
+# capabilities
+complete -c dejavue -n "__fish_seen_subcommand_from capabilities" -l format -a "json text"
 # promote
 complete -c dejavue -n "__fish_seen_subcommand_from promote" -l to -a "planning"
 # diff

@@ -54,6 +54,7 @@ _dejavue() {
                 'invariant:Record an architectural invariant that must always hold'
                 'pattern:Record a discovered convention/pattern (naming, idiom, structure)'
                 'entities:List entities, or show events referencing one entity'
+                'capabilities:Report implementation and repo-local DCP capabilities'
             )
             _describe 'subcommand' subcommands ;;
         args)
@@ -86,6 +87,8 @@ _dejavue() {
                     _arguments \
                         '--format[Output format]:format:(json md)' \
                         '--target[Adapter target]:target:(claude codex gemini copilot cursor all)' ;;
+                capabilities)
+                    _arguments '--format[Output format]:format:(json text)' ;;
                 promote)
                     _arguments '--to[Target system]:system:(planning)' ;;
                 diff)

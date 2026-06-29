@@ -241,7 +241,8 @@ Axiom-0 clean (stdlib, single-file, additive fields). Favors the core loop
 - ✅ **Memory stability-class label** — *shipped (unreleased)*; optional `--stability` labels plus inferred read-time classes for the core memory surfaces.
 
 **P2**
-- `branch` / `merge-summary` git-workflow memory; project epochs; capability negotiation.
+- ✅ `capabilities` — *shipped (unreleased)*; machine-readable DCP capability report for agents and thin adapters.
+- `branch` / `merge-summary` git-workflow memory; project epochs.
 
 **Later — composes its inputs**
 - `dejavue explain <file|commit>` — the killer command; build after lineage / confidence / entities exist.
@@ -280,7 +281,7 @@ fields, Axiom-0 clean.
 
 - **Memory compression lineage** — `archive` already compacts `file_changed` events; extend the principle. Define what is immutable (timeline entries), what may be summarized (dense note clusters), what may be regenerated (FTS, embeddings). Preserve provenance of what was compressed into what.
 - **Scope layering** — DCP is currently repo-scoped (correct for v1/v2). Acknowledge workspace/org/personal scope in the spec so the protocol can grow without backward-incompatible changes.
-- **Capability negotiation in DCP** — agents can query `dejavue capabilities` and learn what optional layers (semantic recall, managed blocks, schema version) are active in a repo. Prevents silent degradation when adapters encounter older implementations.
+- ✅ **Capability negotiation in DCP** *(shipped, unreleased)* — agents can query `dejavue capabilities` and learn what optional layers (semantic recall, managed blocks, schema version) are active in a repo. Prevents silent degradation when adapters encounter older implementations.
 - **Per-entry freshness / expiry** — optional `expires_after: 90d` / `freshness: volatile` on operational memory (build commands, deploy steps, temporary constraints), with `recall`/`context` flagging expired entries at read time. Extends today's file-mtime `_staleness_warnings` (state.md/handoff.md only) to per-entry, computed at read time — **no background process** (Axiom 0). Distinct from `--durability`, a static longevity label with no expiry. (scratch: `deja1.md`)
 - **Memory stability classes** — a retention-class label (`Ephemeral / Operational / Architectural / Constitutional / Historical`) mapped to existing artifacts (scratch→Ephemeral, handoff→Operational, decisions→Architectural, context→Constitutional, timeline→Historical) to drive retention/compaction. **Distinct from `decision --durability`** (a per-decision longevity label, different vocabulary) — this is a cross-artifact taxonomy. Ship the label first; class-driven `archive` can follow. (scratch: `deja.md`)
 - **Machine-readable invariants (open question)** — `invariant` ships free-text only; the *enforcement / validation / architectural-lint* slice (the whole point) is unbuilt and unparked. Decide: a flat declarative `invariants:` block + an optional warnings-only `dejavue check` rule (no graph DB, no LSP — Axiom 0), or explicitly Reject. The LSP realization stays Rejected (below). (scratch: `deja1.md`)

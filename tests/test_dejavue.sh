@@ -2566,6 +2566,34 @@ test_changelog_superseded() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 156. capabilities emits a machine-readable DCP capability report
+test_capabilities_json() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    local out; out="$(dv capabilities 2>/dev/null)"
+    "$PYTHON" - "$out" <<'PYEOF'
+import json, sys
+data = json.loads(sys.argv[1])
+assert data["dcp_version"] == "DCP/1.0"
+assert "capabilities" in data["commands"]
+assert data["features"]["managed_adapters"] is True
+assert data["repo"]["initialized"] is True
+assert "codex" in data["repo"]["adapters"]
+PYEOF
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 157. capabilities --format text prints the compact human view
+test_capabilities_text() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    local out; out="$(dv capabilities --format text 2>/dev/null)"
+    assert_contains "text has dcp version" "$out" "DCP/1.0" || return 1
+    assert_contains "text has features" "$out" "Features:" || return 1
+    assert_contains "text has initialized" "$out" "Repo initialized: yes" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2750,6 +2778,8 @@ main() {
     run_test "153 changelog surfaces decisions"               test_changelog_decisions
     run_test "154 changelog includes commits"                 test_changelog_commits
     run_test "155 changelog annotates superseded"             test_changelog_superseded
+    run_test "156 capabilities emits JSON"                    test_capabilities_json
+    run_test "157 capabilities text view"                     test_capabilities_text
 
     echo ""
     echo "========================================"

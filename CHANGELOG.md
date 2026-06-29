@@ -23,6 +23,10 @@ any v1.x release can be read by any later v1.x release without migration.
 - **Memory stability classes** — optional `--stability` labels plus inferred read-time classes
   for the core memory surfaces. Keeps the retention taxonomy visible without changing the
   on-disk format.
+- **`dejavue capabilities [--format json|text]`** — report implementation and repo-local
+  DCP capabilities: version, supported commands, optional feature support, hook status,
+  and managed adapter status. First P2 item: capability negotiation for agents and thin
+  adapters.
 
 ## [2.1.0] — 2026-06-06
 

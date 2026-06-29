@@ -7,7 +7,7 @@ _dejavue() {
     local cmds="version init start changed decision state handoff context status \
 check archive roster config install-skill log blame note since changelog ingest recall \
 worthiness get list annotate stats promote import export reference link search \
-diff timeline tag note-commit completion rejected trap incident invariant pattern entities"
+diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities"
     if [[ $COMP_CWORD -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$cmds" -- "$cur"))
         return
@@ -49,6 +49,11 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
                 COMPREPLY=($(compgen -W "json md" -- "$cur"))
             elif [[ "$prev" == "--target" ]]; then
                 COMPREPLY=($(compgen -W "claude codex gemini copilot cursor all" -- "$cur"))
+            fi ;;
+        capabilities)
+            COMPREPLY=($(compgen -W "--format" -- "$cur"))
+            if [[ "$prev" == "--format" ]]; then
+                COMPREPLY=($(compgen -W "json text" -- "$cur"))
             fi ;;
         import)   COMPREPLY=($(compgen -f -- "$cur")) ;;
         promote)

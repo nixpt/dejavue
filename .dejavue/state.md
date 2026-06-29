@@ -1,5 +1,5 @@
 # State
 
-Updated: 2026-06-28T00:00:00-05:00
+Updated: 2026-06-28T21:35:06-05:00
 
-Public-release scrub remains the baseline. Current focus: make the post-commit auto-capture path fold timeline updates back into HEAD so active worktrees stay clean after committing, while keeping the repo's own .dejavue files current with public-safe lessons from adopter usage.
+P2 has started with capability negotiation: dejavue capabilities now reports DCP version, supported commands, optional feature support, hook status, and managed adapter status for agents/thin adapters. P1 metadata remains shipped but unreleased; next P2 candidates are branch/merge-summary workflow memory or project epochs.
