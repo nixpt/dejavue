@@ -2588,6 +2588,7 @@ assert data["features"]["git_workflow_memory"] is True
 assert data["features"]["project_epochs"] is True
 assert data["features"]["causal_explain"] is True
 assert data["features"]["conflict_memory"] is True
+assert data["features"]["author_type"] is True
 assert data["repo"]["initialized"] is True
 assert "codex" in data["repo"]["adapters"]
 PYEOF
@@ -2735,6 +2736,37 @@ test_conflict_record() {
     local explained; explained="$(dv explain src/conflicted.py 2>/dev/null)"
     assert_contains "conflict in explain" "$explained" "conflict_record" || return 1
     assert_contains "conflict reason in explain" "$explained" "keep parser fast path" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 166. --author-type stores writer class metadata and surfaces it in read paths
+test_author_type_metadata() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+
+    dv decision "Bot-authored decision" --reason "automation chose it" --author-type bot >/dev/null 2>&1
+    dv note "Coordinator-authored note" --author-type orchestrator >/dev/null 2>&1
+    dv branch start feature/authors --goal "typed branch intent" --author-type agent >/dev/null 2>&1
+    dv conflict record --path README.md --reason "human chose wording" --resolution "kept concise text" --author-type human >/dev/null 2>&1
+
+    local timeline; timeline="$(cat .dejavue/timeline.jsonl)"
+    assert_contains "bot author type stored" "$timeline" '"author_type": "bot"' || return 1
+    assert_contains "orchestrator author type stored" "$timeline" '"author_type": "orchestrator"' || return 1
+    assert_contains "agent author type stored" "$timeline" '"author_type": "agent"' || return 1
+    assert_contains "human author type stored" "$timeline" '"author_type": "human"' || return 1
+    assert_contains "decision doc shows author type" "$(cat .dejavue/decisions.md)" "Author type: bot" || return 1
+
+    local ctx; ctx="$(dv context -n 8 2>&1)"
+    assert_contains "context shows bot author type" "$ctx" "Author type: bot" || return 1
+    assert_contains "context shows orchestrator author type" "$ctx" "Author type: orchestrator" || return 1
+
+    local recall; recall="$(dv recall bot 2>&1)"
+    assert_contains "recall finds author type" "$recall" "Bot-authored decision" || return 1
+    assert_contains "recall shows author type" "$recall" "Author type: bot" || return 1
+
+    local rc; dv note "bad author" --author-type daemon >/dev/null 2>&1; rc=$?
+    assert_eq "invalid author type rejected" "$([ "$rc" -ne 0 ] && echo nonzero || echo zero)" "nonzero" || return 1
+
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
@@ -2932,6 +2964,7 @@ main() {
     run_test "163 explain commit composes memory"             test_explain_commit
     run_test "164 squash-summary synthesizes message"         test_squash_summary_branch
     run_test "165 conflict record surfaces rationale"         test_conflict_record
+    run_test "166 author type metadata read-back"             test_author_type_metadata
 
     echo ""
     echo "========================================"

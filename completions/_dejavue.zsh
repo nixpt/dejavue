@@ -71,24 +71,35 @@ _dejavue() {
                         '--reason[Why this decision was made]:reason' \
                         '*--rejected[Rejected alternative and reason]:alt:reason' \
                         '--agent[Agent name]:agent' \
+                        '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \
                         '--type[Event type]:type:(decision blocker claim question experiment checkpoint)' \
                         '--supersedes[ID or title of a prior decision this supersedes]:event-id' \
                         '--durability[How long-lived this decision is]:durability:(temporary tactical strategic constitutional)' \
                         '--confidence[How firm this decision is]:confidence:(speculative proposed experimental adopted deprecated verified)' \
+                        '--freshness[Freshness label for read-time staleness hints]:freshness' \
+                        '--expires-after[Relative expiry such as 90d or 12h]:duration' \
+                        '--derived-from[Lineage pointer to prior event title or event_id]:event-ref' \
+                        '--stability[Retention / stability class]:stability:(ephemeral operational architectural constitutional historical)' \
                         '*--artifacts[File this decision is about, repeatable]:file:_files' \
                         '*--entity[Subject this event is about, repeatable]:entity' \
                         '--tag[Tag]:tag' ;;
                 trap|incident|invariant|pattern)
                     _arguments \
                         '--agent[Agent name]:agent' \
+                        '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \
                         '*--entity[Subject this event is about, repeatable]:entity' \
                         '--tag[Tag]:tag' ;;
                 note)
                     _arguments \
                         '--agent[Agent name]:agent' \
+                        '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \
                         '--tag[Tag]:tag' \
                         '*--entity[Subject this event is about, repeatable]:entity' \
                         '--confidence[How firm this note/claim is]:confidence:(speculative proposed experimental adopted deprecated verified)' \
+                        '--freshness[Freshness label for read-time staleness hints]:freshness' \
+                        '--expires-after[Relative expiry such as 90d or 12h]:duration' \
+                        '--derived-from[Lineage pointer to prior event title or event_id]:event-ref' \
+                        '--stability[Retention / stability class]:stability:(ephemeral operational architectural constitutional historical)' \
                         '--type[Note type]:type:(note blocker claim question observation)' ;;
                 export)
                     _arguments \
@@ -107,7 +118,7 @@ _dejavue() {
                     local epoch_cmds=('begin:Open a named project epoch' 'end:Close a named project epoch' 'list:List epochs and milestones')
                     _describe 'epoch subcommand' epoch_cmds ;;
                 milestone)
-                    _arguments '--summary[Milestone summary]:summary' '--agent[Agent name]:agent' ;;
+                    _arguments '--summary[Milestone summary]:summary' '--agent[Agent name]:agent' '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' ;;
                 explain)
                     _arguments '1:file or commit:_files' ;;
                 conflict)

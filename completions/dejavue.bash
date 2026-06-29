@@ -13,27 +13,36 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
         return
     fi
     local subcmd="${COMP_WORDS[1]}"
+    if [[ "$prev" == "--author-type" ]]; then
+        COMPREPLY=($(compgen -W "human agent orchestrator ci bot" -- "$cur"))
+        return
+    fi
     case "$subcmd" in
         decision)
-            COMPREPLY=($(compgen -W "--reason --rejected --agent --type --tag --supersedes --durability --confidence --entity --artifacts" -- "$cur"))
+            COMPREPLY=($(compgen -W "--reason --rejected --agent --author-type --type --tag --supersedes --durability --confidence --freshness --expires-after --derived-from --stability --entity --artifacts" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "decision blocker claim question experiment checkpoint" -- "$cur"))
             elif [[ "$prev" == "--durability" ]]; then
                 COMPREPLY=($(compgen -W "temporary tactical strategic constitutional" -- "$cur"))
             elif [[ "$prev" == "--confidence" ]]; then
                 COMPREPLY=($(compgen -W "speculative proposed experimental adopted deprecated verified" -- "$cur"))
+            elif [[ "$prev" == "--stability" ]]; then
+                COMPREPLY=($(compgen -W "ephemeral operational architectural constitutional historical" -- "$cur"))
             fi ;;
-        trap|incident|invariant|pattern) COMPREPLY=($(compgen -W "--agent --tag --entity" -- "$cur")) ;;
+        trap|incident|invariant|pattern) COMPREPLY=($(compgen -W "--agent --author-type --tag --entity" -- "$cur")) ;;
         note)
-            COMPREPLY=($(compgen -W "--agent --tag --type --entity --confidence" -- "$cur"))
+            COMPREPLY=($(compgen -W "--agent --author-type --tag --type --entity --confidence --freshness --expires-after --derived-from --stability" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "note blocker claim question observation" -- "$cur"))
             elif [[ "$prev" == "--confidence" ]]; then
                 COMPREPLY=($(compgen -W "speculative proposed experimental adopted deprecated verified" -- "$cur"))
+            elif [[ "$prev" == "--stability" ]]; then
+                COMPREPLY=($(compgen -W "ephemeral operational architectural constitutional historical" -- "$cur"))
             fi ;;
-        start)    COMPREPLY=($(compgen -W "--agent --goal" -- "$cur")) ;;
-        state)    COMPREPLY=($(compgen -W "--summary --agent" -- "$cur")) ;;
-        handoff)  COMPREPLY=($(compgen -W "--summary --next --agent" -- "$cur")) ;;
+        start)    COMPREPLY=($(compgen -W "--agent --author-type --goal" -- "$cur")) ;;
+        changed)  COMPREPLY=($(compgen -W "--summary --agent --author-type --auto --commit --amend" -- "$cur")) ;;
+        state)    COMPREPLY=($(compgen -W "--summary --agent --author-type" -- "$cur")) ;;
+        handoff)  COMPREPLY=($(compgen -W "--summary --next --agent --author-type" -- "$cur")) ;;
         context)  COMPREPLY=($(compgen -W "--lines" -- "$cur")) ;;
         since)    COMPREPLY=($(compgen -W "--agent --format" -- "$cur")) ;;
         log)      COMPREPLY=($(compgen -W "--since --agent --type --oneline --limit" -- "$cur")) ;;
@@ -55,13 +64,13 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
             if [[ "$prev" == "--format" ]]; then
                 COMPREPLY=($(compgen -W "json text" -- "$cur"))
             fi ;;
-        branch)   COMPREPLY=($(compgen -W "start summary close --base --goal --summary --next --agent" -- "$cur")) ;;
+        branch)   COMPREPLY=($(compgen -W "start summary close --base --goal --summary --next --agent --author-type" -- "$cur")) ;;
         merge-summary) COMPREPLY=($(compgen -f -- "$cur")) ;;
         squash-summary) COMPREPLY=($(compgen -W "--base" -- "$cur")) ;;
-        epoch)    COMPREPLY=($(compgen -W "begin end list --summary --agent" -- "$cur")) ;;
-        milestone) COMPREPLY=($(compgen -W "--summary --agent" -- "$cur")) ;;
+        epoch)    COMPREPLY=($(compgen -W "begin end list --summary --agent --author-type" -- "$cur")) ;;
+        milestone) COMPREPLY=($(compgen -W "--summary --agent --author-type" -- "$cur")) ;;
         explain)  COMPREPLY=($(compgen -f -- "$cur")) ;;
-        conflict) COMPREPLY=($(compgen -W "record list --path --reason --resolution --agent" -- "$cur")) ;;
+        conflict) COMPREPLY=($(compgen -W "record list --path --reason --resolution --agent --author-type" -- "$cur")) ;;
         import)   COMPREPLY=($(compgen -f -- "$cur")) ;;
         promote)
             COMPREPLY=($(compgen -W "--to" -- "$cur"))

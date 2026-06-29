@@ -265,6 +265,8 @@ git                — mechanical history (commits, diffs)
 | `dejavue promote --to planning` | Graduate `.dejavue/` into a `.planning/` planning system without losing history — copies artifacts, records provenance, leaves `.dejavue/` canonical. |
 
 Each command accepts `--help`. See `dejavue --help` for the full flag list.
+Core memory-writing commands accept `--author-type {human,agent,orchestrator,ci,bot}`
+to record the kind of writer separately from the `--agent` identity string.
 
 
 ## Worthiness
