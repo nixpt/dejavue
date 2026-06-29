@@ -61,6 +61,7 @@ _dejavue() {
                 'epoch:Record or list project epochs'
                 'milestone:Record a named project milestone'
                 'explain:Explain why a file or commit exists'
+                'conflict:Record or list conflict-resolution rationale'
             )
             _describe 'subcommand' subcommands ;;
         args)
@@ -109,6 +110,9 @@ _dejavue() {
                     _arguments '--summary[Milestone summary]:summary' '--agent[Agent name]:agent' ;;
                 explain)
                     _arguments '1:file or commit:_files' ;;
+                conflict)
+                    local conflict_cmds=('record:Record conflict-resolution rationale' 'list:List conflict records')
+                    _describe 'conflict subcommand' conflict_cmds ;;
                 promote)
                     _arguments '--to[Target system]:system:(planning)' ;;
                 diff)

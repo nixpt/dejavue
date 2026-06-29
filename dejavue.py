@@ -1847,7 +1847,7 @@ def _explain_commit(target, events):
 def _explain_file(path, events):
     relevant = [ev for ev in events if _event_touches_target(ev, path)]
     decisions = [ev for ev in relevant if ev.get("event") == "decision"]
-    hazards = [ev for ev in relevant if ev.get("event") in ("trap", "incident", "invariant")]
+    hazards = [ev for ev in relevant if ev.get("event") in ("trap", "incident", "invariant", "conflict_record")]
     notes = [ev for ev in relevant if ev.get("event") in ("note", "pattern")]
     changes = [ev for ev in relevant if ev.get("event") == "file_changed"]
     git_log = git_run("git", "log", "--oneline", "--follow", "--", path)
@@ -1876,6 +1876,34 @@ def cmd_explain(args):
         _explain_commit(target, events)
     else:
         _explain_file(target, events)
+
+
+def cmd_conflict(args):
+    """Record why a merge conflict was resolved a certain way."""
+    action = args.action
+    if action == "record":
+        path = getattr(args, "path", None) or ""
+        summary = f"Conflict resolved" + (f" in {path}" if path else "") + f": {args.reason}"
+        append_event({
+            "agent": resolve_agent(getattr(args, "agent", None)),
+            "event": "conflict_record",
+            "path": path,
+            "summary": summary,
+            "reason": args.reason,
+            "resolution": getattr(args, "resolution", None) or "",
+        })
+        print("Conflict resolution recorded.")
+        return
+
+    events = [ev for ev in _load_events() if ev.get("event") == "conflict_record"]
+    if not events:
+        print("No conflict records yet.")
+        return
+    print(f"Conflict records ({len(events)}):\n")
+    for ev in events:
+        ts = (ev.get("ts") or "")[:19]
+        path = f" {ev.get('path')}" if ev.get("path") else ""
+        print(f"  [{ts}]{path} — {ev.get('reason') or ev.get('summary', '')}")
 
 
 def cmd_note(args):
@@ -2421,6 +2449,7 @@ def _capabilities_data():
         "timeline", "tag", "note-commit", "completion", "rejected", "trap",
         "incident", "invariant", "pattern", "entities", "capabilities",
         "branch", "merge-summary", "squash-summary", "epoch", "milestone", "explain",
+        "conflict",
     ]
     return {
         "dejavue_version": VERSION,
@@ -2441,6 +2470,7 @@ def _capabilities_data():
             "git_workflow_memory": True,
             "project_epochs": True,
             "causal_explain": True,
+            "conflict_memory": True,
             "per_entry_metadata": True,
             "freshness_expiry": True,
             "intent_lineage": True,
@@ -4120,7 +4150,7 @@ _dejavue() {
     local cmds="version init start changed decision state handoff context status \\
 check archive roster config install-skill log blame note since changelog ingest recall \\
 worthiness get list annotate stats promote import export reference link search \\
-diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary squash-summary epoch milestone explain"
+diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary squash-summary epoch milestone explain conflict"
     if [[ $COMP_CWORD -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$cmds" -- "$cur"))
         return
@@ -4178,6 +4208,7 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
         epoch)    COMPREPLY=($(compgen -W "begin end list --summary --agent" -- "$cur")) ;;
         milestone) COMPREPLY=($(compgen -W "--summary --agent" -- "$cur")) ;;
         explain)  COMPREPLY=($(compgen -f -- "$cur")) ;;
+        conflict) COMPREPLY=($(compgen -W "record list --path --reason --resolution --agent" -- "$cur")) ;;
         import)   COMPREPLY=($(compgen -f -- "$cur")) ;;
         promote)
             COMPREPLY=($(compgen -W "--to" -- "$cur"))
@@ -4268,6 +4299,7 @@ _dejavue() {
                 'epoch:Record or list project epochs'
                 'milestone:Record a named project milestone'
                 'explain:Explain why a file or commit exists'
+                'conflict:Record or list conflict-resolution rationale'
             )
             _describe 'subcommand' subcommands ;;
         args)
@@ -4324,6 +4356,9 @@ _dejavue() {
                     _arguments '--summary[Milestone summary]:summary' '--agent[Agent name]:agent' ;;
                 explain)
                     _arguments '1:file or commit:_files' ;;
+                conflict)
+                    local conflict_cmds=('record:Record conflict-resolution rationale' 'list:List conflict records')
+                    _describe 'conflict subcommand' conflict_cmds ;;
                 promote)
                     _arguments '--to[Target system]:system:(planning)' ;;
                 diff)
@@ -4358,7 +4393,7 @@ _FISH_COMPLETION = """\
 set -l cmds version init start changed decision state handoff context status \\
     check archive roster config install-skill log blame note since changelog ingest recall \\
     worthiness get list annotate stats promote import export reference link search \\
-    diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary squash-summary epoch milestone explain
+    diff timeline tag note-commit completion rejected trap incident invariant pattern entities capabilities branch merge-summary squash-summary epoch milestone explain conflict
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
@@ -4389,6 +4424,11 @@ complete -c dejavue -n "__fish_seen_subcommand_from epoch" -a "begin end list"
 complete -c dejavue -n "__fish_seen_subcommand_from epoch milestone" -l summary
 complete -c dejavue -n "__fish_seen_subcommand_from epoch milestone" -l agent -d "Agent name"
 complete -c dejavue -n "__fish_seen_subcommand_from explain" -rF
+complete -c dejavue -n "__fish_seen_subcommand_from conflict" -a "record list"
+complete -c dejavue -n "__fish_seen_subcommand_from conflict" -l path -rF
+complete -c dejavue -n "__fish_seen_subcommand_from conflict" -l reason
+complete -c dejavue -n "__fish_seen_subcommand_from conflict" -l resolution
+complete -c dejavue -n "__fish_seen_subcommand_from conflict" -l agent -d "Agent name"
 # promote
 complete -c dejavue -n "__fish_seen_subcommand_from promote" -l to -a "planning"
 # diff
@@ -4633,6 +4673,16 @@ def main():
     p = sub.add_parser("explain", help="Explain why a file or commit exists.")
     p.add_argument("target", help="File path or commit SHA/ref.")
     p.set_defaults(func=cmd_explain)
+
+    p = sub.add_parser("conflict", help="Record or list conflict-resolution rationale.")
+    conflict_sub = p.add_subparsers(dest="action", required=True)
+    cs = conflict_sub.add_parser("record", help="Record why a merge conflict was resolved a certain way.")
+    cs.add_argument("--path", default=None, help="File path involved in the conflict.")
+    cs.add_argument("--reason", required=True, help="Why this resolution was chosen.")
+    cs.add_argument("--resolution", default=None, help="What was done.")
+    cs.add_argument("--agent", default=None)
+    conflict_sub.add_parser("list", help="List conflict records.")
+    p.set_defaults(func=cmd_conflict)
 
     p = sub.add_parser("ingest", help="Scrape .claude/, CHANGELOG, ADRs, git log into timeline.")
     p.add_argument("--force", action="store_true", help="Re-run even if ingested.lock exists.")
