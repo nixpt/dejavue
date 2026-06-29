@@ -73,6 +73,7 @@ _dejavue() {
                         '--agent[Agent name]:agent' \
                         '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \
                         '*--tension[Unresolved tradeoff axis]:tension' \
+                        '*--value[Project value / philosophy label]:value' \
                         '--type[Event type]:type:(decision blocker claim question experiment checkpoint)' \
                         '--supersedes[ID or title of a prior decision this supersedes]:event-id' \
                         '--durability[How long-lived this decision is]:durability:(temporary tactical strategic constitutional)' \
@@ -89,6 +90,7 @@ _dejavue() {
                         '--agent[Agent name]:agent' \
                         '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \
                         '*--tension[Unresolved tradeoff axis]:tension' \
+                        '*--value[Project value / philosophy label]:value' \
                         '*--entity[Subject this event is about, repeatable]:entity' \
                         '--tag[Tag]:tag' ;;
                 note)
@@ -96,6 +98,7 @@ _dejavue() {
                         '--agent[Agent name]:agent' \
                         '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \
                         '*--tension[Unresolved tradeoff axis]:tension' \
+                        '*--value[Project value / philosophy label]:value' \
                         '--tag[Tag]:tag' \
                         '*--entity[Subject this event is about, repeatable]:entity' \
                         '--confidence[How firm this note/claim is]:confidence:(speculative proposed experimental adopted deprecated verified)' \
@@ -121,7 +124,7 @@ _dejavue() {
                     local epoch_cmds=('begin:Open a named project epoch' 'end:Close a named project epoch' 'list:List epochs and milestones')
                     _describe 'epoch subcommand' epoch_cmds ;;
                 milestone)
-                    _arguments '--summary[Milestone summary]:summary' '--agent[Agent name]:agent' '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' '*--tension[Unresolved tradeoff axis]:tension' ;;
+                    _arguments '--summary[Milestone summary]:summary' '--agent[Agent name]:agent' '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' '*--tension[Unresolved tradeoff axis]:tension' '*--value[Project value / philosophy label]:value' ;;
                 explain)
                     _arguments '1:file or commit:_files' ;;
                 conflict)

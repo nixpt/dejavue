@@ -285,3 +285,13 @@ Tensions: institutional-memory, tradeoffs
 
 Author type: agent
 
+
+## 2026-06-28T23:48:45-05:00 — Ship project values metadata
+
+Reason:
+Soft project philosophy labels help agents infer solution fit without turning values into hard invariants.
+
+Values: local-first, capability-first
+
+Author type: agent
+

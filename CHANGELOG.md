@@ -44,6 +44,9 @@ any v1.x release can be read by any later v1.x release without migration.
 - **`--tension LABEL`** — repeatable unresolved tradeoff metadata on core memory-writing
   commands (for example `security` / `performance`), surfaced in context/recall and kept
   distinct from rejected alternatives or supersession.
+- **`--value LABEL`** — repeatable soft project philosophy metadata on core memory-writing
+  commands (for example `local-first` / `capability-first`), surfaced in context/recall
+  without turning values into enforced invariants.
 - **`dejavue conflict record --reason TEXT [--path PATH]`** — record conflict-resolution
   rationale as timeline memory and surface it in `explain <file>`.
 

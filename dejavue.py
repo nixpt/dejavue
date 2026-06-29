@@ -216,6 +216,19 @@ def normalize_tensions(args):
     return out
 
 
+def normalize_values(args):
+    """Normalize repeatable --value labels into sorted-unique kebab-case strings.
+    Values are soft philosophy signals, not hard invariants or policy."""
+    raw = getattr(args, "value", None) or []
+    seen, out = set(), []
+    for item in raw:
+        norm = "-".join(str(item).strip().lower().split())
+        if norm and norm not in seen:
+            seen.add(norm)
+            out.append(norm)
+    return out
+
+
 def normalize_artifacts(args):
     """Normalize the optional repeatable --artifacts flag into a deduped list of stripped
     file paths (kept verbatim — unlike entities, paths are not kebab-cased)."""
@@ -274,6 +287,21 @@ def add_tension_arg(parser):
 def tension_fields(args):
     values = normalize_tensions(args)
     return {"tension": values} if values else {}
+
+
+def add_value_arg(parser):
+    parser.add_argument(
+        "--value",
+        action="append",
+        default=[],
+        metavar="LABEL",
+        help="Project value / philosophy label (repeatable), e.g. local-first.",
+    )
+
+
+def value_fields(args):
+    values = normalize_values(args)
+    return {"values": values} if values else {}
 
 
 def normalize_freshness(args):
@@ -418,6 +446,9 @@ def event_meta_lines(ev, events=None):
     tensions = ev.get("tension") or []
     if tensions:
         lines.append("Tensions: " + ", ".join(tensions))
+    values = ev.get("values") or []
+    if values:
+        lines.append("Values: " + ", ".join(values))
     stability = event_stability(ev)
     if stability:
         lines.append(f"Stability: {stability}")
@@ -434,6 +465,7 @@ def event_search_text(ev):
         ev.get("expires_after", ""),
         " ".join(ev.get("derived_from") or []),
         " ".join(ev.get("tension") or []),
+        " ".join(ev.get("values") or []),
         event_stability(ev),
         ev.get("author_type", ""),
     ]
@@ -615,6 +647,7 @@ def rebuild_fts():
                         ev.get("expires_after", ""),
                         " ".join(ev.get("derived_from") or []),
                         " ".join(ev.get("tension") or []),
+                        " ".join(ev.get("values") or []),
                         event_stability(ev),
                         ev.get("author_type", ""),
                     ]
@@ -1005,6 +1038,7 @@ def cmd_start(args):
         "summary": f"Session start: {args.goal}",
         **author_type_fields(args),
         **tension_fields(args),
+        **value_fields(args),
     })
     print(f"Session started. Goal: {args.goal}")
 
@@ -1052,6 +1086,7 @@ def cmd_changed(args):
             "summary": summary,
             **author_type_fields(args),
             **tension_fields(args),
+            **value_fields(args),
         })
         print("Change recorded.")
 
@@ -1108,6 +1143,7 @@ def cmd_decision(args):
     expires_after = getattr(args, "expires_after", None) or ""
     derived_from = normalize_derived_from(args)
     tensions = normalize_tensions(args)
+    values = normalize_values(args)
     stability = normalize_stability(args)
     author_type = (getattr(args, "author_type", None) or "").strip().lower()
 
@@ -1128,6 +1164,8 @@ def cmd_decision(args):
         entry += f"\nDerived from: {', '.join(derived_from)}\n"
     if tensions:
         entry += f"\nTensions: {', '.join(tensions)}\n"
+    if values:
+        entry += f"\nValues: {', '.join(values)}\n"
     if author_type:
         entry += f"\nAuthor type: {author_type}\n"
     if rejected:
@@ -1161,6 +1199,7 @@ def cmd_decision(args):
         "expires_after": expires_after,
         "derived_from": derived_from,
         "tension": tensions,
+        "values": values,
         "stability": stability,
         **author_type_fields(args),
     })
@@ -1177,6 +1216,7 @@ def cmd_state(args):
         "summary": args.summary,
         **author_type_fields(args),
         **tension_fields(args),
+        **value_fields(args),
     })
     print("State updated.")
 
@@ -1199,6 +1239,7 @@ def cmd_handoff(args):
         "next": args.next,
         **author_type_fields(args),
         **tension_fields(args),
+        **value_fields(args),
     })
     print("Handoff written.")
 
@@ -1962,6 +2003,7 @@ def cmd_conflict(args):
             "resolution": getattr(args, "resolution", None) or "",
             **author_type_fields(args),
             **tension_fields(args),
+            **value_fields(args),
         })
         print("Conflict resolution recorded.")
         return
@@ -1998,6 +2040,7 @@ def cmd_note(args):
         "stability": normalize_stability(args),
         **author_type_fields(args),
         **tension_fields(args),
+        **value_fields(args),
     })
     print(f"{event_type.capitalize()} recorded.")
 
@@ -2051,6 +2094,7 @@ def cmd_trap(args):
         "entities": normalize_entities(args),
         **author_type_fields(args),
         **tension_fields(args),
+        **value_fields(args),
     })
     print("Trap recorded.")
 
@@ -2065,6 +2109,7 @@ def cmd_incident(args):
         "entities": normalize_entities(args),
         **author_type_fields(args),
         **tension_fields(args),
+        **value_fields(args),
     })
     print("Incident recorded.")
 
@@ -2086,6 +2131,7 @@ def cmd_invariant(args):
         "entities": normalize_entities(args),
         **author_type_fields(args),
         **tension_fields(args),
+        **value_fields(args),
     })
     print("Invariant recorded.")
 
@@ -2107,6 +2153,7 @@ def cmd_pattern(args):
         "entities": normalize_entities(args),
         **author_type_fields(args),
         **tension_fields(args),
+        **value_fields(args),
     })
     print("Pattern recorded.")
 
@@ -2259,6 +2306,7 @@ def cmd_branch(args):
             "summary": f"Branch {branch} started: {args.goal}",
             **author_type_fields(args),
             **tension_fields(args),
+            **value_fields(args),
         })
         print(f"Branch intent recorded for {branch}.")
         return
@@ -2273,6 +2321,7 @@ def cmd_branch(args):
             "next": next_steps,
             **author_type_fields(args),
             **tension_fields(args),
+            **value_fields(args),
         })
         print(f"Branch closeout recorded for {branch}.")
         return
@@ -2448,6 +2497,7 @@ def cmd_epoch(args):
             "summary": summary,
             **author_type_fields(args),
             **tension_fields(args),
+            **value_fields(args),
         })
         print(f"Epoch began: {args.name}")
         return
@@ -2460,6 +2510,7 @@ def cmd_epoch(args):
             "summary": summary,
             **author_type_fields(args),
             **tension_fields(args),
+            **value_fields(args),
         })
         print(f"Epoch ended: {args.name}")
         return
@@ -2478,6 +2529,7 @@ def cmd_milestone(args):
         "summary": summary,
         **author_type_fields(args),
         **tension_fields(args),
+        **value_fields(args),
     })
     print(f"Milestone recorded: {args.name}")
 
@@ -2568,6 +2620,7 @@ def _capabilities_data():
             "stability_classes": True,
             "author_type": True,
             "tension_tracking": True,
+            "project_values": True,
         },
         "repo": {
             "initialized": DEJAVUE_DIR.exists(),
@@ -3143,6 +3196,7 @@ def _semantic_text_for(event):
         event.get("expires_after", ""),
         " ".join(event.get("derived_from") or []),
         " ".join(event.get("tension") or []),
+        " ".join(event.get("values") or []),
         event_stability(event),
         event.get("author_type", ""),
         " ".join(event.get("entities") or []),
@@ -4257,7 +4311,7 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
     fi
     case "$subcmd" in
         decision)
-            COMPREPLY=($(compgen -W "--reason --rejected --agent --author-type --tension --type --tag --supersedes --durability --confidence --freshness --expires-after --derived-from --stability --entity --artifacts" -- "$cur"))
+            COMPREPLY=($(compgen -W "--reason --rejected --agent --author-type --tension --value --type --tag --supersedes --durability --confidence --freshness --expires-after --derived-from --stability --entity --artifacts" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "decision blocker claim question experiment checkpoint" -- "$cur"))
             elif [[ "$prev" == "--durability" ]]; then
@@ -4267,9 +4321,9 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
             elif [[ "$prev" == "--stability" ]]; then
                 COMPREPLY=($(compgen -W "ephemeral operational architectural constitutional historical" -- "$cur"))
             fi ;;
-        trap|incident|invariant|pattern) COMPREPLY=($(compgen -W "--agent --author-type --tension --tag --entity" -- "$cur")) ;;
+        trap|incident|invariant|pattern) COMPREPLY=($(compgen -W "--agent --author-type --tension --value --tag --entity" -- "$cur")) ;;
         note)
-            COMPREPLY=($(compgen -W "--agent --author-type --tension --tag --type --entity --confidence --freshness --expires-after --derived-from --stability" -- "$cur"))
+            COMPREPLY=($(compgen -W "--agent --author-type --tension --value --tag --type --entity --confidence --freshness --expires-after --derived-from --stability" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "note blocker claim question observation" -- "$cur"))
             elif [[ "$prev" == "--confidence" ]]; then
@@ -4277,10 +4331,10 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
             elif [[ "$prev" == "--stability" ]]; then
                 COMPREPLY=($(compgen -W "ephemeral operational architectural constitutional historical" -- "$cur"))
             fi ;;
-        start)    COMPREPLY=($(compgen -W "--agent --author-type --tension --goal" -- "$cur")) ;;
-        changed)  COMPREPLY=($(compgen -W "--summary --agent --author-type --tension --auto --commit --amend" -- "$cur")) ;;
-        state)    COMPREPLY=($(compgen -W "--summary --agent --author-type --tension" -- "$cur")) ;;
-        handoff)  COMPREPLY=($(compgen -W "--summary --next --agent --author-type --tension" -- "$cur")) ;;
+        start)    COMPREPLY=($(compgen -W "--agent --author-type --tension --value --goal" -- "$cur")) ;;
+        changed)  COMPREPLY=($(compgen -W "--summary --agent --author-type --tension --value --auto --commit --amend" -- "$cur")) ;;
+        state)    COMPREPLY=($(compgen -W "--summary --agent --author-type --tension --value" -- "$cur")) ;;
+        handoff)  COMPREPLY=($(compgen -W "--summary --next --agent --author-type --tension --value" -- "$cur")) ;;
         context)  COMPREPLY=($(compgen -W "--lines" -- "$cur")) ;;
         since)    COMPREPLY=($(compgen -W "--agent --format" -- "$cur")) ;;
         log)      COMPREPLY=($(compgen -W "--since --agent --type --oneline --limit" -- "$cur")) ;;
@@ -4302,13 +4356,13 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
             if [[ "$prev" == "--format" ]]; then
                 COMPREPLY=($(compgen -W "json text" -- "$cur"))
             fi ;;
-        branch)   COMPREPLY=($(compgen -W "start summary close --base --goal --summary --next --agent --author-type --tension" -- "$cur")) ;;
+        branch)   COMPREPLY=($(compgen -W "start summary close --base --goal --summary --next --agent --author-type --tension --value" -- "$cur")) ;;
         merge-summary) COMPREPLY=($(compgen -f -- "$cur")) ;;
         squash-summary) COMPREPLY=($(compgen -W "--base" -- "$cur")) ;;
-        epoch)    COMPREPLY=($(compgen -W "begin end list --summary --agent --author-type --tension" -- "$cur")) ;;
-        milestone) COMPREPLY=($(compgen -W "--summary --agent --author-type --tension" -- "$cur")) ;;
+        epoch)    COMPREPLY=($(compgen -W "begin end list --summary --agent --author-type --tension --value" -- "$cur")) ;;
+        milestone) COMPREPLY=($(compgen -W "--summary --agent --author-type --tension --value" -- "$cur")) ;;
         explain)  COMPREPLY=($(compgen -f -- "$cur")) ;;
-        conflict) COMPREPLY=($(compgen -W "record list --path --reason --resolution --agent --author-type --tension" -- "$cur")) ;;
+        conflict) COMPREPLY=($(compgen -W "record list --path --reason --resolution --agent --author-type --tension --value" -- "$cur")) ;;
         import)   COMPREPLY=($(compgen -f -- "$cur")) ;;
         promote)
             COMPREPLY=($(compgen -W "--to" -- "$cur"))
@@ -4411,6 +4465,7 @@ _dejavue() {
                         '--agent[Agent name]:agent' \\
                         '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \\
                         '*--tension[Unresolved tradeoff axis]:tension' \\
+                        '*--value[Project value / philosophy label]:value' \\
                         '--type[Event type]:type:(decision blocker claim question experiment checkpoint)' \\
                         '--supersedes[ID or title of a prior decision this supersedes]:event-id' \\
                         '--durability[How long-lived this decision is]:durability:(temporary tactical strategic constitutional)' \\
@@ -4427,6 +4482,7 @@ _dejavue() {
                         '--agent[Agent name]:agent' \\
                         '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \\
                         '*--tension[Unresolved tradeoff axis]:tension' \\
+                        '*--value[Project value / philosophy label]:value' \\
                         '*--entity[Subject this event is about, repeatable]:entity' \\
                         '--tag[Tag]:tag' ;;
                 note)
@@ -4434,6 +4490,7 @@ _dejavue() {
                         '--agent[Agent name]:agent' \\
                         '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \\
                         '*--tension[Unresolved tradeoff axis]:tension' \\
+                        '*--value[Project value / philosophy label]:value' \\
                         '--tag[Tag]:tag' \\
                         '*--entity[Subject this event is about, repeatable]:entity' \\
                         '--confidence[How firm this note/claim is]:confidence:(speculative proposed experimental adopted deprecated verified)' \\
@@ -4459,7 +4516,7 @@ _dejavue() {
                     local epoch_cmds=('begin:Open a named project epoch' 'end:Close a named project epoch' 'list:List epochs and milestones')
                     _describe 'epoch subcommand' epoch_cmds ;;
                 milestone)
-                    _arguments '--summary[Milestone summary]:summary' '--agent[Agent name]:agent' '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' '*--tension[Unresolved tradeoff axis]:tension' ;;
+                    _arguments '--summary[Milestone summary]:summary' '--agent[Agent name]:agent' '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' '*--tension[Unresolved tradeoff axis]:tension' '*--value[Project value / philosophy label]:value' ;;
                 explain)
                     _arguments '1:file or commit:_files' ;;
                 conflict)
@@ -4507,6 +4564,7 @@ complete -c dejavue -n "__fish_seen_subcommand_from decision" -l durability -a "
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l confidence -a "speculative proposed experimental adopted deprecated verified"
 complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l author-type -a "human agent orchestrator ci bot"
 complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l tension
+complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l value
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l freshness
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l expires-after
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l derived-from
@@ -4589,6 +4647,7 @@ def main():
     p.add_argument("--agent", default=None)
     add_author_type_arg(p)
     add_tension_arg(p)
+    add_value_arg(p)
     p.add_argument("--goal", required=True)
     p.set_defaults(func=cmd_start)
 
@@ -4598,6 +4657,7 @@ def main():
     p.add_argument("--agent", default=None)
     add_author_type_arg(p)
     add_tension_arg(p)
+    add_value_arg(p)
     p.add_argument("--auto", action="store_true", help="Auto mode (from git hook).")
     p.add_argument("--commit", default=None, help="Commit SHA (used with --auto).")
     p.add_argument("--amend", action="store_true",
@@ -4633,6 +4693,7 @@ def main():
     p.add_argument("--agent", default=None)
     add_author_type_arg(p)
     add_tension_arg(p)
+    add_value_arg(p)
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_decision)
 
@@ -4641,6 +4702,7 @@ def main():
     p.add_argument("--agent", default=None)
     add_author_type_arg(p)
     add_tension_arg(p)
+    add_value_arg(p)
     p.set_defaults(func=cmd_state)
 
     p = sub.add_parser("handoff", help="Write handoff.md.")
@@ -4650,6 +4712,7 @@ def main():
     p.add_argument("--agent", default=None)
     add_author_type_arg(p)
     add_tension_arg(p)
+    add_value_arg(p)
     p.set_defaults(func=cmd_handoff)
 
     p = sub.add_parser("context", help="Print all .md files + last N timeline entries.")
@@ -4717,6 +4780,7 @@ def main():
     p.add_argument("--agent", default=None)
     add_author_type_arg(p)
     add_tension_arg(p)
+    add_value_arg(p)
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.add_argument("--confidence", choices=["speculative", "proposed", "experimental", "adopted", "deprecated", "verified"],
                    help="How firm this note/claim is.")
@@ -4753,6 +4817,7 @@ def main():
     bs.add_argument("--agent", default=None)
     add_author_type_arg(bs)
     add_tension_arg(bs)
+    add_value_arg(bs)
     bs = branch_sub.add_parser("summary", help="Replay branch-scoped memory and commits.")
     bs.add_argument("name", nargs="?", help="Branch name/ref (default: current branch).")
     bs.add_argument("--base", default=None, help="Base ref for commit and event window.")
@@ -4763,6 +4828,7 @@ def main():
     bs.add_argument("--agent", default=None)
     add_author_type_arg(bs)
     add_tension_arg(bs)
+    add_value_arg(bs)
     p.set_defaults(func=cmd_branch)
 
     p = sub.add_parser("merge-summary", help="Summarize what a branch brings into a base ref.")
@@ -4783,12 +4849,14 @@ def main():
     es.add_argument("--agent", default=None)
     add_author_type_arg(es)
     add_tension_arg(es)
+    add_value_arg(es)
     es = epoch_sub.add_parser("end", help="Close a named project epoch.")
     es.add_argument("name", help="Epoch name.")
     es.add_argument("--summary", default=None, help="What changed by the end of this epoch.")
     es.add_argument("--agent", default=None)
     add_author_type_arg(es)
     add_tension_arg(es)
+    add_value_arg(es)
     epoch_sub.add_parser("list", help="List epochs and milestones.")
     p.set_defaults(func=cmd_epoch)
 
@@ -4798,6 +4866,7 @@ def main():
     p.add_argument("--agent", default=None)
     add_author_type_arg(p)
     add_tension_arg(p)
+    add_value_arg(p)
     p.set_defaults(func=cmd_milestone)
 
     p = sub.add_parser("explain", help="Explain why a file or commit exists.")
@@ -4813,6 +4882,7 @@ def main():
     cs.add_argument("--agent", default=None)
     add_author_type_arg(cs)
     add_tension_arg(cs)
+    add_value_arg(cs)
     conflict_sub.add_parser("list", help="List conflict records.")
     p.set_defaults(func=cmd_conflict)
 
@@ -4959,6 +5029,7 @@ def main():
     p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
     add_author_type_arg(p)
     add_tension_arg(p)
+    add_value_arg(p)
     p.add_argument("--tag", metavar="TAG", help="Tag.")
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_trap)
@@ -4968,6 +5039,7 @@ def main():
     p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
     add_author_type_arg(p)
     add_tension_arg(p)
+    add_value_arg(p)
     p.add_argument("--tag", metavar="TAG", help="Tag.")
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_incident)
@@ -4977,6 +5049,7 @@ def main():
     p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
     add_author_type_arg(p)
     add_tension_arg(p)
+    add_value_arg(p)
     p.add_argument("--tag", metavar="TAG", help="Tag.")
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_invariant)
@@ -4986,6 +5059,7 @@ def main():
     p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
     add_author_type_arg(p)
     add_tension_arg(p)
+    add_value_arg(p)
     p.add_argument("--tag", metavar="TAG", help="Tag.")
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_pattern)

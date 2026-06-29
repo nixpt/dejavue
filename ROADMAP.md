@@ -275,7 +275,7 @@ fields, Axiom-0 clean.
 - ✅ **`pattern` command + `patterns.md`** *(shipped, unreleased)* — the previously-missing core memory file (decisions / patterns / invariants / glossary). Discovered naming/idiom/structure conventions, distinct from decisions; same mold as `trap`/`invariant`. (scratch: `deja_ext.md`)
 - ✅ **`author_type` field** *(shipped, unreleased)* — trust-typing for the multi-writer reality. Records *what kind* of writer (`human / agent / orchestrator / ci / bot`), not just *who* (the existing `agent` string). Not access control. (scratch: `deja1.md`)
 - ✅ **Tension tracking** *(shipped, unreleased)* — live *unresolved* architectural tensions as standing institutional memory via repeatable `--tension` labels stored as `tension: [security, performance]`; distinct from `--rejected` (discarded) and `--supersedes` (resolved). (scratch: `deja1.md`)
-- **Project values / philosophy layer** — a soft `values: []` array (capability-first / local-first / composability) so agents infer solution-fit; distinct from hard `invariant`s. (scratch: `deja1.md`)
+- ✅ **Project values / philosophy layer** *(shipped, unreleased)* — a soft `values: []` array via repeatable `--value` labels (capability-first / local-first / composability) so agents infer solution-fit; distinct from hard `invariant`s. (scratch: `deja1.md`)
 - **`domain_owner` field + recall-by-owner** — promote from the buried Tier-4 "ownership maps" row to a first-class additive event field, mirroring `entities[]`. (scratch: `deja1.md`)
 
 ### Memory management

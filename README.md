@@ -269,6 +269,8 @@ Core memory-writing commands accept `--author-type {human,agent,orchestrator,ci,
 to record the kind of writer separately from the `--agent` identity string.
 They also accept repeatable `--tension LABEL` for unresolved tradeoff axes such as
 `security` or `performance`.
+Use repeatable `--value LABEL` for soft project philosophy labels such as
+`local-first` or `capability-first`.
 
 
 ## Worthiness

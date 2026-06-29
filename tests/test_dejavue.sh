@@ -2590,6 +2590,7 @@ assert data["features"]["causal_explain"] is True
 assert data["features"]["conflict_memory"] is True
 assert data["features"]["author_type"] is True
 assert data["features"]["tension_tracking"] is True
+assert data["features"]["project_values"] is True
 assert data["repo"]["initialized"] is True
 assert "codex" in data["repo"]["adapters"]
 PYEOF
@@ -2796,6 +2797,31 @@ test_tension_metadata() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 168. --value stores soft project philosophy metadata and surfaces it in read paths
+test_value_metadata() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+
+    dv decision "Keep the runtime local" --reason "offline agents need deterministic tools" \
+        --value local-first --value "Capability First" >/dev/null 2>&1
+    dv note "Composability applies to adapter boundaries" --value composability >/dev/null 2>&1
+
+    local timeline; timeline="$(cat .dejavue/timeline.jsonl)"
+    assert_contains "decision values stored" "$timeline" '"values": ["local-first", "capability-first"]' || return 1
+    assert_contains "note value stored" "$timeline" '"values": ["composability"]' || return 1
+    assert_contains "decision doc shows values" "$(cat .dejavue/decisions.md)" "Values: local-first, capability-first" || return 1
+
+    local ctx; ctx="$(dv context -n 6 2>&1)"
+    assert_contains "context shows values" "$ctx" "Values: local-first, capability-first" || return 1
+    assert_contains "context shows note value" "$ctx" "Values: composability" || return 1
+
+    local recall; recall="$(dv recall capability 2>&1)"
+    assert_contains "recall finds value" "$recall" "Keep the runtime local" || return 1
+    assert_contains "recall shows value metadata" "$recall" "Values: local-first, capability-first" || return 1
+
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -2992,6 +3018,7 @@ main() {
     run_test "165 conflict record surfaces rationale"         test_conflict_record
     run_test "166 author type metadata read-back"             test_author_type_metadata
     run_test "167 tension metadata read-back"                 test_tension_metadata
+    run_test "168 value metadata read-back"                   test_value_metadata
 
     echo ""
     echo "========================================"
