@@ -267,3 +267,11 @@ Artifacts: dejavue.py, tests/test_dejavue.sh, ROADMAP.md
 Outcome:
 Added conflict record/list, explain surfacing, tests, docs, roadmap/changelog updates, completions, capabilities flag, and repo memory.
 
+
+## 2026-06-28T23:36:47-05:00 — Ship author_type trust metadata
+
+Reason:
+Core memory commands need to distinguish writer class from agent identity for multi-writer trust-aware recall.
+
+Author type: agent
+

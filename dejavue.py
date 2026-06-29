@@ -45,6 +45,7 @@ EMBEDDER_TIMEOUT_S = 5.0
 # Valid event sub-types for decision/note commands (stored as "event_type" field).
 DECISION_TYPES = {"decision", "blocker", "claim", "question", "experiment", "checkpoint"}
 NOTE_TYPES     = {"note", "blocker", "claim", "question", "observation"}
+AUTHOR_TYPES   = {"human", "agent", "orchestrator", "ci", "bot"}
 
 # ── DCP (DejaVue Context Protocol) ─────────────────────────────────────────────
 # context.md is the DCP instruction-layer source of truth; adapters are generated
@@ -233,6 +234,20 @@ def normalize_stability(args):
     return value.strip().lower()
 
 
+def author_type_fields(args):
+    value = (getattr(args, "author_type", None) or "").strip().lower()
+    return {"author_type": value} if value else {}
+
+
+def add_author_type_arg(parser):
+    parser.add_argument(
+        "--author-type",
+        choices=sorted(AUTHOR_TYPES),
+        default=None,
+        help="Writer class for trust typing: human, agent, orchestrator, ci, or bot.",
+    )
+
+
 def normalize_freshness(args):
     """Normalize the optional --freshness label while preserving user vocabulary."""
     value = getattr(args, "freshness", None) or ""
@@ -375,6 +390,9 @@ def event_meta_lines(ev, events=None):
     stability = event_stability(ev)
     if stability:
         lines.append(f"Stability: {stability}")
+    author_type = (ev.get("author_type") or "").strip()
+    if author_type:
+        lines.append(f"Author type: {author_type}")
     return lines
 
 
@@ -385,6 +403,7 @@ def event_search_text(ev):
         ev.get("expires_after", ""),
         " ".join(ev.get("derived_from") or []),
         event_stability(ev),
+        ev.get("author_type", ""),
     ]
     return " ".join(p for p in parts if p)
 
@@ -564,6 +583,7 @@ def rebuild_fts():
                         ev.get("expires_after", ""),
                         " ".join(ev.get("derived_from") or []),
                         event_stability(ev),
+                        ev.get("author_type", ""),
                     ]
                     text = " ".join(p for p in parts if p)
                     rows.append((ev.get("ts", ""), ev.get("event", ""), text, "timeline.jsonl"))
@@ -950,6 +970,7 @@ def cmd_start(args):
         "event": "session_start",
         "goal": args.goal,
         "summary": f"Session start: {args.goal}",
+        **author_type_fields(args),
     })
     print(f"Session started. Goal: {args.goal}")
 
@@ -995,6 +1016,7 @@ def cmd_changed(args):
             "event": "file_changed",
             "path": args.path,
             "summary": summary,
+            **author_type_fields(args),
         })
         print("Change recorded.")
 
@@ -1051,6 +1073,7 @@ def cmd_decision(args):
     expires_after = getattr(args, "expires_after", None) or ""
     derived_from = normalize_derived_from(args)
     stability = normalize_stability(args)
+    author_type = (getattr(args, "author_type", None) or "").strip().lower()
 
     type_label = f"[{event_type.upper()}] " if event_type != "decision" else ""
     dur_label = f"[{durability.upper()}] " if durability else ""
@@ -1067,6 +1090,8 @@ def cmd_decision(args):
         entry += f"\nExpires after: {expires_after}\n"
     if derived_from:
         entry += f"\nDerived from: {', '.join(derived_from)}\n"
+    if author_type:
+        entry += f"\nAuthor type: {author_type}\n"
     if rejected:
         entry += "\nRejected alternatives:\n"
         for ra in rejected:
@@ -1098,6 +1123,7 @@ def cmd_decision(args):
         "expires_after": expires_after,
         "derived_from": derived_from,
         "stability": stability,
+        **author_type_fields(args),
     })
     print(f"{event_type.capitalize()} recorded: {args.title}")
 
@@ -1110,6 +1136,7 @@ def cmd_state(args):
         "agent": resolve_agent(args.agent),
         "event": "state_update",
         "summary": args.summary,
+        **author_type_fields(args),
     })
     print("State updated.")
 
@@ -1130,6 +1157,7 @@ def cmd_handoff(args):
         "event": "handoff",
         "summary": args.summary,
         "next": args.next,
+        **author_type_fields(args),
     })
     print("Handoff written.")
 
@@ -1891,6 +1919,7 @@ def cmd_conflict(args):
             "summary": summary,
             "reason": args.reason,
             "resolution": getattr(args, "resolution", None) or "",
+            **author_type_fields(args),
         })
         print("Conflict resolution recorded.")
         return
@@ -1925,6 +1954,7 @@ def cmd_note(args):
         "expires_after": getattr(args, "expires_after", None) or "",
         "derived_from": normalize_derived_from(args),
         "stability": normalize_stability(args),
+        **author_type_fields(args),
     })
     print(f"{event_type.capitalize()} recorded.")
 
@@ -1976,6 +2006,7 @@ def cmd_trap(args):
         "summary": args.text,
         "tag": args.tag or "",
         "entities": normalize_entities(args),
+        **author_type_fields(args),
     })
     print("Trap recorded.")
 
@@ -1988,6 +2019,7 @@ def cmd_incident(args):
         "summary": args.text,
         "tag": args.tag or "",
         "entities": normalize_entities(args),
+        **author_type_fields(args),
     })
     print("Incident recorded.")
 
@@ -2007,6 +2039,7 @@ def cmd_invariant(args):
         "summary": args.text,
         "tag": args.tag or "",
         "entities": normalize_entities(args),
+        **author_type_fields(args),
     })
     print("Invariant recorded.")
 
@@ -2026,6 +2059,7 @@ def cmd_pattern(args):
         "summary": args.text,
         "tag": args.tag or "",
         "entities": normalize_entities(args),
+        **author_type_fields(args),
     })
     print("Pattern recorded.")
 
@@ -2176,6 +2210,7 @@ def cmd_branch(args):
             "base_ref": base,
             "goal": args.goal,
             "summary": f"Branch {branch} started: {args.goal}",
+            **author_type_fields(args),
         })
         print(f"Branch intent recorded for {branch}.")
         return
@@ -2188,6 +2223,7 @@ def cmd_branch(args):
             "target_branch": branch,
             "summary": args.summary,
             "next": next_steps,
+            **author_type_fields(args),
         })
         print(f"Branch closeout recorded for {branch}.")
         return
@@ -2361,6 +2397,7 @@ def cmd_epoch(args):
             "event": "epoch_begin",
             "epoch": args.name,
             "summary": summary,
+            **author_type_fields(args),
         })
         print(f"Epoch began: {args.name}")
         return
@@ -2371,6 +2408,7 @@ def cmd_epoch(args):
             "event": "epoch_end",
             "epoch": args.name,
             "summary": summary,
+            **author_type_fields(args),
         })
         print(f"Epoch ended: {args.name}")
         return
@@ -2387,6 +2425,7 @@ def cmd_milestone(args):
         "event": "milestone",
         "milestone": args.name,
         "summary": summary,
+        **author_type_fields(args),
     })
     print(f"Milestone recorded: {args.name}")
 
@@ -2475,6 +2514,7 @@ def _capabilities_data():
             "freshness_expiry": True,
             "intent_lineage": True,
             "stability_classes": True,
+            "author_type": True,
         },
         "repo": {
             "initialized": DEJAVUE_DIR.exists(),
@@ -3050,6 +3090,7 @@ def _semantic_text_for(event):
         event.get("expires_after", ""),
         " ".join(event.get("derived_from") or []),
         event_stability(event),
+        event.get("author_type", ""),
         " ".join(event.get("entities") or []),
         " ".join(event.get("artifacts") or []),
     ]
@@ -4156,9 +4197,13 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
         return
     fi
     local subcmd="${COMP_WORDS[1]}"
+    if [[ "$prev" == "--author-type" ]]; then
+        COMPREPLY=($(compgen -W "human agent orchestrator ci bot" -- "$cur"))
+        return
+    fi
     case "$subcmd" in
         decision)
-            COMPREPLY=($(compgen -W "--reason --rejected --agent --type --tag --supersedes --durability --confidence --freshness --expires-after --derived-from --stability --entity --artifacts" -- "$cur"))
+            COMPREPLY=($(compgen -W "--reason --rejected --agent --author-type --type --tag --supersedes --durability --confidence --freshness --expires-after --derived-from --stability --entity --artifacts" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "decision blocker claim question experiment checkpoint" -- "$cur"))
             elif [[ "$prev" == "--durability" ]]; then
@@ -4168,9 +4213,9 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
             elif [[ "$prev" == "--stability" ]]; then
                 COMPREPLY=($(compgen -W "ephemeral operational architectural constitutional historical" -- "$cur"))
             fi ;;
-        trap|incident|invariant|pattern) COMPREPLY=($(compgen -W "--agent --tag --entity" -- "$cur")) ;;
+        trap|incident|invariant|pattern) COMPREPLY=($(compgen -W "--agent --author-type --tag --entity" -- "$cur")) ;;
         note)
-            COMPREPLY=($(compgen -W "--agent --tag --type --entity --confidence --freshness --expires-after --derived-from --stability" -- "$cur"))
+            COMPREPLY=($(compgen -W "--agent --author-type --tag --type --entity --confidence --freshness --expires-after --derived-from --stability" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
                 COMPREPLY=($(compgen -W "note blocker claim question observation" -- "$cur"))
             elif [[ "$prev" == "--confidence" ]]; then
@@ -4178,9 +4223,10 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
             elif [[ "$prev" == "--stability" ]]; then
                 COMPREPLY=($(compgen -W "ephemeral operational architectural constitutional historical" -- "$cur"))
             fi ;;
-        start)    COMPREPLY=($(compgen -W "--agent --goal" -- "$cur")) ;;
-        state)    COMPREPLY=($(compgen -W "--summary --agent" -- "$cur")) ;;
-        handoff)  COMPREPLY=($(compgen -W "--summary --next --agent" -- "$cur")) ;;
+        start)    COMPREPLY=($(compgen -W "--agent --author-type --goal" -- "$cur")) ;;
+        changed)  COMPREPLY=($(compgen -W "--summary --agent --author-type --auto --commit --amend" -- "$cur")) ;;
+        state)    COMPREPLY=($(compgen -W "--summary --agent --author-type" -- "$cur")) ;;
+        handoff)  COMPREPLY=($(compgen -W "--summary --next --agent --author-type" -- "$cur")) ;;
         context)  COMPREPLY=($(compgen -W "--lines" -- "$cur")) ;;
         since)    COMPREPLY=($(compgen -W "--agent --format" -- "$cur")) ;;
         log)      COMPREPLY=($(compgen -W "--since --agent --type --oneline --limit" -- "$cur")) ;;
@@ -4202,13 +4248,13 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
             if [[ "$prev" == "--format" ]]; then
                 COMPREPLY=($(compgen -W "json text" -- "$cur"))
             fi ;;
-        branch)   COMPREPLY=($(compgen -W "start summary close --base --goal --summary --next --agent" -- "$cur")) ;;
+        branch)   COMPREPLY=($(compgen -W "start summary close --base --goal --summary --next --agent --author-type" -- "$cur")) ;;
         merge-summary) COMPREPLY=($(compgen -f -- "$cur")) ;;
         squash-summary) COMPREPLY=($(compgen -W "--base" -- "$cur")) ;;
-        epoch)    COMPREPLY=($(compgen -W "begin end list --summary --agent" -- "$cur")) ;;
-        milestone) COMPREPLY=($(compgen -W "--summary --agent" -- "$cur")) ;;
+        epoch)    COMPREPLY=($(compgen -W "begin end list --summary --agent --author-type" -- "$cur")) ;;
+        milestone) COMPREPLY=($(compgen -W "--summary --agent --author-type" -- "$cur")) ;;
         explain)  COMPREPLY=($(compgen -f -- "$cur")) ;;
-        conflict) COMPREPLY=($(compgen -W "record list --path --reason --resolution --agent" -- "$cur")) ;;
+        conflict) COMPREPLY=($(compgen -W "record list --path --reason --resolution --agent --author-type" -- "$cur")) ;;
         import)   COMPREPLY=($(compgen -f -- "$cur")) ;;
         promote)
             COMPREPLY=($(compgen -W "--to" -- "$cur"))
@@ -4309,6 +4355,7 @@ _dejavue() {
                         '--reason[Why this decision was made]:reason' \\
                         '*--rejected[Rejected alternative and reason]:alt:reason' \\
                         '--agent[Agent name]:agent' \\
+                        '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \\
                         '--type[Event type]:type:(decision blocker claim question experiment checkpoint)' \\
                         '--supersedes[ID or title of a prior decision this supersedes]:event-id' \\
                         '--durability[How long-lived this decision is]:durability:(temporary tactical strategic constitutional)' \\
@@ -4323,11 +4370,13 @@ _dejavue() {
                 trap|incident|invariant|pattern)
                     _arguments \\
                         '--agent[Agent name]:agent' \\
+                        '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \\
                         '*--entity[Subject this event is about, repeatable]:entity' \\
                         '--tag[Tag]:tag' ;;
                 note)
                     _arguments \\
                         '--agent[Agent name]:agent' \\
+                        '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \\
                         '--tag[Tag]:tag' \\
                         '*--entity[Subject this event is about, repeatable]:entity' \\
                         '--confidence[How firm this note/claim is]:confidence:(speculative proposed experimental adopted deprecated verified)' \\
@@ -4353,7 +4402,7 @@ _dejavue() {
                     local epoch_cmds=('begin:Open a named project epoch' 'end:Close a named project epoch' 'list:List epochs and milestones')
                     _describe 'epoch subcommand' epoch_cmds ;;
                 milestone)
-                    _arguments '--summary[Milestone summary]:summary' '--agent[Agent name]:agent' ;;
+                    _arguments '--summary[Milestone summary]:summary' '--agent[Agent name]:agent' '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' ;;
                 explain)
                     _arguments '1:file or commit:_files' ;;
                 conflict)
@@ -4399,6 +4448,7 @@ complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l durability -a "temporary tactical strategic constitutional"
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l confidence -a "speculative proposed experimental adopted deprecated verified"
+complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l author-type -a "human agent orchestrator ci bot"
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l freshness
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l expires-after
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l derived-from
@@ -4479,6 +4529,7 @@ def main():
 
     p = sub.add_parser("start", help="Record session start.")
     p.add_argument("--agent", default=None)
+    add_author_type_arg(p)
     p.add_argument("--goal", required=True)
     p.set_defaults(func=cmd_start)
 
@@ -4486,6 +4537,7 @@ def main():
     p.add_argument("path", nargs="?", default=None)
     p.add_argument("--summary", default=None)
     p.add_argument("--agent", default=None)
+    add_author_type_arg(p)
     p.add_argument("--auto", action="store_true", help="Auto mode (from git hook).")
     p.add_argument("--commit", default=None, help="Commit SHA (used with --auto).")
     p.add_argument("--amend", action="store_true",
@@ -4519,12 +4571,14 @@ def main():
     p.add_argument("--artifacts", action="append", metavar="PATH",
                    help="File this decision is about (repeatable; makes `blame <path>` precise).")
     p.add_argument("--agent", default=None)
+    add_author_type_arg(p)
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_decision)
 
     p = sub.add_parser("state", help="Overwrite state.md with current snapshot.")
     p.add_argument("--summary", required=True)
     p.add_argument("--agent", default=None)
+    add_author_type_arg(p)
     p.set_defaults(func=cmd_state)
 
     p = sub.add_parser("handoff", help="Write handoff.md.")
@@ -4532,6 +4586,7 @@ def main():
     p.add_argument("--next", action="append", required=True,
                    help="Repeatable; each occurrence becomes a bullet in handoff.md.")
     p.add_argument("--agent", default=None)
+    add_author_type_arg(p)
     p.set_defaults(func=cmd_handoff)
 
     p = sub.add_parser("context", help="Print all .md files + last N timeline entries.")
@@ -4597,6 +4652,7 @@ def main():
                    choices=sorted(NOTE_TYPES),
                    help="Event sub-type (default: note).")
     p.add_argument("--agent", default=None)
+    add_author_type_arg(p)
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.add_argument("--confidence", choices=["speculative", "proposed", "experimental", "adopted", "deprecated", "verified"],
                    help="How firm this note/claim is.")
@@ -4631,6 +4687,7 @@ def main():
     bs.add_argument("--goal", required=True, help="What this branch is meant to accomplish.")
     bs.add_argument("--base", default=None, help="Base ref this branch starts from.")
     bs.add_argument("--agent", default=None)
+    add_author_type_arg(bs)
     bs = branch_sub.add_parser("summary", help="Replay branch-scoped memory and commits.")
     bs.add_argument("name", nargs="?", help="Branch name/ref (default: current branch).")
     bs.add_argument("--base", default=None, help="Base ref for commit and event window.")
@@ -4639,6 +4696,7 @@ def main():
     bs.add_argument("--summary", required=True, help="What is ready, blocked, or left over.")
     bs.add_argument("--next", action="append", default=[], help="Repeatable next step.")
     bs.add_argument("--agent", default=None)
+    add_author_type_arg(bs)
     p.set_defaults(func=cmd_branch)
 
     p = sub.add_parser("merge-summary", help="Summarize what a branch brings into a base ref.")
@@ -4657,10 +4715,12 @@ def main():
     es.add_argument("name", help="Epoch name.")
     es.add_argument("--summary", default=None, help="Why this epoch begins.")
     es.add_argument("--agent", default=None)
+    add_author_type_arg(es)
     es = epoch_sub.add_parser("end", help="Close a named project epoch.")
     es.add_argument("name", help="Epoch name.")
     es.add_argument("--summary", default=None, help="What changed by the end of this epoch.")
     es.add_argument("--agent", default=None)
+    add_author_type_arg(es)
     epoch_sub.add_parser("list", help="List epochs and milestones.")
     p.set_defaults(func=cmd_epoch)
 
@@ -4668,6 +4728,7 @@ def main():
     p.add_argument("name", help="Milestone name.")
     p.add_argument("--summary", default=None, help="What this milestone means.")
     p.add_argument("--agent", default=None)
+    add_author_type_arg(p)
     p.set_defaults(func=cmd_milestone)
 
     p = sub.add_parser("explain", help="Explain why a file or commit exists.")
@@ -4681,6 +4742,7 @@ def main():
     cs.add_argument("--reason", required=True, help="Why this resolution was chosen.")
     cs.add_argument("--resolution", default=None, help="What was done.")
     cs.add_argument("--agent", default=None)
+    add_author_type_arg(cs)
     conflict_sub.add_parser("list", help="List conflict records.")
     p.set_defaults(func=cmd_conflict)
 
@@ -4825,6 +4887,7 @@ def main():
     p = sub.add_parser("trap", help="Record a known lie / trap: misleading name, fake abstraction, dangerous assumption.")
     p.add_argument("text", help="What the trap is.")
     p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
+    add_author_type_arg(p)
     p.add_argument("--tag", metavar="TAG", help="Tag.")
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_trap)
@@ -4832,6 +4895,7 @@ def main():
     p = sub.add_parser("incident", help="Record an operational incident: outage, data corruption, failed migration.")
     p.add_argument("text", help="Incident description.")
     p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
+    add_author_type_arg(p)
     p.add_argument("--tag", metavar="TAG", help="Tag.")
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_incident)
@@ -4839,6 +4903,7 @@ def main():
     p = sub.add_parser("invariant", help="Record an architectural invariant that must always hold.")
     p.add_argument("text", help="The invariant statement.")
     p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
+    add_author_type_arg(p)
     p.add_argument("--tag", metavar="TAG", help="Tag.")
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_invariant)
@@ -4846,6 +4911,7 @@ def main():
     p = sub.add_parser("pattern", help="Record a discovered convention/pattern: naming, idiom, structure.")
     p.add_argument("text", help="The convention or pattern.")
     p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
+    add_author_type_arg(p)
     p.add_argument("--tag", metavar="TAG", help="Tag.")
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_pattern)
