@@ -17,7 +17,7 @@ complete -c dejavue -n "__fish_seen_subcommand_from note" -l type -a "note block
 complete -c dejavue -n "__fish_seen_subcommand_from export" -l format -a "json md"
 complete -c dejavue -n "__fish_seen_subcommand_from export" -l target -a "claude codex gemini copilot cursor all"
 # promote
-complete -c dejavue -n "__fish_seen_subcommand_from promote" -l to -a "jagent"
+complete -c dejavue -n "__fish_seen_subcommand_from promote" -l to -a "planning"
 # diff
 complete -c dejavue -n "__fish_seen_subcommand_from diff" -l format -a "text patch"
 # get / annotate docs

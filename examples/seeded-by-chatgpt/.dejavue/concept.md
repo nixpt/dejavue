@@ -2,7 +2,7 @@
 
 ## Project
 Name: Deja Vue  
-Parent System: Joker MCP  
+Parent System: existing memory stack MCP  
 Purpose: Repo-local déjà vu memory for coding agents.
 
 ## Core Idea

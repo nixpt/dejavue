@@ -352,7 +352,7 @@ When the project has outgrown plain dejavue memory and needs a full
 planning system:
 
 ```bash
-dejavue promote --to jagent     # bootstrap a .jagent/ planning system
+dejavue promote --to planning     # bootstrap a .planning/ planning system
 ```
 
 This graduates the project without losing the `.dejavue/` history.
@@ -460,7 +460,7 @@ Use `--wizard` to also interactively seed `context.md` for DCP export.
   timeline — the worthiness gate filters that out for good reason.
 - Not a project planner. State is current-snapshot; decisions are
   architectural choices; handoff is short-form. For real planning use
-  a richer system on top (dejavue's docs note `.jagent/` as one
+  a richer system on top (dejavue's docs note `.planning/` as one
   superset).
 - Not auto-summarizing commits via LLM. v0.1 records the diff stat +
   commit message verbatim; deliberate capture is the contract.

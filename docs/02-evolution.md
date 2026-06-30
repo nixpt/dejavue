@@ -6,13 +6,13 @@ Yes — that’s the next layer.
 
 Deja Vue should have two memory planes:
 
-.joker/
+.memory-service/
   timeline.jsonl      # episodic memory: what happened, in order
   semantic/           # semantic memory: what this project knows
 
 
 Add semantic memory handoff
-.joker/
+.memory-service/
   semantic/
     index.json
     chunks.jsonl
@@ -44,7 +44,7 @@ Example:
   "id": "concept:git-cognitive-history",
   "text": "Git captures mechanical history. Deja Vue captures cognitive history.",
   "tags": ["dejavue", "git", "memory"],
-  "source": ".joker/deja-vue.md",
+  "source": ".memory-service/deja-vue.md",
   "embedding_model": "nomic-embed-text",
   "updated": "2026-05-13T03:30:00-05:00"
 }
@@ -68,8 +68,8 @@ Deja Vue exists because coding agents lose context after sessions.
 Git records what changed, but Deja Vue records why it changed.
 
 Sources:
-- .joker/deja-vue.md
-- .joker/decisions.md
+- .memory-service/deja-vue.md
+- .memory-service/decisions.md
 
 
 
@@ -101,12 +101,12 @@ Do not treat retrieval as absolute truth; verify against source files and git.
 ## Add MCP tools
 
 ```txt
-joker.dejavue.semantic.remember
-joker.dejavue.semantic.recall
-joker.dejavue.semantic.reindex
-joker.dejavue.semantic.concepts
-joker.dejavue.semantic.related_files
-joker.dejavue.semantic.boot_packet
+dejavue.mcp.semantic.remember
+dejavue.mcp.semantic.recall
+dejavue.mcp.semantic.reindex
+dejavue.mcp.semantic.concepts
+dejavue.mcp.semantic.related_files
+dejavue.mcp.semantic.boot_packet
 
 
 The architecture becomes powerful
@@ -119,7 +119,7 @@ Deja Vue timeline
 Semantic memory
   = conceptual memory
 
-Joker MCP
+existing memory stack MCP
   = agent coordination
 
 Agent boot packet
@@ -134,7 +134,7 @@ Every semantic memory should point back to evidence:
 {
   "memory": "CASM is preferred over WASM for this project.",
   "source_files": [
-    ".joker/decisions.md",
+    ".memory-service/decisions.md",
     "docs/casm.md"
   ],
   "source_commits": [
@@ -183,14 +183,14 @@ You are entering this repo.
 Read first:
 - crates/exo-core
 - docs/capsules.md
-- .joker/decisions.md
+- .memory-service/decisions.md
 
 Do not rewrite:
 - capability model
 - CASM manifest format
 
 Current focus:
-- Joker MCP Deja Vue memory layer
+- existing memory stack MCP Deja Vue memory layer
 
 Known risks:
 - Avoid duplicating git
@@ -230,7 +230,7 @@ Since your last session:
 - Scheduler extracted into runtime service
 - SQLite capsule changed from embedded mode to service mode
 - CASM exception opcodes added
-- Tests failing in crush-vm await/yield path
+- Tests failing in runtime test await/yield path
 
 
 4. Semantic recall with provenance
@@ -246,7 +246,7 @@ Capsules declare explicit capabilities like fs.read:/data/*.
 
 Evidence:
 - docs/security.md
-- .joker/decisions.md
+- .memory-service/decisions.md
 - commit a81f2cd
 
 Confidence:
@@ -322,7 +322,7 @@ dejavue tasks
 Open:
 - Add git diff capture
 - Add semantic recall
-- Add Joker MCP tools
+- Add existing memory stack MCP tools
 - Add boot protocol
 - Add conflict detector
 
@@ -334,13 +334,13 @@ Blocked:
 
 This is extremely useful.
 
-.joker/contracts.md
+.memory-service/contracts.md
 
 Example:
 
 # Contracts
 
-- `.joker/timeline.jsonl` must remain append-only.
+- `.memory-service/timeline.jsonl` must remain append-only.
 - Events must include timestamp, agent, event type, and summary.
 - Semantic memories must include source references.
 - Git remains source of truth.
@@ -388,7 +388,7 @@ Contracts
 Handoff
   next-agent continuity
 
-Joker MCP
+existing memory stack MCP
   agent interface
 
 

@@ -4,7 +4,7 @@ chmod +x dejavue.py
 
 ./dejavue.py start \
   --agent codex \
-  --goal "Implement Joker MCP Deja Vue memory writer"
+  --goal "Implement existing memory stack MCP Deja Vue memory writer"
 
 ./dejavue.py changed src/main.rs \
   --agent codex \
@@ -21,6 +21,6 @@ chmod +x dejavue.py
 ./dejavue.py handoff \
   --agent codex \
   --summary "Basic repo-local memory scaffold implemented." \
-  --next "Add git diff summarization and Joker MCP bindings."
+  --next "Add git diff summarization and existing memory stack MCP bindings."
 
 ./dejavue.py context

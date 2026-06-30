@@ -1,6 +1,6 @@
 # Decisions
 
-## Decision 001 — Use `.joker/` instead of a single `.joker` file
+## Decision 001 — Use `.memory-service/` instead of a single `.memory-service` file
 
 Reason:
 A directory allows multiple memory artifacts: timeline, decisions, handoff, diffs, sessions, and current state.

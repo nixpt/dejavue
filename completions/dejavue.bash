@@ -54,7 +54,7 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
         promote)
             COMPREPLY=($(compgen -W "--to" -- "$cur"))
             if [[ "$prev" == "--to" ]]; then
-                COMPREPLY=($(compgen -W "jagent" -- "$cur"))
+                COMPREPLY=($(compgen -W "planning" -- "$cur"))
             fi ;;
         diff)     COMPREPLY=($(compgen -W "--format" -- "$cur"))
             if [[ "$prev" == "--format" ]]; then

@@ -2,7 +2,7 @@
 
 Read this first.
 
-Deja Vue is a proposed Joker MCP extension that creates repo-local memory for coding agents.
+Deja Vue is a proposed existing memory stack MCP extension that creates repo-local memory for coding agents.
 
 The goal is to solve agent amnesia.
 
@@ -23,5 +23,5 @@ Next implementation steps:
 - Create `dejavue start-session`.
 - Add git diff summarization.
 - Add `dejavue handoff`.
-- Add Joker MCP tools.
+- Add existing memory stack MCP tools.
 - Add agent boot protocol: read `.dejavue/handoff.md` before working.

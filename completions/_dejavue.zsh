@@ -87,7 +87,7 @@ _dejavue() {
                         '--format[Output format]:format:(json md)' \
                         '--target[Adapter target]:target:(claude codex gemini copilot cursor all)' ;;
                 promote)
-                    _arguments '--to[Target system]:system:(jagent)' ;;
+                    _arguments '--to[Target system]:system:(planning)' ;;
                 diff)
                     _arguments '--format[Diff format]:format:(text patch)' ;;
                 get)
