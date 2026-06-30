@@ -1,18 +1,18 @@
 
-## `.joker/current_state.md`
+## `.memory-service/current_state.md`
 
 ```md
 # Current State
 
-Deja Vue is being designed as a Joker MCP extension that automatically writes project-local memory into `.joker/`.
+Deja Vue is being designed as a existing memory stack MCP extension that automatically writes project-local memory into `.memory-service/`.
 
 The current model is:
 
-- `.joker/timeline.jsonl` is the append-only machine-readable event log.
-- `.joker/deja-vue.md` is the human-readable memory.
-- `.joker/current_state.md` summarizes the latest project understanding.
-- `.joker/decisions.md` stores architectural decisions.
-- `.joker/handoff.md` tells the next agent what to read first.
+- `.memory-service/timeline.jsonl` is the append-only machine-readable event log.
+- `.memory-service/deja-vue.md` is the human-readable memory.
+- `.memory-service/current_state.md` summarizes the latest project understanding.
+- `.memory-service/decisions.md` stores architectural decisions.
+- `.memory-service/handoff.md` tells the next agent what to read first.
 
 The system should capture relevant git changes, not every file save.
 
@@ -30,4 +30,4 @@ Deja Vue is best understood as:
 
 Git = mechanical history  
 Deja Vue = cognitive history  
-Joker = coordination layer
+existing memory stack = coordination layer

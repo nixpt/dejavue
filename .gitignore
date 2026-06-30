@@ -17,7 +17,7 @@ __pycache__/
 dist/
 build/
 
-# Stray config not part of dejavue (flag to captain s156)
+# Stray config not part of dejavue
 seahorse-server.toml
 
 # dejavue: local-only artifacts
@@ -30,3 +30,5 @@ seahorse-server.toml
 .dejavue/embedder_circuit.json
 .dejavue/timeline.jsonl.bak-*
 
+# Local audit artifacts
+.audit tool/

@@ -55,7 +55,7 @@ reminder and the command quick-reference.
 | `dejavue export --format {json,md}` | Export full memory snapshot as JSON or Markdown |
 | `dejavue export --target {claude,codex,gemini,copilot,cursor,all}` | Generate adapter file from `context.md` (DCP — non-destructive) |
 | `dejavue import <FILE>` | Bootstrap `context.md` from an existing `AGENTS.md` / `CLAUDE.md` |
-| `dejavue promote --to jagent` | Graduate `.dejavue/` into a `.jagent/` planning system |
+| `dejavue promote --to planning` | Graduate `.dejavue/` into a `.planning/` planning system |
 | `dejavue reference {create,list,update,view} [--type T]` | Manage `.dejavue/references/` cards |
 | `dejavue diff <from> [<to>] [--format patch]` | Compare memory between two refs |
 | `dejavue link <sha>` | Show dejavue events recorded for a git commit |

@@ -21,28 +21,30 @@ On-disk format frozen. 20 commands, 62/62 tests.
 - Per-repo `.dejavue/config` defaults file
 - `.gitignore` entries installed by `dejavue init`
 
-### v0.1 — first release (2026-05-13, s156)
+### v0.1 — first release (2026-05-13, internal session)
 
 The zero-ceremony per-repo agent memory layer. 13 commands, FTS5 keyword
 recall, git post-commit hook, `merge=union` `.gitattributes`, 33/33 tests.
 Single Python file, stdlib only.
 
-### v0.2 — semantic recall (2026-05-13, s160)
+### v0.2 — semantic recall (2026-05-13, internal session)
 
 `dejavue recall --semantic` with cosine-ranked retrieval against an
 OpenAI-compat embeddings endpoint, content-addressed cache, graceful FTS5
 fallback. No new runtime deps (`urllib.request`).
 
-### Patch-level fixes (2026-05-15, s167–s168)
+### Patch-level fixes (2026-05-15, internal session–internal session)
 
 - `dejavue handoff --next` is now repeatable (`action="append"`); multiple
   next-steps render as a bullet list. Single-value usage unchanged.
 - Post-commit hook now captures **merge + root commits** correctly. The
   old `git show --name-only` silently emitted nothing for merge commits
   (default `--diff-merges=off`), so multi-agent projects were losing ~70%
-  of capture (Khukuri case study, 9 of 13 commits missing). Fix:
+  of capture (audit tool case study, 9 of 13 commits missing). Fix:
   `git diff-tree --no-commit-id -r --name-only -m --first-parent --root`
   to handle merges + root commits uniformly.
+- Post-commit auto-capture now folds the timeline update back into HEAD so
+  active worktrees stay clean after commit instead of carrying post-hook noise.
 
 ---
 
@@ -95,7 +97,7 @@ Test gate achieved: 62/62 (was ≥50/50 target).
 - `event_type` field indexed in FTS5 — `recall blocker` finds `--type blocker` events
 - `since` now shows a Notes section (notes in time window with tag + sub-type labels)
 
-## 📌 Reconciliation note (s241, 2026-06-05)
+## 📌 Reconciliation note (internal session, 2026-06-05)
 
 Several items previously listed as "v1.4 candidates" **already shipped in
 v1.3.0** — this section was drifted. Corrected:
@@ -105,15 +107,15 @@ v1.3.0** — this section was drifted. Corrected:
 - ✅ `dejavue check --fix` (auto-repair) — **shipped v1.3.0**
 - ✅ `log --type` / FTS5 `event_type` indexing — **shipped v1.3.0**
 
-## ✅ v2.0.0 — DCP (DejaVue Context Protocol) — shipped (2026-06-05, s241)
+## ✅ v2.0.0 — DCP (DejaVue Context Protocol) — shipped (2026-06-05, internal session)
 
-The maturation step (captain-directed s241) evolves dejavue from *per-repo
+The maturation step (maintainer-directed internal session) evolves dejavue from *per-repo
 agent memory* into **DCP — a portable context interchange standard**: `.dejavue/`
 becomes the single source of truth; `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` /
 Copilot rules become **generated, non-destructive adapter targets**. dejavue is
 the reference implementation; the protocol has a citable spec (Foundry / OCPL).
 
-Shipped s241 across parallel horses (spec/positioning + code), **119/119 tests**,
+Shipped internal session across parallel horses (spec/positioning + code), **119/119 tests**,
 zero new deps. Release line **v2.0.0**; format backward-compatible (additive, DCP §7).
 
 **Wave (all shipped):**
@@ -126,7 +128,7 @@ zero new deps. Release line **v2.0.0**; format backward-compatible (additive, DC
 - ✅ `dejavue export --target {claude,codex,gemini,copilot,cursor,all}` —
   non-destructive managed-block adapters (append-and-warn / `--replace`; hash staleness in `check`).
 - ✅ `references/glossary.md` glossary reference card.
-- ✅ Stdlib v1.4: `promote --to jagent`, `init --wizard`, reference frontmatter, `diff --format patch`.
+- ✅ Stdlib v1.4: `promote --to planning`, `init --wizard`, reference frontmatter, `diff --format patch`.
 
 **Axiom 0 — Zero-ceremony conformance (hard invariant):** a conforming DCP tool
 MUST be usable with no configuration and no files beyond what `init` creates.
@@ -150,9 +152,10 @@ Design + waves: `docs/plans/2026-06-05-dcp-maturation.md`.
 ### Lower impact
 - **`dejavue archive --compress`** — zstd-compress the backup file on archive (stdlib `zlib`/`lzma` only — no zstd dep).
 
-### MCP-only (separate horizon, joker ecosystem)
+### MCP-only (separate horizon, memory-service ecosystem)
 
 - MCP tool wrappers around the 13 CLI commands so MCP-native agents can call dejavue via structured tool-use instead of shell. Stays optional — never breaks the zero-ceremony / format-as-contract invariant.
+- Keep the wrapper thin: shell out to `dejavue`, do not embed state, routing, or indexing in the adapter layer.
 
 ---
 
@@ -213,7 +216,7 @@ Fix = normalize to UTC before comparing.
 
 ---
 
-## 🎯 Prioritized — next waves (from the scratch/deja audit, 2026-06-06)
+## 🎯 Prioritized — next waves (from the design backlog audit, 2026-06-06)
 
 Actionable ordering over the v3.x pool + the gaps the audit surfaced. All
 Axiom-0 clean (stdlib, single-file, additive fields). Favors the core loop
@@ -221,7 +224,8 @@ Axiom-0 clean (stdlib, single-file, additive fields). Favors the core loop
 
 > **Update (v2.1.0, 2026-06-06): the entire P0 wave shipped** — `pattern`, `entities`,
 > `--confidence`, `--supersedes` read-back, and `decision --artifacts`. See CHANGELOG `[2.1.0]`.
-> Next up is P1 (`changelog <range>`, freshness/expiry, `derived_from` lineage, stability classes).
+> **Update (P1, 2026-06-28):** `changelog <range>`, freshness/expiry, `derived_from`
+> lineage, and stability classes are now shipped in the codebase but unreleased.
 
 **P0 — do next (all small, additive)**
 - ✅ **`pattern` command + `patterns.md`** — *shipped (unreleased)*; the missing core memory file (decisions / patterns / invariants / glossary). First P0 item, done.
@@ -232,9 +236,9 @@ Axiom-0 clean (stdlib, single-file, additive fields). Favors the core loop
 
 **P1**
 - ✅ **`dejavue changelog <range>`** — *shipped (unreleased)*; why-aware markdown changelog (decisions + confidence + superseded annotations + traps/incidents + notes + commits) over a git range. First P1 item, done.
-- Per-entry freshness / expiry with read-time staleness flagging.
-- `derived_from` intent lineage (after entities land).
-- Memory stability-class label.
+- ✅ **Per-entry freshness / expiry** — *shipped (unreleased)*; optional `freshness: volatile` plus `expires_after: 90d` metadata with read-time staleness flagging in `context` / `since` / `recall`.
+- ✅ **`derived_from` intent lineage** — *shipped (unreleased)*; repeatable lineage pointers on `decision` / `note`, surfaced at read time and indexed for recall.
+- ✅ **Memory stability-class label** — *shipped (unreleased)*; optional `--stability` labels plus inferred read-time classes for the core memory surfaces.
 
 **P2**
 - `branch` / `merge-summary` git-workflow memory; project epochs; capability negotiation.
@@ -303,7 +307,7 @@ Integration tiers (informational; implementation deferred):
 |---|---|
 | **Tier 1 — local dev tools** | lint waivers (clippy/ruff), test annotations (pytest/cargo test), flaky-test markers, coverage gaps, dependency decisions, benchmark/profiler results, task runner discovery, ADR import/export |
 | **Tier 2 — forge tools** | GitHub/GitLab PR memory, issue linking, CI failure ingestion, release memory (`dejavue release v2.1.0`), security-scanner / CVE risk-acceptance |
-| **Tier 3 — AI/runtime tools** | MCP thin adapter (6 tools: context/since/recall/decision/handoff/blame), additional export targets (aider, opencode, continue, cline), shell prompt integration |
+| **Tier 3 — AI/runtime tools** | MCP thin adapter (6 tools: context/since/recall/decision/handoff/blame), additional export targets (aider, external agent, continue, cline), shell prompt integration |
 | **Tier 4 — org memory** | incident ingestion from observability tools, cross-repo workspace scope, compliance/license memory, ownership maps |
 
 One rule for any integration: it must answer one of — *what changed / why / what failed / what was rejected / what should the next agent know / what invariant must not be violated*. If it can't, it doesn't belong here.
@@ -312,25 +316,25 @@ One rule for any integration: it must answer one of — *what changed / why / wh
 - **`dejavue editor context <file>`** — a thin JSON emitter (handoff + decisions + traps touching the file) so external IDE extensions can render ambient memory. Data → extension; explicitly not an LSP server. (scratch: `deja-dev-tools.md`)
 - **`dejavue docs check / stale / link`** — external-doc drift + canonical-doc-for-behavior mapping, distinct from the adapter-staleness already in `check`. (scratch: `deja-dev-tools.md`)
 - **`dejavue repo map` (intra-repo scope, NEEDS-CARE)** — parse `.gitmodules` / Cargo `[workspace]` / npm workspaces to add a `scope:` dimension *within* a repo (distinct from the repo-and-above "scope layering" above). Flat descriptor, no graph DB.
-- **`worktree spawn` — scope call:** the action-oriented multi-agent dispatch wrapper shells out to `git worktree add` and overlaps Squadron's orchestration. Likely belongs in Squadron, not dejavue — flag before building. (scratch: `deja-git.md`)
+- **`worktree spawn` — scope call:** the action-oriented multi-agent dispatch wrapper shells out to `git worktree add` and overlaps orchestration's orchestration. Likely belongs in orchestration, not dejavue — flag before building. (scratch: `deja-git.md`)
 
 ---
 
 ## 🛑 Out of scope (won't ship in dejavue itself)
 
 - **Hosted platform / cloud sync** — dejavue must stay filesystem-first, local-first, append-only. The moment it requires a server, hosted infra, or cloud sync, adoption collapses and Axiom 0 breaks. This is the constraint that makes the design coherent.
-- **`joker-memory` Rust crate consolidation** (audit §860-962) — that's a Squadron-side refactor (unify `agent-mem` / `agent-lib` / `librarian-cli` / `joker-core/embedding` into one trait-backed Rust crate). Dejavue's role there is "thin Python consumer of the same contract." Tracked at the workspace level, not here.
-- **Inferno-style 9P/Styx service-tree namespaces, capsule isolation, et al.** — exosphere-side work.
+- **`memory crate` Rust crate consolidation** (audit §860-962) — that's a orchestration-side refactor (unify `agent-mem` / `agent-lib` / `librarian-cli` / `memory core/embedding` into one trait-backed Rust crate). Dejavue's role there is "thin Python consumer of the same contract." Tracked at the workspace level, not here.
+- **Inferno-style 9P/Styx service-tree namespaces, capsule isolation, et al.** — external project-side work.
 - **Anything that breaks the contract:** new runtime dependencies beyond stdlib, multi-file rewrites of `dejavue.py`, MCP-mandatory operation, mandatory config files.
 
 ---
 
 ## Source references
 
-- **Audit:** `.squad/teams/engineering/dejavue-assessment.md` (1031 lines; rounds 1-3: arniko-core greenfield + Khukuri stress test + Squadron/joker-core pattern portability + consolidation map). Author: opencode (engineering loan). Foreman correction note at lines 189-209 (the audit's drop-in hook-fix recommendation was empirically broken; real fix uses `-m --first-parent --root`).
+- **Audit:** `.workspace/teams/engineering/dejavue-assessment.md` (1031 lines; rounds 1-3: sample project greenfield + audit tool stress test + orchestration/memory core pattern portability + consolidation map). Author: external agent (engineering loan). Design lead correction note at lines 189-209 (the audit's drop-in hook-fix recommendation was empirically broken; real fix uses `-m --first-parent --root`).
 - **Map spec:** `projects/incubator/dejavue-map-spec.md` (463 lines). 6-phase adoption strategy for `.dejavue/references/map.md` + sibling reference docs.
 
-Both source docs live in foreman's workspace, not this repo. The above
+Both source docs live in design lead's workspace, not this repo. The above
 summary is what's load-bearing for dejavue itself; the source docs cover
 more (workspace-level consolidation, etc.) that doesn't fit here.
 
@@ -339,7 +343,7 @@ more (workspace-level consolidation, etc.) that doesn't fit here.
 ## How this roadmap is maintained
 
 - Versions move from 🚧 → ✅ on tag.
-- v0.4 candidates re-prioritize when captain picks the next wave.
+- v0.4 candidates re-prioritize when maintainer picks the next wave.
 - Out-of-scope items stay listed so the next reader doesn't re-propose them.
 - The map spec + audit are the canonical sources for v0.3 design questions.
   If something contradicts them, fix this file or one of those — don't let

@@ -1,6 +1,6 @@
 so coding agents like codex or claude often work on a project and forget about it afterwards, the 
-only evidences remaining are .claude or .agents files, what if we created a new system with joker mcp 
-to automatically write a .joker file with relevant information like what wae changed sequentially 
+only evidences remaining are .claude or .agents files, what if we created a new system with memory-service mcp 
+to automatically write a .memory-service file with relevant information like what wae changed sequentially 
 that would allow agents to instantly learn that this is their work, a dejavu memory of sorts. lets 
 call this project Deja Vue
 
@@ -12,14 +12,14 @@ Yes. Deja Vue should be a repo-native memory layer for coding agents.
 
 Core idea:
 
-Every meaningful agent action leaves behind a structured .joker/ trace, so the next agent gets 
+Every meaningful agent action leaves behind a structured .memory-service/ trace, so the next agent gets 
 instant project déjà vu: “I remember doing this.”
 
 
 Deja Vue
 
 Purpose:
-Give Codex, Claude, Cursor agents, local agents, and Joker MCP a persistent project memory that is:
+Give Codex, Claude, Cursor agents, local agents, and existing memory stack MCP a persistent project memory that is:
 
 local to the repo
 chronological
@@ -31,7 +31,7 @@ resumable after context loss
 
 
 Repo layout
-.joker/
+.memory-service/
   deja-vue.md              # Human-readable project memory
   timeline.jsonl           # Append-only event stream
   current_state.md         # Latest known architecture/task state
@@ -45,23 +45,23 @@ Repo layout
   handoff.md               # “Next agent should read this first”
 
 
-.joker/deja-vue.md
+.memory-service/deja-vue.md
 
-.joker/timeline.jsonl
+.memory-service/timeline.jsonl
 Each event is machine-readable:
 
-Joker MCP tools
-joker.dejavue.start_session
-joker.dejavue.record_change
-joker.dejavue.record_decision
-joker.dejavue.record_blocker
-joker.dejavue.write_handoff
-joker.dejavue.read_context
-joker.dejavue.explain_history
+existing memory stack MCP tools
+dejavue.mcp.start_session
+dejavue.mcp.record_change
+dejavue.mcp.record_decision
+dejavue.mcp.record_blocker
+dejavue.mcp.write_handoff
+dejavue.mcp.read_context
+dejavue.mcp.explain_history
 
 The killer command:
 
-joker.dejavue.read_context
+dejavue.mcp.read_context
 
 Returns:
 
@@ -73,7 +73,7 @@ Recent intent:
 - Make future agents resume instantly.
 
 Important decisions:
-- Use `.joker/` directory.
+- Use `.memory-service/` directory.
 - Keep JSONL as source of truth.
 - Generate Markdown for humans.
 
@@ -85,9 +85,9 @@ Unfinished:
 Agent flow
 Agent starts
   ↓
-Reads .joker/handoff.md
+Reads .memory-service/handoff.md
   ↓
-Reads .joker/current_state.md
+Reads .memory-service/current_state.md
   ↓
 Starts session
   ↓
@@ -135,7 +135,7 @@ This becomes the missing layer between:
 
 .git history = what changed
 .claude/.agents = agent config
-.joker = why agents changed it
+.memory-service = why agents changed it
 
 So the project gains memory without needing the agent itself to remember.
 
@@ -234,7 +234,7 @@ Trigger points
 Best trigger.
 
 git commit
-→ joker captures:
+→ memory-service captures:
   - staged diff
   - changed files
   - branch
@@ -286,13 +286,13 @@ Exokernel-like capability substrate with capsule runtime.
 
 That’s effectively project consciousness continuity.
 
-Integration with Joker MCP
+Integration with existing memory stack MCP
 
-Joker already has coordination semantics.
+existing memory stack already has coordination semantics.
 
 Deja Vue becomes the long-term episodic memory layer.
 
-Joker
+existing memory stack
 Who is doing what now?
 Deja Vue
 What happened across time?
@@ -361,17 +361,17 @@ hidden embeddings
 
 You want future developers to literally open:
 
-.joker/deja-vue.md
+.memory-service/deja-vue.md
 
 and understand the repo’s evolving mind.
 
 
 lets test it right now, lets write dejavue for the conversations we have had above
-Perfect test case. I’ll convert the conversation thread into a .joker/-style Deja Vue pack: human-readable memory, timeline events, current state, decisions, and handoff.
+Perfect test case. I’ll convert the conversation thread into a .memory-service/-style Deja Vue pack: human-readable memory, timeline events, current state, decisions, and handoff.
 
 Here’s a first Deja Vue capture for this conversation.
 
-.joker/
+.memory-service/
   deja-vue.md
   timeline.jsonl
   current_state.md
@@ -397,5 +397,5 @@ scaffold plus a tiny CLI.
 
 sure 
 
-I’ll turn it into a minimal runnable scaffold: a .joker/ file structure plus a tiny dejavue CLI that 
+I’ll turn it into a minimal runnable scaffold: a .memory-service/ file structure plus a tiny dejavue CLI that 
 can initialize, record events, record decisions, and generate handoff/context.

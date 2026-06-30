@@ -8,6 +8,10 @@ avoids collision with joker-mcp .joker/cache/ directories (foreman_perspective �
 
 Rejected alternatives:
 - **Use .joker/**: collision with existing joker-mcp cache dirs
+avoids collision with existing tool cache directories documented during initial scoping
+
+Rejected alternatives:
+- **Use .memory-service/**: collision with existing tool cache dirs
 - **Use .memory/**: too generic, no project identity
 
 
@@ -19,6 +23,11 @@ pipefish embedder offline; stdlib sqlite FTS5 ships on all modern Linux; zero in
 Rejected alternatives:
 - **joker_search_knowledge**: requires MCP dep, violates zero-ceremony principle
 - **external embeddings**: pipefish offline this session, adds infra dep
+local embedder unavailable; stdlib sqlite FTS5 ships on all modern Linux; zero install
+
+Rejected alternatives:
+- **external_search_knowledge**: requires MCP dep, violates zero-ceremony principle
+- **external embeddings**: local embedder unavailable this session, adds infra dep
 
 
 ## 2026-05-13T04:11:41-05:00 — Single file, stdlib only
@@ -50,6 +59,14 @@ The skill was first authored under workspace-meta/skill-creator/skills/dejavue-w
 Rejected alternatives:
 - **Ship the workspace-internal version verbatim**: would leak nixpt/foreman/squadron references into a public release the maintainer explicitly genericized last commit (ebf36db)
 - **Single canonical version in dejavue repo, workspace-meta references via include**: dejavue is the substrate; making workspace-meta depend on dejavue's SKILL.md for its own foreman cross-links inverts the dependency direction
+## 2026-05-13T16:32:56-05:00 — Generalize SKILL.md content for public dejavue repo (no environment-specific references)
+
+Reason:
+The skill was first authored in an earlier draft location with workflow-specific cross-links and absolute local paths. For the public dejavue repo it must stand alone: replace draft workflow cross-links with pointers to dejavue's own docs (README, docs/05-v0.1-scope.md, docs/04-design-perspective.md); drop environment-specific canonical-store references; replace local install instructions with generic 'symlink dejavue.py into ~/.local/bin/'; add stable-role-name agent identity guidance pulled from README's Concurrency section. The draft and public versions intentionally diverge on environment specificity but stay in sync on dejavue protocol content.
+
+Rejected alternatives:
+- **Ship the draft version verbatim**: would leak draft workflow references into a public release the maintainer explicitly genericized last commit (ebf36db)
+- **Single canonical version in dejavue repo, environment-specific references via include**: dejavue is the substrate; making draft workflow docs depend on dejavue's SKILL.md for draft cross-links inverts the dependency direction
 
 
 ## 2026-05-15T00:14:00-05:00 — Skill canonical source = dejavue repo (Option A)
@@ -60,12 +77,18 @@ The dejavue project owns its own docs. Edit-once-propagate-everywhere via symlin
 Rejected alternatives:
 - **Option B (sync UP to skill-creator, treat workspace-meta as authoring source)**: manual sync overhead, drift will recur on every wording fix, the project ends up not owning its own docs
 - **Option C (two intentional versions, one workspace-internal + one public)**: 2x maintenance for any wording fix, dishonest about which is canonical, no obvious win
+The dejavue project owns its own docs. Edit-once-propagate-everywhere via symlink chain. dejavue-repo skills/ is single source; .claude/skills/ relative-symlinks support in-repo Claude Code auto-discovery; external consumer skill installs point into the dejavue repo. Closes drift between previously-divergent draft and public-adapted versions.
+
+Rejected alternatives:
+- **Option B (sync UP to a separate authoring source)**: manual sync overhead, drift will recur on every wording fix, the project ends up not owning its own docs
+- **Option C (two intentional versions, one draft + one public)**: 2x maintenance for any wording fix, dishonest about which is canonical, no obvious win
 
 
 ## 2026-05-15T00:14:00-05:00 — Skills reach agents via TWO channels: clone-time + install-time
 
 Reason:
 Captain s166: 'when a user installs dejavue, the skill is copied to claude or their choice of agents.' Two complementary delivery vectors: (1) clone-time — .claude/skills/ ships INSIDE the repo, any Claude Code session opening the repo auto-discovers; works for cloners/contributors. (2) install-time — when user runs pip install dejavue (future), a dejavue install-skill subcommand or post-install hook detects their agent system and installs the skill there; works for end-users who only invoke the CLI. Channel 1 done s166; channel 2 specced in workspace-meta FOREMAN_THREADS dejavue-maturation-arc sub-bullet 5.
+The public install story needs two complementary delivery vectors: (1) clone-time — .claude/skills/ ships inside the repo, any Claude Code session opening the repo auto-discovers; works for cloners/contributors. (2) install-time — when a user runs pip install dejavue (future), a dejavue install-skill subcommand or post-install hook detects their agent system and installs the skill there; works for end-users who only invoke the CLI.
 
 Rejected alternatives:
 - **Single channel = clone-time only**: most users won't clone the repo, they'll pip install — they'd never see the skill
@@ -76,6 +99,7 @@ Rejected alternatives:
 
 Reason:
 git show --name-only and even audit's recommended git diff-tree --no-commit-id -r --name-only silently emit nothing on merge commits (default --diff-merges=off). Real-world impact: ~70% capture loss in multi-agent projects per opencode's Khukuri audit. -m --first-parent shows what came in via the merge; --root handles initial commits.
+git show --name-only and even audit-recommended git diff-tree --no-commit-id -r --name-only silently emit nothing on merge commits (default --diff-merges=off). Real-world impact: high capture loss in multi-agent projects. -m --first-parent shows what came in via the merge; --root handles initial commits.
 
 Rejected alternatives:
 - **git diff --name-only HEAD~1..HEAD**: works for merges but fails for root commits (no HEAD~1) and is two commands worth of parsing
@@ -86,6 +110,7 @@ Rejected alternatives:
 
 Reason:
 Captain s168 directive — dejavue needs an in-repo roadmap so contributors and adopters can see shipped vs in-flight vs candidate scope at a glance. CHANGELOG covers per-release detail; ROADMAP.md is the wide-angle view.
+dejavue needs an in-repo roadmap so contributors and adopters can see shipped vs in-flight vs candidate scope at a glance. CHANGELOG covers per-release detail; ROADMAP.md is the wide-angle view.
 
 Rejected alternatives:
 - **leave as GitHub Issues/Projects**: works for collaboration but loses the offline/portable invariant — anyone cloning the repo should see roadmap in-tree
@@ -142,6 +167,7 @@ v1.3.0 tagged. 36 commands, 100/100 tests.
 
 Reason:
 Per ratified s241 plan (D2): export writes a marker-delimited managed block into the target tool's real file. Absent→create block-only; marked→replace fenced region; unmarked hand-written→append block + warn (never clobber); --replace converts whole file. Keeps Axiom 0 (zero new deps, base loop frozen).
+export writes a marker-delimited managed block into the target tool's real file. Absent→create block-only; marked→replace fenced region; unmarked hand-written→append block + warn (never clobber); --replace converts whole file. Keeps Axiom 0 (zero new deps, base loop frozen).
 
 Rejected alternatives:
 - **blind overwrite**: clobbers hand-written CLAUDE.md
@@ -168,6 +194,10 @@ Rejected alternatives:
 
 Reason:
 Audited all 78 scratch ideas vs roadmap+shipped code. Cognitive-continuity and memory-mgmt clusters were captured well and dev-tools is parked at category level in the Tier 1-4 table, but two gaps existed: (1) git-native workflow commands (branch/merge-summary/changelog/squash/conflict) were nowhere, and (2) per-event metadata (entities[], decision artifacts[], freshness/expiry, stability classes) was missing or masked by --durability. Added a Prioritized-next-waves section + a Git-native ergonomics subsection + the missing metadata fields. P0 favors small additive fields that reinforce the core capture-the-why loop and reuse the existing --durability/FTS plumbing.
+## 2026-06-06T11:33:49-05:00 — [TACTICAL] Prioritize v3.x backlog; P0 = entities + confidence + decision artifacts
+
+Reason:
+Audited backlog ideas vs roadmap+shipped code. Cognitive-continuity and memory-mgmt clusters were captured well and dev-tools is parked at category level in the Tier 1-4 table, but two gaps existed: (1) git-native workflow commands (branch/merge-summary/changelog/squash/conflict) were nowhere, and (2) per-event metadata (entities[], decision artifacts[], freshness/expiry, stability classes) was missing or masked by --durability. Added a Prioritized-next-waves section + a Git-native ergonomics subsection + the missing metadata fields. P0 favors small additive fields that reinforce the core capture-the-why loop and reuse the existing --durability/FTS plumbing.
 
 Rejected alternatives:
 - **build dejavue explain first**: it is the killer command but composes lineage+confidence+entities, so it must come AFTER those inputs exist
@@ -181,3 +211,23 @@ v2.0.1's --supersedes was write-only (stored, never surfaced). v2.1.0 wires reca
 
 Artifacts: dejavue.py
 
+## 2026-06-25T01:42:00-05:00 — [STRATEGIC] [VERIFIED] Treat adopter usage as first-class design evidence
+
+Reason:
+The strongest validation for dejavue has come from use in other repositories, while this repo's own .dejavue files lagged behind the tool's real behavior. Going forward, public-safe lessons from adopter use should be folded back into this repo's state, handoff, roadmap, and tests without naming unrelated project details.
+
+Artifacts: .dejavue/context.md, .dejavue/state.md, .dejavue/handoff.md
+
+Rejected alternatives:
+- **Self-host memory only**: would miss real workflow pressure discovered in downstream repos
+- **Copy downstream histories verbatim**: would leak unrelated project context into the public reference repo
+
+
+## 2026-06-28T00:00:00-05:00 — Make post-commit auto-capture amend HEAD so timeline capture does not leave the worktree dirty
+
+Reason:
+`timeline.jsonl` is tracked append-only memory, but the post-commit hook should not leave active worktrees dirty after every commit. Folding the captured timeline update back into HEAD keeps the repo clean while preserving automatic file-change capture.
+
+Rejected alternatives:
+- **Leave `timeline.jsonl` dirty after every commit**: keeps the capture path simple but forces constant manual cleanup and makes `git status` noisy.
+- **Move timeline capture out of git-tracked files entirely**: would avoid dirtiness but breaks the current repo-local memory contract and the merge-friendly append-only model.

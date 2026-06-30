@@ -6,7 +6,7 @@ evolve before v1.0. Contributions are welcome but read this first.
 ## Before opening a PR
 
 1. **Read the design docs in `docs/`** — particularly
-   `docs/04-foreman-perspective.md` for the design rationale and
+   `docs/04-design-perspective.md` for the design rationale and
    `docs/05-v0.1-scope.md` for the build spec and architecture ruling. The
    non-goals are as important as the goals.
 2. **Read `README.md` end to end** — especially the *What dejavue is NOT*

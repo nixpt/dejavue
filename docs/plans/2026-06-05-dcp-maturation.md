@@ -2,7 +2,7 @@
 
 **Session:** 241 (2026-06-05) · **Status:** ✅ DESIGN RATIFIED — ready to dispatch
 
-## Ratified decisions (s241, locked)
+## Ratified decisions (internal session, locked)
 
 | # | Decision | Locked outcome |
 |---|----------|----------------|
@@ -22,7 +22,7 @@ The `hash` feeds `check`'s staleness detection ("context.md changed, adapters st
 
 ---
 
-**Origin:** captain "dejavue maturation"; vision brainstorm `~/WORKSPACE/scratch/deja_ext.md`;
+**Origin:** maintainer "dejavue maturation"; vision brainstorm `local workspace/private design notes`;
 scope picks = hygiene/reconcile + v1.4 features + productization/release.
 
 ---
@@ -30,12 +30,12 @@ scope picks = hygiene/reconcile + v1.4 features + productization/release.
 ## The reframe
 
 DejaVue today is *per-repo agent memory* (the **why** of a codebase: decisions,
-constraints, dead ends). The captain's vision matures it into **DCP — the
+constraints, dead ends). The maintainer's vision matures it into **DCP — the
 DejaVue Context Protocol**: a portable context interchange layer where
 `.dejavue/` is the **single source of truth** and `AGENTS.md` / `CLAUDE.md` /
 `GEMINI.md` / Copilot rules become **generated adapter targets**.
 
-Three layers (captain's framing):
+Three layers (maintainer's framing):
 1. **Instruction layer** — what the agent should *do* (style, commands, rules, arch map) → new `context.md`
 2. **Memory layer** — what the agent should *remember* (decisions, patterns, failures, glossary) → dejavue already has this
 3. **Adapter layer** — generated per-tool files (`export --target {claude,codex,gemini,copilot,all}`) + `import` to bootstrap from existing files
@@ -48,17 +48,17 @@ OpenKO Foundry registration already in place (OCPL, `foundry.toml`, STEWARDSHIP.
 
 ---
 
-## Current state (verified s241)
+## Current state (verified internal session)
 
 - **Mature core:** v1.3.0, 36 commands, **100/100 tests green**, single-file stdlib-only.
-- **Thin adoption:** only **5 repos** have `.dejavue/` (dejavue, exosphere, zorro, openko_scaffold, workspace-meta) of ~30 peers. *(Adoption was NOT picked this session — noted, not in scope.)*
+- **Thin adoption:** only **5 repos** have `.dejavue/` (dejavue, external project, sample repo, sample repo, private source workspace) of ~30 peers. *(Adoption was NOT picked this session — noted, not in scope.)*
 - **Roadmap drift:** "v1.4 candidates" lists `diff` / `timeline` / `check --fix` as future — all three **already shipped in v1.3.0**.
-- **Dead branch:** `origin/agent/opencode/dejavue-v0.3` is 8 commits *behind* master; its headline "split dejavue.py into modules — single-file invariant relaxed" is the **opposite** of master's deliberate single-file decision. Prune, don't merge.
+- **Dead branch:** `origin/agent/external agent/dejavue-v0.3` is 8 commits *behind* master; its headline "split dejavue.py into modules — single-file invariant relaxed" is the **opposite** of master's deliberate single-file decision. Prune, don't merge.
 - **No `context.md`** yet; `export` is `--format json|md` (snapshot), not `--target` (adapter).
 
 ---
 
-## Axiom 0 — Zero-ceremony conformance  *(RATIFIED s241)*
+## Axiom 0 — Zero-ceremony conformance  *(RATIFIED internal session)*
 
 The hard invariant every other decision answers to. A conforming DCP tool MUST
 be usable with no configuration and no files beyond what `init` creates. Every
@@ -68,7 +68,7 @@ handoff`) is **frozen**. **No new runtime dependency may ever be introduced.**
 If a feature can only work via a new dep or a mandatory file, it is wrong by
 definition (this is how ONNX was caught — D4).
 
-## Ratified direction (s241)
+## Ratified direction (internal session)
 - **DCP as a full, citable standard** — write `docs/dcp-spec.md`; dejavue is the reference impl; positioned for OpenKO Foundry (OCPL).
 - **Refine design, then dispatch** — no DCP code dispatched until the design is ratified. Hygiene (Wave A) runs in parallel (risk-free).
 
@@ -105,7 +105,7 @@ ROADMAP "Out of scope"). **Recommendation:** **drop** it (or defer as an
 optional out-of-process shellout, never an import). Keeps the contract clean.
 
 ### D5 — v1.4 subset that ships: stdlib-safe only
-**Ship:** `promote --to jagent` (graduate a `.dejavue/` without losing history),
+**Ship:** `promote --to planning` (graduate a `.dejavue/` without losing history),
 `init --wizard` (3-question seed), reference frontmatter (`reference list --type`).
 **Drop:** ONNX (D4). All chosen items are pure-stdlib.
 
@@ -116,8 +116,8 @@ optional out-of-process shellout, never an import). Keeps the contract clean.
 Single-file tool ⇒ parallel horses on `dejavue.py` **will** conflict. Sequence
 the code-touching work; parallelize only doc/spec work (separate files).
 
-### Wave A — Hygiene / reconcile  *(foreman-direct, now — no dispatch)*
-1. Prune `origin/agent/opencode/dejavue-v0.3` (dead, behind, contra single-file).
+### Wave A — Hygiene / reconcile  *(design lead-direct, now — no dispatch)*
+1. Prune `origin/agent/external agent/dejavue-v0.3` (dead, behind, contra single-file).
 2. Reconcile `ROADMAP.md`: move `diff`/`timeline`/`check --fix` from "v1.4 candidates" → Shipped (v1.3.0); restate real remaining candidates.
 3. Quick dogfood/consistency check.
 **Done:** branch gone, ROADMAP self-consistent, committed + pushed.
@@ -131,12 +131,12 @@ the code-touching work; parallelize only doc/spec work (separate files).
 **Done:** round-trip `import CLAUDE.md` → edit `context.md` → `export --target claude` reproduces a managed block without clobbering hand-written content; tests green.
 
 ### Wave C — stdlib-safe v1.4 features  *(dispatch: sequential after B — same file)*
-`promote --to jagent`, `init --wizard`, reference frontmatter. **Done:** features + tests, green.
+`promote --to planning`, `init --wizard`, reference frontmatter. **Done:** features + tests, green.
 
 ### Wave D — Productization + DCP spec  *(dispatch: parallel-OK, separate files)*
 - `docs/dcp-spec.md` — the DCP standard (the three layers, adapter format, managed-block contract, `.dejavue/` layout).
 - README/STEWARDSHIP positioning as "portable context + memory + adapter bridge."
-- CHANGELOG + ROADMAP for the DCP release (v1.4 or v2.0 — captain's call on version line).
+- CHANGELOG + ROADMAP for the DCP release (v1.4 or v2.0 — maintainer's call on version line).
 **Done:** spec doc + positioning committed; no `dejavue.py` conflict with B/C.
 
 ---
@@ -145,4 +145,4 @@ the code-touching work; parallelize only doc/spec work (separate files).
 - Adoption rollout across the ~30 repos (not picked; separate session).
 - ONNX embedder (D4).
 - Renaming the binary / breaking command contract / multi-file split of `dejavue.py`.
-- `joker-memory` Rust consolidation (squadron-side, per existing ROADMAP out-of-scope).
+- `memory crate` Rust consolidation (orchestration-side, per existing ROADMAP out-of-scope).

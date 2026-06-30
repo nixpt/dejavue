@@ -13,11 +13,20 @@ any v1.x release can be read by any later v1.x release without migration.
   events over a git range (e.g. `v2.1.0..HEAD`, or a single ref = `ref..HEAD`): **Decisions**
   (with confidence labels and "⚠ later superseded by" annotations), **Traps & incidents**,
   **Notes**, and the git **Commits**. A `since` + `export` composition. First P1 item from
-  the scratch/deja audit.
+  the design backlog audit.
+- **Per-entry freshness / expiry** — optional `freshness` plus `expires_after` metadata on
+  decisions and notes, with `context` / `since` / `recall` flagging expired entries at read
+  time. The base timeline stays append-only; no background expiry process.
+- **`derived_from` lineage** — repeatable lineage pointers on `decision` and `note`, surfaced
+  in read-time context and indexed by `recall` so reasoning chains stay queryable without a
+  graph store.
+- **Memory stability classes** — optional `--stability` labels plus inferred read-time classes
+  for the core memory surfaces. Keeps the retention taxonomy visible without changing the
+  on-disk format.
 
 ## [2.1.0] — 2026-06-06
 
-**Institutional-memory P0 wave** — the five top-rated items from the scratch/deja roadmap
+**Institutional-memory P0 wave** — the five top-rated items from the design backlog roadmap
 audit, making recall *relational* (`entities`, `--artifacts`) and *trustworthy*
 (`--confidence`, `--supersedes` read-back), plus the missing `pattern` memory file and
 robustness fixes. Two new commands (`pattern`, `entities`), four new fields, zero new
@@ -29,19 +38,19 @@ dependencies (Axiom 0 preserved). 161/161 tests.
   idiom, structure). Appends to `.dejavue/patterns.md` — the missing core memory
   file alongside `decisions.md` / `invariants.md` — and is surfaced by `context`,
   indexed by `recall`, `merge=union` in `.gitattributes`, and scaffolded by `init`.
-  Same mold as `trap` / `invariant`. First P0 item from the scratch/deja roadmap audit.
+  Same mold as `trap` / `invariant`. First P0 item from the design backlog roadmap audit.
 - **`--entity <name>` on `decision`/`note`/`trap`/`incident`/`invariant`/`pattern`** +
   **`dejavue entities [<name>]`** — an optional repeatable subject field
   (`entities: ["auth-system", …]`, normalized to kebab-case) that links events *by
   subject*, complementing the single-valued `tag`. Entities are indexed by `recall`,
   matched by `blame <name>`, and `entities` lists them with counts (or filters events
   for one). Lightweight strings only — not a graph or registry (Axiom 0). Second P0
-  item from the scratch/deja audit; the relational primitive that unlocks lineage/explain.
+  item from the design backlog audit; the relational primitive that unlocks lineage/explain.
 - **`--confidence {speculative,proposed,experimental,adopted,deprecated,verified}` on
   `decision` and `note`** — a recall-trust signal so brainstorms and firm decisions no
   longer look identical. Stored on the event, shown as a `[CONFIDENCE]` label in the
   `decisions.md` heading (alongside `--durability`), and indexed by `recall` (so
-  `recall verified` / `recall speculative` work). Third P0 item from the scratch/deja audit.
+  `recall verified` / `recall speculative` work). Third P0 item from the design backlog audit.
 - **`--supersedes` read-back** — `recall`, `since`, and `context` now surface
   "⚠ superseded by '<newer decision>'" on an overridden decision, so stale decisions
   stop looking authoritative. The `--supersedes` value was previously *write-only*
@@ -169,8 +178,8 @@ DCP. Zero new runtime dependencies (stdlib only; Axiom 0).
 - **`references/glossary.md`** — glossary reference card via the existing
   reference machinery (`reference create <name> --template glossary`), surfaced
   in `dejavue context`.
-- **`dejavue promote --to jagent`** — graduate a `.dejavue/` into a richer
-  per-repo planning system (`.jagent/`) without losing history: copies (never
+- **`dejavue promote --to planning`** — graduate a `.dejavue/` into a richer
+  per-repo planning system (`.planning/`) without losing history: copies (never
   moves) every memory artifact, records a provenance card + a `promote` event,
   and leaves `.dejavue/` canonical.
 - **`dejavue init --wizard`** — 3-question prompt (project type / agent / purpose)
@@ -339,7 +348,7 @@ Format declared stable. 20 commands, 62/62 tests.
   routes through `context --check-stale` (stderr-only) so the safety net
   catches pushes even without an interactive session.
 - **`dejavue init --ingest`** — run ingest immediately at init time.
-  Saves one manual step for the common Khukuri-style first-time setup.
+  Saves one manual step for the common audit tool-style first-time setup.
 - **`dejavue init --map`** — scaffold `references/map.md` with a
   section-per-concern template (layout, entry points, invariants, deps).
 - **Pre-push hook** — installed alongside the post-commit hook by

@@ -314,10 +314,10 @@ alongside the common ones. A `decision` event, for example, carries:
 {"ts": "2026-05-13T04:11:32-05:00", "branch": "master", "commit": "95f0c19",
  "agent": "sonnet", "event": "decision",
  "decision_title": "Use .dejavue/ directory naming",
- "decision_reason": "avoids collision with .joker/cache/ dirs",
+ "decision_reason": "avoids collision with .memory-service/cache/ dirs",
  "summary": "Decision: Use .dejavue/ directory naming",
  "rejected_alternatives": [
-   {"option": "Use .joker/", "reason": "collision with joker-mcp cache dirs"},
+   {"option": "Use .memory-service/", "reason": "collision with optional MCP memory service cache dirs"},
    {"option": "Use .memory/", "reason": "too generic, no project identity"}]}
 ```
 
@@ -427,6 +427,112 @@ a tool failing any MUST in §8.1 is non-conformant regardless of §8.2–§8.4.
 
 ---
 
+## §9 — DCP as Universal Agent Context Interoperability Layer
+
+**Source:** `private design notes`
+**Status:** Extension proposal — not yet in DCP/1.0
+
+### The Problem
+
+Every coding agent runtime currently invents its own instruction format:
+
+| Tool | File |
+|------|------|
+| Claude Code | `CLAUDE.md` + `.claude/` |
+| Codex | `AGENTS.md` |
+| Gemini | `GEMINI.md` |
+| Copilot | `.github/copilot-instructions.md` |
+| Cursor | `.cursor/rules` |
+
+A project with multiple agent users must maintain N incompatible files that drift
+independently and are kept in sync by nobody. Each file is a snapshot — not an
+evolving memory system.
+
+### The DCP Solution
+
+DCP makes `.dejavue/` the **single canonical source of truth**. Per-tool instruction
+files become generated, non-destructive adapter targets:
+
+```
+.dejavue/context.md     → AGENTS.md
+.dejavue/context.md     → CLAUDE.md
+.dejavue/context.md     → GEMINI.md
+.dejavue/memory/*       → DejaVue memory (already in DCP)
+```
+
+The adapter layer (§4) already defines the export contract. The extension here is
+formalizing which target names are standard and adding an `import` path.
+
+### Standard Adapter Targets
+
+```bash
+dejavue export --target codex       # → AGENTS.md
+dejavue export --target claude      # → CLAUDE.md
+dejavue export --target gemini      # → GEMINI.md
+dejavue export --target copilot     # → .github/copilot-instructions.md
+dejavue export --target cursor      # → .cursor/rules
+dejavue export --target all         # → all of the above
+```
+
+Import path (merge existing tool files back into DCP):
+
+```bash
+dejavue import AGENTS.md            # seeds context.md from Codex instructions
+dejavue import CLAUDE.md            # seeds context.md from Claude instructions
+```
+
+### Three-Layer Model
+
+**Instruction layer** — what the agent should do: coding style, commands, constraints,
+safety rules. Stored in `context.md`, exported to per-tool adapter files.
+
+**Memory layer** — what the agent should remember: decisions, prior attempts, project
+vocabulary, architectural intent. Stored in `.dejavue/memory/`, readable by any agent
+via `dejavue context` or `dejavue recall`.
+
+**Adapter layer** — generated files for today's tools. Updated by `dejavue export`.
+Agents should read these for fast orientation; they are derivatives, not sources of truth.
+
+### Why Not a New Protocol Name?
+
+Several alternative names were considered (ACP, MCPX, JCP, XCP, OPENCTX). The conclusion:
+DCP is already the right name. The full form:
+
+> **DejaVue Context Protocol (DCP)**
+
+expands naturally into `dcp://` addressing, DCP manifests, DCP memory graphs, DCP
+semantic snapshots, and DCP federation — without conflicting with existing ecosystems.
+
+The differentiator is not just "agents forget." It is that **cognition today is stateless**.
+Current AI workflows are isolated, ephemeral, tool-centric, and chat-centric. Real
+engineering is temporal, layered, historical, contextual, and organizational.
+
+DejaVue's actual differentiator over static `CLAUDE.md` files:
+
+```json
+{
+  "decision": "Moved from embedded Python to PyO3 capsules",
+  "why": ["Sandbox isolation", "Capability routing", "Runtime portability"],
+  "supersedes": "decision_019",
+  "artifacts": ["capsule_abi_v2.md", "walker_runtime.rs"],
+  "semantic_tags": ["security", "polyglot", "capsules"]
+}
+```
+
+That becomes searchable, transferable, machine-understandable, and replayable. Static
+instruction files cannot carry this.
+
+### Relationship to MCP
+
+MCP answers: "what tools can the agent call?"
+
+DCP answers: "what happened in this project over time?"
+
+They are complementary, not competing. MCP handles tool invocation; DCP handles
+cognitive continuity.
+
+---
+
 ## Appendix — Reference implementation
 
 [dejavue](https://github.com/nixpt/dejavue) is the DCP/1.0 reference
@@ -435,3 +541,4 @@ It realizes the memory layer (the base loop and `since`/`recall`/`context`),
 the instruction layer (`context.md` + `init` scaffold), and the adapter layer
 (`import` + `export --target`). Where this spec and the reference implementation
 disagree, the spec is the contract and the implementation is the bug.
+

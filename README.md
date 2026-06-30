@@ -127,12 +127,12 @@ and developers rediscover those dead ends at full cost.
 Deja Vue fills that gap. It writes a plain-text event log (`.dejavue/`) that
 ships with the repo, requires zero infrastructure, and degrades gracefully when
 tools are absent. The format is the contract — other coding-agent tools
-(Cursor, Aider, opencode, claude-cli) can read `.dejavue/` directly, and
+(Cursor, Aider, external agent, claude-cli) can read `.dejavue/` directly, and
 richer MCP servers can consume it without dejavue having to depend on them.
 
 For the full design rationale — including the overlap with adjacent memory
 tools, hook strategy, and the rejected-alternatives principle — see
-`docs/04-foreman-perspective.md`. For the build spec and migration path,
+`docs/04-design-perspective.md`. For the build spec and migration path,
 see `docs/05-v0.1-scope.md`.
 
 
@@ -185,7 +185,7 @@ rich MCP servers   — consume .dejavue/ via thin shim tools (v0.3 work)
   may also maintain their own richer per-repo planning state
   (e.g. milestone / phase / learning indexes) as a superset
 
-other coding agents — Cursor, Aider, opencode, claude-cli
+other coding agents — Cursor, Aider, external agent, claude-cli
   read .dejavue/ directly — the format is the open contract
 
 git                — mechanical history (commits, diffs)
@@ -254,7 +254,7 @@ git                — mechanical history (commits, diffs)
 |---|---|
 | `dejavue import <FILE>` | Bootstrap `context.md` losslessly from an existing `AGENTS.md` / `CLAUDE.md`; records provenance. Safe first step before `export`. |
 | `dejavue export --target {claude,codex,gemini,copilot,cursor,all}` | Generate the tool's instruction file from `context.md` non-destructively. Absent → create; managed block → replace region; hand-written → append + warn; `--replace` to convert. |
-| `dejavue promote --to jagent` | Graduate `.dejavue/` into a `.jagent/` planning system without losing history — copies artifacts, records provenance, leaves `.dejavue/` canonical. |
+| `dejavue promote --to planning` | Graduate `.dejavue/` into a `.planning/` planning system without losing history — copies artifacts, records provenance, leaves `.dejavue/` canonical. |
 
 Each command accepts `--help`. See `dejavue --help` for the full flag list.
 
@@ -293,12 +293,13 @@ next agent the most to rediscover. Use `--rejected "option: reason"` on every
 ```bash
 #!/usr/bin/env bash
 # dejavue auto-capture
-exec python3 /path/to/dejavue.py changed --auto --commit "$(git rev-parse HEAD)"
+if [ "${DEJAVUE_SKIP_AUTO_AMEND:-}" = "1" ]; then exit 0; fi
+exec python3 /path/to/dejavue.py changed --auto --commit "$(git rev-parse HEAD)" --amend
 ```
 
 After every `git commit`, dejavue records one `file_changed` event per touched
-file with the diff stat and commit message. No manual `changed` calls needed
-for committed work.
+file with the diff stat and commit message, then amends HEAD with the timeline
+update so the worktree returns clean instead of staying dirty.
 
 If a non-dejavue hook already exists, `init` will warn and refuse to overwrite
 unless `--force` is passed.
@@ -476,7 +477,7 @@ tools sit on top of the same on-disk format. See `docs/05-v0.1-scope.md`
 | v1.1 | 25 commands: `check`, `archive`, `roster`, `config`, `install-skill`, embedder circuit breaker. |
 | v1.2 | 31 commands: richer event types, `stats`, `export`, `reference`, `link`, `search`, tiered embedder auto-detect. |
 | v1.3 | 35 commands: `diff`, `timeline`, `tag`, `note-commit`, `check --fix`, event_type FTS indexing, `since` notes section. |
-| v2.0 | **DCP/1.0** — `context.md` instruction layer, `import`, `export --target {claude,codex,gemini,copilot,cursor,all}` (non-destructive adapter bridge), `promote --to jagent`, `init --wizard`, `references/glossary.md`, init auto-discovery (CLAUDE.md boot stub + in-repo skills). `docs/dcp-spec.md` ships as a citable standard. |
+| v2.0 | **DCP/1.0** — `context.md` instruction layer, `import`, `export --target {claude,codex,gemini,copilot,cursor,all}` (non-destructive adapter bridge), `promote --to planning`, `init --wizard`, `references/glossary.md`, init auto-discovery (CLAUDE.md boot stub + in-repo skills). `docs/dcp-spec.md` ships as a citable standard. |
 
 
 ## Status
@@ -488,12 +489,13 @@ zero mandated dependency (Axiom 0). Not on PyPI.
 
 Design documents in repo:
 - `docs/dcp-spec.md` — **the DCP/1.0 standard** (three layers, adapter contract, `.dejavue/` layout, conformance)
-- `docs/plans/2026-06-05-dcp-maturation.md` — ratified DCP design decisions (s241)
+- `docs/plans/2026-06-05-dcp-maturation.md` — ratified DCP design decisions (internal session)
 - `docs/01-origin.md` — original conversation that produced the spec
 - `docs/02-evolution.md` — the spec's evolution (semantic, boot packet, since/recall)
 - `docs/03-example.md` — early bash demo
-- `docs/04-foreman-perspective.md` — design rationale, overlap analysis, hook strategy
+- `docs/04-design-perspective.md` — design rationale, overlap analysis, hook strategy
 - `docs/05-v0.1-scope.md` — v0.1 build spec and architecture ruling
+- `docs/08-thin-wrapper.md` — minimal shell-out wrapper contract for optional MCP/stdio adapters
 - `skills/dejavue-workflow/SKILL.md` — agent-facing workflow skill (Claude Code SKILL.md format, generic — symlink into `~/.claude/skills/` to load automatically)
 - `CHANGELOG.md` — release notes
 - `CONTRIBUTING.md` — contribution guidelines
