@@ -23,6 +23,8 @@ STATE = DEJAVUE_DIR / "state.md"
 DECISIONS = DEJAVUE_DIR / "decisions.md"
 INVARIANTS = DEJAVUE_DIR / "invariants.md"
 PATTERNS = DEJAVUE_DIR / "patterns.md"
+RULES = DEJAVUE_DIR / "rules.md"
+PLAN_FALLBACK = DEJAVUE_DIR / "plan.md"
 HANDOFF = DEJAVUE_DIR / "handoff.md"
 CONTEXT = DEJAVUE_DIR / "context.md"
 REFERENCES = DEJAVUE_DIR / "references"
@@ -1299,7 +1301,10 @@ def cmd_context(args):
         print(f"--- {label} ---\n")
         print(ctx_text)
 
-    for path, label in [(HANDOFF, "handoff.md"), (STATE, "state.md"), (DECISIONS, "decisions.md"), (INVARIANTS, "invariants.md"), (PATTERNS, "patterns.md")]:
+    # rules.md sits with invariants: both are normative (what an agent must/should
+    # do here), unlike patterns.md which is merely descriptive. An agent that
+    # doesn't read the project's rules on arrival will violate them by accident.
+    for path, label in [(HANDOFF, "handoff.md"), (STATE, "state.md"), (DECISIONS, "decisions.md"), (INVARIANTS, "invariants.md"), (RULES, "rules.md"), (PATTERNS, "patterns.md")]:
         if path.exists():
             print(f"--- {label} ---\n")
             print(path.read_text(encoding="utf-8"))
@@ -2195,6 +2200,142 @@ def cmd_pattern(args):
         **domain_owner_fields(args),
     })
     print("Pattern recorded.")
+
+
+def cmd_rule(args):
+    """Record a soft project rule / convention and append to rules.md.
+
+    Normative tiers, weakest to strongest:
+      pattern    — descriptive. "this is how the code happens to be written."
+      rule       — soft-normative. "this is how we do things here." Advisory:
+                   an agent may knowingly depart from it, but should say why.
+      invariant  — hard-normative. "this must always hold." Breaking it is a bug.
+
+    Rules surface in `dejavue context`, so every agent reads the project's
+    conventions on arrival rather than rediscovering (or violating) them.
+    """
+    DEJAVUE_DIR.mkdir(exist_ok=True)
+    if not RULES.exists():
+        RULES.write_text(
+            "# Rules\n\n"
+            "Soft project rules and conventions — advisory, not invariants.\n"
+            "Depart from one knowingly and say why; don't violate one by accident.\n\n",
+            encoding="utf-8",
+        )
+    ts = now()
+    scope = f" _({args.scope})_" if getattr(args, "scope", None) else ""
+    entry = f"\n## {ts}{scope}\n\n{args.text}\n"
+    with RULES.open("a", encoding="utf-8") as f:
+        f.write(entry)
+    append_event({
+        "agent": resolve_agent(args.agent),
+        "event": "rule",
+        "summary": args.text,
+        "scope": getattr(args, "scope", None) or "",
+        "tag": args.tag or "",
+        "entities": normalize_entities(args),
+        **author_type_fields(args),
+        **tension_fields(args),
+        **value_fields(args),
+        **domain_owner_fields(args),
+    })
+    print(f"Rule recorded → {RULES}")
+
+
+# Planning conventions dejavue knows how to write into, most specific first.
+# A repo that uses none of these still works: we fall back to .dejavue/plan.md,
+# which preserves the zero-ceremony guarantee (stdlib + git + what init created).
+PLAN_CONVENTIONS = [
+    Path(".jagent/planning/TASKS.md"),
+    Path(".jagent/TODO.md"),
+    Path("TODO.md"),
+    Path("docs/TODO.md"),
+    Path("TASKS.md"),
+]
+
+
+def _resolve_plan_target(explicit=None):
+    """Pick the file `dejavue plan` appends to.
+
+    Order: --target > config `plan.target` > first existing known convention >
+    .dejavue/plan.md fallback. Returns (path, how) so the caller can tell the
+    user *why* it chose that file — silently guessing a destination for
+    someone's planning notes is how captured findings get lost.
+    """
+    if explicit:
+        return Path(explicit), "--target"
+
+    configured = _load_config().get("plan.target")
+    if configured:
+        return Path(configured), "config plan.target"
+
+    for candidate in PLAN_CONVENTIONS:
+        if candidate.exists():
+            return candidate, "detected convention"
+
+    return PLAN_FALLBACK, "fallback (no planner found)"
+
+
+def cmd_plan(args):
+    """Capture an actionable item into the repo's planning convention.
+
+    The point is capture, not triage: an agent that trips over an issue, a gap,
+    or an opportunity while doing something else should be able to record it in
+    one command and keep going. It does NOT have to fix it, and it does NOT have
+    to know where the project keeps its plans — dejavue finds the planner
+    (.jagent/, TODO.md, …) or falls back to .dejavue/plan.md.
+    """
+    target, how = _resolve_plan_target(getattr(args, "target", None))
+
+    if getattr(args, "list", False):
+        if not target.exists():
+            print(f"No plan file yet ({target}).")
+            return
+        open_items = [
+            ln.rstrip() for ln in target.read_text(encoding="utf-8").splitlines()
+            if ln.lstrip().startswith("- [ ]")
+        ]
+        print(f"# open items in {target}  ({how})\n")
+        if not open_items:
+            print("  (none)")
+        for ln in open_items:
+            print(f"  {ln.strip()}")
+        return
+
+    if not args.text:
+        print("dejavue plan: nothing to capture (pass TEXT, or --list).", file=sys.stderr)
+        sys.exit(2)
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if not target.exists():
+        target.write_text(
+            f"# {target.stem.title()}\n\n"
+            "Captured by agents as they work. An unchecked box is an open item;\n"
+            "nobody has committed to doing it, only to not losing it.\n\n",
+            encoding="utf-8",
+        )
+
+    agent = resolve_agent(args.agent)
+    kind = args.kind
+    stamp = now().split("T")[0]
+    line = f"- [ ] **{kind}** — {args.text}  _({agent}, {stamp})_\n"
+    with target.open("a", encoding="utf-8") as f:
+        f.write(line)
+
+    append_event({
+        "agent": agent,
+        "event": "plan",
+        "kind": kind,
+        "summary": args.text,
+        "target": str(target),
+        "tag": args.tag or "",
+        "entities": normalize_entities(args),
+        **author_type_fields(args),
+        **tension_fields(args),
+        **value_fields(args),
+        **domain_owner_fields(args),
+    })
+    print(f"Captured [{kind}] → {target}  ({how})")
 
 
 def _resolve_range(ref):
@@ -5163,6 +5304,32 @@ def main():
     p.add_argument("--tag", metavar="TAG", help="Tag.")
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_pattern)
+
+    p = sub.add_parser("rule", help="Record a soft project rule/convention (advisory; weaker than an invariant).")
+    p.add_argument("text", help="The rule or convention.")
+    p.add_argument("--scope", metavar="SCOPE", help="Where it applies, e.g. a subsystem or path.")
+    p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
+    add_author_type_arg(p)
+    add_tension_arg(p)
+    add_value_arg(p)
+    add_domain_owner_arg(p)
+    p.add_argument("--tag", metavar="TAG", help="Tag.")
+    p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
+    p.set_defaults(func=cmd_rule)
+
+    p = sub.add_parser("plan", help="Capture an actionable item into the repo's planner (.jagent/, TODO.md, …).")
+    p.add_argument("text", nargs="?", help="The issue, gap, or opportunity to capture.")
+    p.add_argument("--kind", default="issue", choices=["issue", "gap", "opportunity", "idea", "cleanup"], help="What kind of item this is (default: issue).")
+    p.add_argument("--target", metavar="PATH", help="Write to this file instead of the auto-detected planner.")
+    p.add_argument("--list", action="store_true", help="List open items instead of capturing one.")
+    p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
+    add_author_type_arg(p)
+    add_tension_arg(p)
+    add_value_arg(p)
+    add_domain_owner_arg(p)
+    p.add_argument("--tag", metavar="TAG", help="Tag.")
+    p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
+    p.set_defaults(func=cmd_plan)
 
     p = sub.add_parser("entities", help="List entities, or show events referencing one entity.")
     p.add_argument("name", nargs="?", help="Entity to filter on (optional; omit to list all).")

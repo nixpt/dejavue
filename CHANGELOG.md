@@ -9,6 +9,24 @@ any v1.x release can be read by any later v1.x release without migration.
 
 ### Added
 
+- **`dejavue plan TEXT [--kind …] [--target PATH] [--list]`** — capture an actionable
+  item (issue / gap / opportunity / idea / cleanup) into **the repo's own planning
+  convention**, not into a dejavue-specific file. Resolves the target in precedence
+  order: `--target` → config `plan.target` → first existing known convention
+  (`.jagent/planning/TASKS.md`, `.jagent/TODO.md`, `TODO.md`, `docs/TODO.md`,
+  `TASKS.md`) → `.dejavue/plan.md` fallback. It prints *which* target it chose and
+  *why*, because silently guessing where to file someone's findings is how captured
+  work gets lost. Also appends a `plan` event to the timeline, so a captured item
+  stays recallable and attributable even if the planner file is later rewritten.
+  The fallback preserves the zero-ceremony guarantee: capture must never fail merely
+  because a repo has no planner.
+- **`dejavue rule TEXT [--scope SCOPE]`** — record a **soft project rule / convention**
+  in `rules.md`, surfaced in `dejavue context`. Fills the missing normative tier:
+  `pattern` is descriptive ("this is how the code happens to be written"), `invariant`
+  is hard ("this must always hold"), and `rule` is the advisory middle ("this is how we
+  do things here" — depart from it knowingly and say why). Rules ship in the boot packet
+  so an arriving agent reads a project's conventions instead of violating them by accident.
+
 - **`dejavue changelog <range>`** — generate a why-aware markdown changelog from dejavue
   events over a git range (e.g. `v2.1.0..HEAD`, or a single ref = `ref..HEAD`): **Decisions**
   (with confidence labels and "⚠ later superseded by" annotations), **Traps & incidents**,
