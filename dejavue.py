@@ -4853,6 +4853,19 @@ def cmd_completion(args):
 
 def main():
     parser = argparse.ArgumentParser("dejavue", description="Repo-local agent memory.")
+    # Global --repo: run against another repo without cd'ing into it first.
+    #
+    # Every path in this module (.dejavue/, git calls) is relative to the process CWD, so
+    # --repo is implemented as a chdir before dispatch — deliberately, since that makes it
+    # correct for EVERY subcommand at once rather than threading a repo arg through each.
+    #
+    # This exists because callers already assumed it did. Orchestrators that drive dejavue
+    # for an agent working in some other checkout (e.g. a dispatch harness injecting a repo's
+    # boot packet into an agent's prompt) naturally write `dejavue --repo <path> context`.
+    # Without it, argparse rejected the flag, the caller's `2>/dev/null || true` swallowed the
+    # error, and the feature silently produced nothing — which is exactly how it was found.
+    parser.add_argument("--repo", metavar="PATH", default=None,
+                        help="Run against this repo instead of the current directory.")
     sub = parser.add_subparsers(required=True)
 
     p = sub.add_parser("version", help="Print dejavue version.")
@@ -5340,6 +5353,21 @@ def main():
     p.set_defaults(func=cmd_owners)
 
     args = parser.parse_args()
+
+    if args.repo:
+        target = Path(args.repo).expanduser()
+        if not target.is_dir():
+            print(f"dejavue: --repo path is not a directory: {target}", file=sys.stderr)
+            sys.exit(2)
+        # Fail loudly if the chdir can't happen. The whole reason --repo exists is that a
+        # silent no-op here is indistinguishable from success to a caller that redirects
+        # stderr — don't reintroduce that.
+        try:
+            os.chdir(target)
+        except OSError as exc:
+            print(f"dejavue: cannot enter --repo {target}: {exc}", file=sys.stderr)
+            sys.exit(2)
+
     args.func(args)
 
 
