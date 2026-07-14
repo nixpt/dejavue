@@ -2943,6 +2943,32 @@ test_plan_list_open_items() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 177. global --repo runs against another repo from an unrelated CWD.
+#      Regression guard: orchestrators call `dejavue --repo <path> context 2>/dev/null || true`
+#      to inject a repo's boot packet into an agent's prompt. When --repo didn't exist, argparse
+#      rejected it, the redirect swallowed the error, and the caller silently got NOTHING.
+test_repo_flag_from_other_cwd() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv rule "capture findings immediately" >/dev/null 2>&1
+    cd /tmp
+    local ctx; ctx="$(dv --repo "$TEST_DIR" context 2>/dev/null)"
+    assert_contains "context from another cwd" "$ctx" "Dejavue Context" || return 1
+    assert_contains "reads that repo's rules" "$ctx" "capture findings immediately" || return 1
+    # capture must work through --repo too, not just read commands
+    dv --repo "$TEST_DIR" plan "found from elsewhere" --kind gap >/dev/null 2>&1
+    assert_contains "plan wrote into the target repo" "$(cat "$TEST_DIR/.dejavue/plan.md")" "found from elsewhere" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 178. a bad --repo fails LOUDLY (exit 2) rather than silently no-op'ing
+test_repo_flag_bad_path_exits_nonzero() {
+    cd /tmp
+    dv --repo /nonexistent-repo-xyz status >/dev/null 2>&1
+    local rc=$?
+    assert_eq "bad --repo exits 2" "2" "$rc" || return 1
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -3148,6 +3174,8 @@ main() {
     run_test "174 plan detects root TODO.md"                  test_plan_detects_todo_md
     run_test "175 plan target precedence"                     test_plan_target_precedence
     run_test "176 plan --list shows open items"               test_plan_list_open_items
+    run_test "177 global --repo from another cwd"             test_repo_flag_from_other_cwd
+    run_test "178 bad --repo exits nonzero"                   test_repo_flag_bad_path_exits_nonzero
 
     echo ""
     echo "========================================"

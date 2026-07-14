@@ -20,6 +20,7 @@ any v1.x release can be read by any later v1.x release without migration.
   stays recallable and attributable even if the planner file is later rewritten.
   The fallback preserves the zero-ceremony guarantee: capture must never fail merely
   because a repo has no planner.
+- **`dejavue --repo PATH <cmd>`** — run any command against another repo without cd-ing into it. Callers already assumed this existed; without it argparse rejected the flag and their `2>/dev/null || true` swallowed the error, silently producing nothing.
 - **`dejavue rule TEXT [--scope SCOPE]`** — record a **soft project rule / convention**
   in `rules.md`, surfaced in `dejavue context`. Fills the missing normative tier:
   `pattern` is descriptive ("this is how the code happens to be written"), `invariant`
