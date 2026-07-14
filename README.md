@@ -213,6 +213,25 @@ git                — mechanical history (commits, diffs)
 | `dejavue annotate <doc> "note"` | Append a timestamped note to a doc without rewriting it. |
 | `dejavue changed PATH --summary TEXT` | Record file change event manually (post-commit hook does this automatically). |
 
+**Capture + conventions**
+
+Capture is meant to cost one command. An agent that trips over a problem while
+doing something else should be able to record it and keep going — it does not
+have to fix it, and it does not have to know where this repo keeps its plans.
+
+| Command | Description |
+|---|---|
+| `dejavue plan TEXT [--kind issue\|gap\|opportunity\|idea\|cleanup] [--target PATH] [--list]` | Capture an actionable item into **the repo's own planner**. Finds it automatically — `.jagent/planning/TASKS.md`, `.jagent/TODO.md`, `TODO.md`, `docs/TODO.md`, `TASKS.md` — or falls back to `.dejavue/plan.md` so capture never fails for lack of a planner. Override permanently with `dejavue config set plan.target <path>`, or once with `--target`. Always also lands in the timeline, so it stays recallable. |
+| `dejavue rule TEXT [--scope SCOPE]` | Record a **soft project rule / convention** in `rules.md`. Surfaced in `dejavue context`, so an arriving agent reads your conventions instead of violating them by accident. |
+
+The three normative tiers, weakest to strongest:
+
+| Tier | Command | Meaning |
+|---|---|---|
+| descriptive | `pattern` | "this is how the code happens to be written." |
+| soft-normative | `rule` | "this is how we do things here." Depart from it knowingly and say why. |
+| hard-normative | `invariant` | "this must always hold." Breaking it is a bug. |
+
 **Recall + exploration**
 
 | Command | Description |

@@ -53,6 +53,8 @@ _dejavue() {
                 'incident:Record an operational incident (outage, corruption, migration)'
                 'invariant:Record an architectural invariant that must always hold'
                 'pattern:Record a discovered convention/pattern (naming, idiom, structure)'
+                'rule:Record a soft project rule/convention (advisory, weaker than invariant)'
+                'plan:Capture an actionable item into the repo planner (.jagent/, TODO.md)'
                 'entities:List entities, or show events referencing one entity'
                 'owners:List domain owners, or show events owned by one domain'
                 'capabilities:Report implementation and repo-local DCP capabilities'
@@ -87,7 +89,7 @@ _dejavue() {
                         '*--artifacts[File this decision is about, repeatable]:file:_files' \
                         '*--entity[Subject this event is about, repeatable]:entity' \
                         '--tag[Tag]:tag' ;;
-                trap|incident|invariant|pattern)
+                trap|incident|invariant|pattern|rule)
                     _arguments \
                         '--agent[Agent name]:agent' \
                         '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \

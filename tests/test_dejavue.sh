@@ -2857,6 +2857,92 @@ test_domain_owner_metadata() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 170. rule records event AND appends to rules.md
+test_rule_records_event_and_doc() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv rule "Builds go through build-safe, never bare cargo in a main checkout" --scope rust >/dev/null 2>&1
+    assert_event_recorded "rule event" ".dejavue/timeline.jsonl" "event" "rule" || return 1
+    assert_file_exists "rules.md created" ".dejavue/rules.md" || return 1
+    local content; content="$(cat .dejavue/rules.md)"
+    assert_contains "rule text present" "$content" "build-safe" || return 1
+    assert_contains "scope recorded" "$content" "rust" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 171. rules reach an arriving agent through the context boot packet
+test_context_surfaces_rules() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv rule "Capture findings immediately with dejavue plan" >/dev/null 2>&1
+    local ctx; ctx="$(dv context 2>/dev/null)"
+    assert_contains "context lists rules.md" "$ctx" "rules.md" || return 1
+    assert_contains "context shows the rule" "$ctx" "Capture findings immediately" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 172. plan falls back to .dejavue/plan.md when the repo has no planner
+#      (zero-ceremony guarantee: capture must never fail for lack of a planner)
+test_plan_fallback_no_planner() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    local out; out="$(dv plan "parser drops escaped quotes" --kind issue 2>&1)"
+    assert_contains "reports fallback" "$out" "fallback" || return 1
+    assert_file_exists "plan.md created" ".dejavue/plan.md" || return 1
+    assert_contains "item captured" "$(cat .dejavue/plan.md)" "escaped quotes" || return 1
+    assert_event_recorded "plan event" ".dejavue/timeline.jsonl" "event" "plan" || return 1
+    assert_event_recorded "kind recorded" ".dejavue/timeline.jsonl" "kind" "issue" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 173. plan auto-detects a .jagent planner without any config
+test_plan_detects_jagent() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    mkdir -p .jagent/planning && printf '# Tasks\n\n' > .jagent/planning/TASKS.md
+    local out; out="$(dv plan "dead code: cap never registered" --kind gap 2>&1)"
+    assert_contains "reports detection" "$out" "detected convention" || return 1
+    assert_contains "wrote to jagent" "$(cat .jagent/planning/TASKS.md)" "cap never registered" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 174. plan auto-detects a plain root TODO.md (the non-jagent convention)
+test_plan_detects_todo_md() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    printf '# TODO\n\n' > TODO.md
+    dv plan "sweep stray target dirs" --kind cleanup >/dev/null 2>&1
+    assert_contains "wrote to TODO.md" "$(cat TODO.md)" "sweep stray target dirs" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 175. explicit config beats detection; --target beats config
+test_plan_target_precedence() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    printf '# TODO\n\n' > TODO.md                      # a detectable convention exists...
+    dv config set plan.target docs/BACKLOG.md >/dev/null 2>&1
+    local out; out="$(dv plan "config wins" 2>&1)"
+    assert_contains "config beats detection" "$out" "config plan.target" || return 1
+    assert_contains "landed in configured file" "$(cat docs/BACKLOG.md)" "config wins" || return 1
+    out="$(dv plan "flag wins" --target docs/OTHER.md 2>&1)"
+    assert_contains "--target beats config" "$out" "--target" || return 1
+    assert_contains "landed in flag file" "$(cat docs/OTHER.md)" "flag wins" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 176. plan --list shows open (unchecked) items only
+test_plan_list_open_items() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    dv plan "still open" --kind issue >/dev/null 2>&1
+    printf -- '- [x] **issue** — already done  _(x, 2026-01-01)_\n' >> .dejavue/plan.md
+    local out; out="$(dv plan --list 2>&1)"
+    assert_contains "lists open item" "$out" "still open" || return 1
+    assert_not_contains "hides completed item" "$out" "already done" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -3055,6 +3141,13 @@ main() {
     run_test "167 tension metadata read-back"                 test_tension_metadata
     run_test "168 value metadata read-back"                   test_value_metadata
     run_test "169 domain owner metadata read-back"            test_domain_owner_metadata
+    run_test "170 rule records event and rules.md"            test_rule_records_event_and_doc
+    run_test "171 context surfaces rules"                     test_context_surfaces_rules
+    run_test "172 plan falls back with no planner"            test_plan_fallback_no_planner
+    run_test "173 plan detects .jagent planner"               test_plan_detects_jagent
+    run_test "174 plan detects root TODO.md"                  test_plan_detects_todo_md
+    run_test "175 plan target precedence"                     test_plan_target_precedence
+    run_test "176 plan --list shows open items"               test_plan_list_open_items
 
     echo ""
     echo "========================================"

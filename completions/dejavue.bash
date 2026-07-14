@@ -7,7 +7,7 @@ _dejavue() {
     local cmds="version init start changed decision state handoff context status \
 check archive roster config install-skill log blame note since changelog ingest recall \
 worthiness get list annotate stats promote import export reference link search \
-diff timeline tag note-commit completion rejected trap incident invariant pattern entities owners capabilities branch merge-summary squash-summary epoch milestone explain conflict"
+diff timeline tag note-commit completion rejected trap incident invariant pattern rule plan entities owners capabilities branch merge-summary squash-summary epoch milestone explain conflict"
     if [[ $COMP_CWORD -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$cmds" -- "$cur"))
         return

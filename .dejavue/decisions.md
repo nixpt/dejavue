@@ -305,3 +305,9 @@ Domain owner: institutional-memory
 
 Author type: agent
 
+
+## 2026-07-14T00:05:28-05:00 — [STRATEGIC] [ADOPTED] Add 'plan' and 'rule' commands: plan captures an actionable finding into the repo's OWN planning convention (.jagent/, TODO.md, ...) with a .dejavue/plan.md fallback; rule records a soft, advisory project convention surfaced in the context boot packet.
+
+Reason:
+Agents kept finding issues while doing something else and dropping them, because capture required knowing where each repo keeps its plans. 'plan' removes that knowledge requirement (auto-detect + fallback), so capture costs one command and never fails for lack of a planner. 'rule' fills the missing normative tier between pattern (descriptive) and invariant (hard), giving projects a place to state conventions an arriving agent will otherwise violate by accident.
+

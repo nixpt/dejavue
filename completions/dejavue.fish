@@ -4,16 +4,16 @@
 set -l cmds version init start changed decision state handoff context status \
     check archive roster config install-skill log blame note since changelog ingest recall \
     worthiness get list annotate stats promote import export reference link search \
-    diff timeline tag note-commit completion rejected trap incident invariant pattern entities owners capabilities branch merge-summary squash-summary epoch milestone explain conflict
+    diff timeline tag note-commit completion rejected trap incident invariant pattern rule plan entities owners capabilities branch merge-summary squash-summary epoch milestone explain conflict
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l durability -a "temporary tactical strategic constitutional"
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l confidence -a "speculative proposed experimental adopted deprecated verified"
-complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l author-type -a "human agent orchestrator ci bot"
-complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l tension
-complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l value
-complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l domain-owner
+complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern rule plan branch epoch milestone conflict" -l author-type -a "human agent orchestrator ci bot"
+complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern rule plan branch epoch milestone conflict" -l tension
+complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern rule plan branch epoch milestone conflict" -l value
+complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern rule plan branch epoch milestone conflict" -l domain-owner
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l freshness
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l expires-after
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l derived-from
@@ -64,3 +64,8 @@ complete -c dejavue -n "__fish_seen_subcommand_from decision note trap incident 
 complete -c dejavue -n "__fish_seen_subcommand_from log recall since" -l since -d "Since date or commit"
 complete -c dejavue -n "__fish_seen_subcommand_from check" -l fix -d "Auto-fix issues"
 complete -c dejavue -n "__fish_seen_subcommand_from import" -rF
+
+complete -c dejavue -n "__fish_seen_subcommand_from plan" -l kind -a "issue gap opportunity idea cleanup"
+complete -c dejavue -n "__fish_seen_subcommand_from plan" -l list
+complete -c dejavue -n "__fish_seen_subcommand_from plan" -l target -r
+complete -c dejavue -n "__fish_seen_subcommand_from rule" -l scope -r
