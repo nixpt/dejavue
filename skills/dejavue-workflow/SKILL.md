@@ -294,6 +294,38 @@ commit's file changes as `file_changed` events. The hook is one line
 calling `dejavue changed --auto`; no manual `changed` calls needed for
 committed work.
 
+### The hook's dirty diff is self-perpetuating — don't chase it to zero
+
+Because the hook fires **after** the commit completes, the `file_changed`
+event it appends describes a commit that has *already happened* — it
+physically cannot be included in that same commit. The result: right
+after every commit, `.dejavue/timeline.jsonl` shows one new dirty line
+(a record of the commit you just made). If you commit that line too,
+the hook fires again and appends a record of *that* commit — forever.
+This is expected behavior by construction, not a bug to fix or a sign
+something is broken.
+
+What this means in practice (verified live, s408 2026-07-29, on
+`workspace-meta`):
+
+- **A single dangling `file_changed` line for the most recent commit is
+  normal.** Don't loop trying to reach a permanently clean tree — one
+  will always regenerate.
+- **Multiple pending lines, or lines several commits old, ARE worth
+  sweeping** — that's a sign the hook's records piled up uncommitted
+  across a stretch of work (seen this session in exosphere: BUCKETS-11's
+  merge-decision + timeline records sat uncommitted since s396, three
+  sessions earlier). A single `git add .dejavue/ && git commit` closes
+  the gap; don't hand-edit the JSONL.
+- **At session-start or session-close, when checking `git status` for a
+  clean tree** ([[foreman-session-start]], [[foreman-session-close]]):
+  a lone trailing `.dejavue/timeline.jsonl` diff recording the
+  just-made commit is not a "dirty tree" finding worth flagging or
+  blocking on — distinguish it from real uncommitted work by checking
+  *what* the diff contains (one `file_changed`/`commit` line referencing
+  a commit hash you recognize as your own last one) before treating the
+  repo as unclean.
+
 ## `merge=union` for parallel branches
 
 If multiple agents commit on parallel branches that all touch
