@@ -341,3 +341,18 @@ Author type: agent
 Reason:
 Agents kept finding issues while doing something else and dropping them, because capture required knowing where each repo keeps its plans. 'plan' removes that knowledge requirement (auto-detect + fallback), so capture costs one command and never fails for lack of a planner. 'rule' fills the missing normative tier between pattern (descriptive) and invariant (hard), giving projects a place to state conventions an arriving agent will otherwise violate by accident.
 
+
+## 2026-08-13T03:19:21-05:00 — [STRATEGIC] [ADOPTED] [ARCHITECTURAL] Vendor dejavue.py itself into .dejavue/ during init, not just skill docs
+
+Reason:
+The generated CLAUDE.md boot stub has promised a 'python3 .dejavue/dejavue context' fallback since v2.0.0's discovery wave, but _install_discovery() only ever copied skills/*/SKILL.md — never the running script. Confirmed systemic across every scaffolded repo checked, including this repo's own self-hosted .dejavue/. Filed and root-caused as github.com/nixpt/dejavue/issues/9 by an exploration agent working from a downstream adopter (checkstand).
+
+Artifacts: dejavue.py, tests/test_dejavue.sh, CHANGELOG.md
+
+Rejected alternatives:
+- **Leave the fallback text as documentation-only / aspirational**: rejected, a promise in generated boot text that's never been true for any adopter repo is worse than not making the promise at all
+- **Rename the .dejavue/dejavue/ skill directory to free up the name for the script**: rejected, breaking change to the established .dejavue/<skill-name>/SKILL.md convention across 65+ already-scaffolded repos, for no real benefit over just picking a distinct filename
+
+Outcome:
+_install_discovery() now also copies dejavue.py to .dejavue/dejavue.py (distinct name from the .dejavue/dejavue/ skill directory), idempotent/best-effort like the skill copy. Boot stub text updated to reference the real filename. 2 new integration tests (179, 180): vendored copy is genuinely runnable, and a second init without --force preserves local edits rather than clobbering them. 191/191 tests passing.
+
