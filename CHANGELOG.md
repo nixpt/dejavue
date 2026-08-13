@@ -72,6 +72,20 @@ any v1.x release can be read by any later v1.x release without migration.
 - **`dejavue conflict record --reason TEXT [--path PATH]`** — record conflict-resolution
   rationale as timeline memory and surface it in `explain <file>`.
 
+### Fixed
+
+- **`init`'s CLAUDE.md fallback line was never actually true.** Since v2.0.0's
+  discovery wave, the generated boot stub has said "Fallback if not on PATH:
+  `python3 .dejavue/dejavue context`" — but `_install_discovery()` only ever
+  copied `skills/*/SKILL.md` into `.dejavue/`, never the running `dejavue.py`
+  itself. Confirmed systemic across every scaffolded repo checked, including
+  this repo's own self-hosted `.dejavue/`. `init` now vendors the script too
+  (as `.dejavue/dejavue.py` — `.dejavue/dejavue/` is already a skill
+  directory, so it can't share that name), idempotently and best-effort like
+  the skill copy, and the boot stub text now points at the real filename.
+  Reported and root-caused in
+  [nixpt/dejavue#9](https://github.com/nixpt/dejavue/issues/9).
+
 ## [2.1.0] — 2026-06-06
 
 **Institutional-memory P0 wave** — the five top-rated items from the design backlog roadmap

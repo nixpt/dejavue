@@ -2969,6 +2969,47 @@ test_repo_flag_bad_path_exits_nonzero() {
     assert_eq "bad --repo exits 2" "2" "$rc" || return 1
 }
 
+# 179. init vendors dejavue.py into .dejavue/ AND the vendored copy is
+#      genuinely runnable — makes the CLAUDE.md "Fallback if not on PATH:
+#      python3 .dejavue/dejavue.py <command>" promise actually true instead
+#      of just present as text (github.com/nixpt/dejavue/issues/9).
+test_init_vendors_runnable_script() {
+    TEST_DIR="$(setup_repo)"
+    trap 'cd /; rm -rf "$TEST_DIR"' EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    assert_file_exists "dejavue.py vendored into .dejavue/" ".dejavue/dejavue.py" || return 1
+
+    local content
+    content="$(cat CLAUDE.md)"
+    assert_contains "CLAUDE.md fallback references the vendored .py filename" "$content" ".dejavue/dejavue.py context" || return 1
+
+    # The point isn't just that the file exists — it has to actually run,
+    # exactly the way the CLAUDE.md fallback line tells an agent to invoke it.
+    local out
+    out="$("$PYTHON" .dejavue/dejavue.py context 2>&1)"
+    local rc=$?
+    assert_eq "vendored script exits 0 on 'context'" "0" "$rc" || return 1
+    assert_contains "vendored script produces real context output" "$out" "Decisions" || return 1
+
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 180. re-running init does not clobber a vendored script the user may have
+#      locally modified — idempotent like the skill install, not force-overwritten
+test_init_vendor_idempotent_no_force() {
+    TEST_DIR="$(setup_repo)"
+    trap 'cd /; rm -rf "$TEST_DIR"' EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    echo "# local marker" >> .dejavue/dejavue.py
+    dv init >/dev/null 2>&1  # second run, no --force
+    local content
+    content="$(cat .dejavue/dejavue.py)"
+    assert_contains "second init without --force preserves local edit" "$content" "# local marker" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 main() {
@@ -3176,6 +3217,8 @@ main() {
     run_test "176 plan --list shows open items"               test_plan_list_open_items
     run_test "177 global --repo from another cwd"             test_repo_flag_from_other_cwd
     run_test "178 bad --repo exits nonzero"                   test_repo_flag_bad_path_exits_nonzero
+    run_test "179 init vendors runnable dejavue.py"           test_init_vendors_runnable_script
+    run_test "180 vendored script re-init preserves edits"    test_init_vendor_idempotent_no_force
 
     echo ""
     echo "========================================"
