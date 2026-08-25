@@ -32,3 +32,41 @@ seahorse-server.toml
 
 # Local audit artifacts
 .audit tool/
+
+# ── agent/MCP artifacts — never commit ──────────────────────────────────────
+# worktree-setup SEEDS a per-agent .mcp.json into every dispatched worktree,
+# carrying the live joker-mcp JWT_SECRET so each horse posts under its own
+# AGENT_NAME. That file must never be committed. It is exactly how a live
+# secret reached nixpt/nerve-mcp (729f370) and water-spider before it.
+#
+# Note the glob is *mcp*.json, NOT *.mcp.json — the narrow form does not match
+# `mcp_servers.json`, which is the filename that actually leaked. Do not narrow.
+/.mcp.json
+/.dispatch/
+/.claude/
+.claude/settings.local.json
+.jagent/*.db
+.jagent/*.db-shm
+.jagent/*.db-wal
+.jagent/*.db-journal
+.jagent/*.lock
+.jagent/*.sock
+.jagent/cache/
+.jagent/mcp/
+.jagent/*mcp*.json
+.khukuri/
+${SECURE_ENV_DB_PATH}*
+
+# Generic secret-shaped files — defense in depth.
+*.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+id_rsa*
+id_ed25519*
+id_ecdsa*
+credentials*.json
+.netrc
+secrets.json
