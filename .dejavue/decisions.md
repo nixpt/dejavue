@@ -356,3 +356,14 @@ Rejected alternatives:
 Outcome:
 _install_discovery() now also copies dejavue.py to .dejavue/dejavue.py (distinct name from the .dejavue/dejavue/ skill directory), idempotent/best-effort like the skill copy. Boot stub text updated to reference the real filename. 2 new integration tests (179, 180): vendored copy is genuinely runnable, and a second init without --force preserves local edits rather than clobbering them. 191/191 tests passing.
 
+
+## 2026-09-07T10:37:27-05:00 — [STRATEGIC] In-session capture via runner hooks ('dejavue hook posttooluse') + index freshness in the boot packet
+
+Reason:
+Git hooks only see committed work, so since/blame/explain were blind to the uncommitted window where most session reasoning happens. A stdin-JSON hook consumer folds runner PostToolUse events into canonical file_changed events with zero new deps, and external indexers' symbol_index events now surface as a boot-packet freshness section so arriving agents know whether structural answers are trustworthy.
+
+Rejected alternatives:
+- **Debounce/coalesce per-edit events into one per file per session**: extra state, marginal value — archive already collapses old file_changed noise
+- **Write session edits to a separate session-edits.jsonl**: a second file format splits recall/blame/explain coverage for no gain; reuse the event schema
+- **MCP server now**: capture half is served by hooks; retrieval over MCP stays a roadmap candidate until a concrete host demands it (CONTRIBUTING defers it)
+

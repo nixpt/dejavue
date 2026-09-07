@@ -4,7 +4,7 @@
 set -l cmds version init start changed decision state handoff context status \
     check archive roster config install-skill log blame note since changelog ingest recall \
     worthiness get list annotate stats promote import export reference link search \
-    diff timeline tag note-commit completion rejected trap incident invariant pattern rule plan entities owners capabilities branch merge-summary squash-summary epoch milestone explain conflict
+    diff timeline tag note-commit completion rejected trap incident invariant pattern rule plan entities owners capabilities branch merge-summary squash-summary epoch milestone explain conflict hook
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
@@ -24,6 +24,11 @@ complete -c dejavue -n "__fish_seen_subcommand_from note" -l type -a "note block
 # export
 complete -c dejavue -n "__fish_seen_subcommand_from export" -l format -a "json md"
 complete -c dejavue -n "__fish_seen_subcommand_from export" -l target -a "claude codex gemini copilot cursor all"
+
+complete -c dejavue -n "__fish_seen_subcommand_from plan" -l kind -a "issue gap opportunity idea cleanup"
+complete -c dejavue -n "__fish_seen_subcommand_from plan" -l list
+complete -c dejavue -n "__fish_seen_subcommand_from plan" -l target -r
+complete -c dejavue -n "__fish_seen_subcommand_from rule" -l scope -r
 # capabilities
 complete -c dejavue -n "__fish_seen_subcommand_from capabilities" -l format -a "json text"
 # branch / merge-summary
@@ -64,8 +69,3 @@ complete -c dejavue -n "__fish_seen_subcommand_from decision note trap incident 
 complete -c dejavue -n "__fish_seen_subcommand_from log recall since" -l since -d "Since date or commit"
 complete -c dejavue -n "__fish_seen_subcommand_from check" -l fix -d "Auto-fix issues"
 complete -c dejavue -n "__fish_seen_subcommand_from import" -rF
-
-complete -c dejavue -n "__fish_seen_subcommand_from plan" -l kind -a "issue gap opportunity idea cleanup"
-complete -c dejavue -n "__fish_seen_subcommand_from plan" -l list
-complete -c dejavue -n "__fish_seen_subcommand_from plan" -l target -r
-complete -c dejavue -n "__fish_seen_subcommand_from rule" -l scope -r

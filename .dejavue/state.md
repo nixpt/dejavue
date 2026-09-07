@@ -1,5 +1,5 @@
 # State
 
-Updated: 2026-06-28T23:55:28-05:00
+Updated: 2026-09-07T10:37:27-05:00
 
-Roadmap domain_owner field shipped: --domain-owner stores one normalized owner, context/recall display and index it, owners [NAME] lists/filters owner-scoped memory, capabilities advertise domain_owner, and the full integration suite passes.
+v2.2.0 wave shipped: 'dejavue hook posttooluse' consumes runner PostToolUse JSON from stdin and records uncommitted edits as session-hook file_changed events (capabilities.features.session_hooks); context boot packet surfaces external index freshness from symbol_index/symbol_index_incremental events (+30d staleness warning); embedded completions re-synced with rule/plan; VERSION+pyproject bumped 2.1.0 -> 2.2.0; tests 191 -> 195.

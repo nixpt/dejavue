@@ -9,6 +9,22 @@ any v1.x release can be read by any later v1.x release without migration.
 
 ### Added
 
+- **`dejavue hook posttooluse`** — in-session capture: consume a coding agent's
+  PostToolUse-style hook JSON from stdin (Claude Code and compatible runners) and
+  record the touched file as a `file_changed` event (agent `session-hook`, tool
+  name attached), closing the uncommitted-work window the post-commit hook can't
+  see. Best-effort by design: a repo without `.dejavue/` is a silent no-op; malformed
+  input exits nonzero with a message — a silently swallowed hook error is
+  indistinguishable from success and stays dead for months. Advertised as
+  `features.session_hooks` in `capabilities`.
+- **Index freshness in the boot packet** — `dejavue context` now surfaces an
+  `index freshness` section when the timeline contains `symbol_index` /
+  `symbol_index_incremental` events (the documented foreign-event schema external
+  structural indexers can append): last full index, its age, and incremental update
+  count. `_staleness_warnings` also flags index events older than 30 days, so
+  an arriving agent knows whether structural answers are trustworthy without
+  reindexing first. Standardizes the completions with the `rule`/`plan` commands
+  that had drifted out of the embedded scripts.
 - **`dejavue plan TEXT [--kind …] [--target PATH] [--list]`** — capture an actionable
   item (issue / gap / opportunity / idea / cleanup) into **the repo's own planning
   convention**, not into a dejavue-specific file. Resolves the target in precedence

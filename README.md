@@ -212,6 +212,7 @@ git                — mechanical history (commits, diffs)
 | `dejavue note TEXT [--tag TAG]` | Lightweight timestamped note between `annotate` and `decision`. |
 | `dejavue annotate <doc> "note"` | Append a timestamped note to a doc without rewriting it. |
 | `dejavue changed PATH --summary TEXT` | Record file change event manually (post-commit hook does this automatically). |
+| `dejavue hook posttooluse` | Consume a runner's PostToolUse JSON from stdin and record the uncommitted edit. |
 
 **Capture + conventions**
 
@@ -339,6 +340,41 @@ update so the worktree returns clean instead of staying dirty.
 If a non-dejavue hook already exists, `init` will warn and refuse to overwrite
 unless `--force` is passed.
 
+## In-session capture via runner hook
+
+Git hooks only see *committed* work. To also capture edits as they happen
+(the uncommitted window, where most of a session's real reasoning happens),
+wire dejavue's hook consumer into your coding agent as a PostToolUse-style
+hook. For Claude Code, add to `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [{"type": "command", "command": "dejavue hook posttooluse"}]
+      }
+    ]
+  }
+}
+```
+
+Every edit-tool use then records one `file_changed` event (agent
+`session-hook`, with the tool name) to the timeline — so `since`, `blame`,
+and `explain` see in-session work, not just commits. The consumer is
+best-effort by design: in a repo without `.dejavue/` it exits 0 silently,
+and malformed input exits nonzero with a message rather than failing quietly.
+
+## External index freshness in the boot packet
+
+If a structural index tool appends `symbol_index` / `symbol_index_incremental`
+events to the timeline (the documented foreign-event schema — JSONL, same
+`append_event` contract), `dejavue context` surfaces an **index freshness**
+section: when the last full index ran, how old it is, and how many
+incremental updates followed. An arriving agent can trust or re-derive
+structural answers without reindexing first. Repos with index events older
+than 30 days get a staleness warning.
 
 ## `since` reference forms
 

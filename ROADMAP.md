@@ -320,6 +320,13 @@ One rule for any integration: it must answer one of — *what changed / why / wh
 - **`dejavue repo map` (intra-repo scope, NEEDS-CARE)** — parse `.gitmodules` / Cargo `[workspace]` / npm workspaces to add a `scope:` dimension *within* a repo (distinct from the repo-and-above "scope layering" above). Flat descriptor, no graph DB.
 - **`worktree spawn` — scope call:** the action-oriented multi-agent dispatch wrapper shells out to `git worktree add` and overlaps orchestration's orchestration. Likely belongs in orchestration, not dejavue — flag before building. (scratch: `deja-git.md`)
 
+**Shipped in this tier (2026-09):** `dejavue hook posttooluse` — the runner-hook side of Tier 3: an external agent hook produces the signal (PostToolUse JSON), the thin consumer folds it into canonical `file_changed` events. No runner-specific SDK, no daemon.
+
+**Candidates spawned by the runner-hook pattern:**
+- **`hook` kinds beyond `posttooluse`** — session start/end, subagent stop; same stdin-JSON consumer shape, per-kind field extraction. Only add a kind when a real runner needs it; don't speculatively collect them.
+- **Session-economics tally** — count recall/since/hook hits per session so adopters can answer "what did memory save me?" (seen working well in external context layers). Needs a noise design first: aggregate counters, not one timeline event per query.
+- **MCP thin adapter (Tier 3, existing candidate)** — the hook consumer covers capture; recall/context/since over MCP remains the retrieval half, still deferred until a concrete host demands it.
+
 ---
 
 ## 🛑 Out of scope (won't ship in dejavue itself)
