@@ -65,6 +65,7 @@ _dejavue() {
                 'milestone:Record a named project milestone'
                 'explain:Explain why a file or commit exists'
                 'conflict:Record or list conflict-resolution rationale'
+                'hook:Consume a runner hook stdin JSON (posttooluse) and record the edit'
             )
             _describe 'subcommand' subcommands ;;
         args)

@@ -294,6 +294,40 @@ commit's file changes as `file_changed` events. The hook is one line
 calling `dejavue changed --auto`; no manual `changed` calls needed for
 committed work.
 
+### In-session capture (runner hooks)
+
+Git hooks only see *committed* work; the post-commit hook is blind to
+everything a session did before committing. `dejavue hook posttooluse`
+closes that window: wire it into your coding agent as a PostToolUse-style
+hook (Claude Code `.claude/settings.json`):
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [{"type": "command", "command": "dejavue hook posttooluse"}]
+      }
+    ]
+  }
+}
+```
+
+Every edit-tool use then records a `file_changed` event (agent
+`session-hook`, tool name attached) — so `since`, `blame`, and `explain`
+see in-session work too. It is best-effort: silent no-op without
+`.dejavue/`, nonzero exit with a message on malformed input (a hook error
+that swallows itself stays dead for months).
+
+### External index freshness in the boot packet
+
+Structural index tools can append `symbol_index` / `symbol_index_incremental`
+events to the timeline (same JSONL schema, same append contract). When they
+exist, `dejavue context` shows an `index freshness` section — last full
+index, age, incremental count — and warns past 30 days. An arriving agent
+reads this before deciding whether to trust or rebuild a structural index.
+
 ### The hook's dirty diff is self-perpetuating — don't chase it to zero
 
 Because the hook fires **after** the commit completes, the `file_changed`
