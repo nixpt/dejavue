@@ -8,7 +8,7 @@ did              = "did:openko:project:dejavue"
 version          = "2.0.0"
 description      = "Zero-ceremony repo-local agent memory + DCP context protocol for coding agents"
 category         = "ecosystem"   # core | governed-commons | ecosystem | commercial
-license          = "OCPL-1.1"
+license          = "MIT"
 repository       = "https://github.com/nixpt/dejavue"
 author           = "did:openko:human:nixpt"
 foundry_registry = "did:openko:federation:seed"
@@ -80,7 +80,7 @@ id   = "did:openko:cell:openko-tools"
 
 [[stewardship.succession]]
 type = "commons"
-license = "OCPL-1.1"
+license = "MIT"
 
 # Preservation invariants (survive all stewardship transitions)
 attribution      = "permanent"   # creator lineage never removed from any derivative
