@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 nixpt and Dejavue Contributors. See LICENSE (https://github.com/nixpt/dejavue).
 import argparse
 import contextlib
 import difflib
