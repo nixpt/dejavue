@@ -292,6 +292,19 @@ def add_meta_args(parser):
     )
 
 
+def add_lifecycle_args(parser):
+    """--freshness / --expires-after / --derived-from / --stability (decision, note)."""
+    parser.add_argument("--freshness", default=None,
+                        help="Freshness label for read-time staleness hints (e.g. volatile).")
+    parser.add_argument("--expires-after", dest="expires_after", default=None,
+                        help="Relative expiry such as 90d, 12h, 30m, or 10s.")
+    parser.add_argument("--derived-from", action="append", dest="derived_from", default=[],
+                        help="Repeatable lineage pointer to a prior event title or event_id.")
+    parser.add_argument("--stability",
+                        choices=["ephemeral", "operational", "architectural", "constitutional", "historical"],
+                        help="Retention / stability class label.")
+
+
 def normalize_freshness(args):
     """Normalize the optional --freshness label while preserving user vocabulary."""
     value = getattr(args, "freshness", None) or ""
@@ -1121,29 +1134,19 @@ def cmd_decision(args):
     stability = normalize_stability(args)
     author_type = (getattr(args, "author_type", None) or "").strip().lower()
 
-    type_label = f"[{event_type.upper()}] " if event_type != "decision" else ""
-    dur_label = f"[{durability.upper()}] " if durability else ""
-    conf_label = f"[{confidence.upper()}] " if confidence else ""
-    stab_label = f"[{stability.upper()}] " if stability else ""
-    entry = f"\n## {ts} — {dur_label}{conf_label}{stab_label}{type_label}{args.title}\n\nReason:\n{args.reason}\n"
-    if supersedes:
-        entry += f"\nSupersedes: {supersedes}\n"
-    if artifacts:
-        entry += f"\nArtifacts: {', '.join(artifacts)}\n"
-    if freshness:
-        entry += f"\nFreshness: {freshness}\n"
-    if expires_after:
-        entry += f"\nExpires after: {expires_after}\n"
-    if derived_from:
-        entry += f"\nDerived from: {', '.join(derived_from)}\n"
-    if tensions:
-        entry += f"\nTensions: {', '.join(tensions)}\n"
-    if values:
-        entry += f"\nValues: {', '.join(values)}\n"
-    if domain_owner:
-        entry += f"\nDomain owner: {domain_owner}\n"
-    if author_type:
-        entry += f"\nAuthor type: {author_type}\n"
+    labels = "".join(f"[{v.upper()}] " for v in (durability, confidence, stability) if v)
+    if event_type != "decision":
+        labels += f"[{event_type.upper()}] "
+    entry = f"\n## {ts} — {labels}{args.title}\n\nReason:\n{args.reason}\n"
+    for label, value in (
+        ("Supersedes", supersedes), ("Artifacts", ", ".join(artifacts)),
+        ("Freshness", freshness), ("Expires after", expires_after),
+        ("Derived from", ", ".join(derived_from)), ("Tensions", ", ".join(tensions)),
+        ("Values", ", ".join(values)), ("Domain owner", domain_owner),
+        ("Author type", author_type),
+    ):
+        if value:
+            entry += f"\n{label}: {value}\n"
     if rejected:
         entry += "\nRejected alternatives:\n"
         for ra in rejected:
@@ -1368,7 +1371,7 @@ def cmd_status(args):
     if last_dec:
         print(f"Last decision: {dec_str}")
     if next_steps:
-        print(f"Next steps   :")
+        print("Next steps   :")
         for s in next_steps[:3]:
             print(f"  • {s}")
 
@@ -1562,7 +1565,7 @@ def cmd_archive(args):
         return
 
     if not args.yes:
-        print(f"Archive plan:")
+        print("Archive plan:")
         print(f"  Events before {cutoff} : {total_before}")
         print(f"  file_changed to drop  : {len(dropped_fc)}")
         print(f"  Other events to keep  : {kept_before}")
@@ -1679,7 +1682,7 @@ def cmd_config(args):
         cfg = _load_config()
         val = cfg.get(args.key)
         if val is None:
-            print(f"(not set)")
+            print("(not set)")
             sys.exit(1)
         else:
             print(val)
@@ -1972,7 +1975,7 @@ def cmd_conflict(args):
     action = args.action
     if action == "record":
         path = getattr(args, "path", None) or ""
-        summary = f"Conflict resolved" + (f" in {path}" if path else "") + f": {args.reason}"
+        summary = "Conflict resolved" + (f" in {path}" if path else "") + f": {args.reason}"
         append_event({
             "agent": resolve_agent(getattr(args, "agent", None)),
             "event": "conflict_record",
@@ -2039,11 +2042,11 @@ def cmd_rejected(args):
         hits.append(ev)
 
     if not hits:
-        msg = f"No rejected alternatives found" + (f" mentioning '{args.query}'" if query else "") + "."
+        msg = "No rejected alternatives found" + (f" mentioning '{args.query}'" if query else "") + "."
         print(msg)
         return
 
-    header = f"Rejected alternatives" + (f" mentioning '{args.query}'" if query else "") + f" ({len(hits)} decision(s)):\n"
+    header = "Rejected alternatives" + (f" mentioning '{args.query}'" if query else "") + f" ({len(hits)} decision(s)):\n"
     print(header)
     for ev in hits:
         ts = (ev.get("ts") or "")[:10]
@@ -2716,6 +2719,7 @@ def cmd_since(args):
     since_ts = None
     since_commit = None
     until_ts = None
+    range_override = None
     since_label = ref or ""
 
     if not args.agent and not ref:
@@ -2752,7 +2756,7 @@ def cmd_since(args):
         since_commit = base
         since_label = f"range {ref}"
         # override git output to use the explicit range, not base..HEAD
-        _range_override = ref
+        range_override = ref
         # bound the event window by the tip's date too, unless tip is HEAD (open-ended "up to now")
         if tip != "HEAD":
             until_ts = git_run("git", "log", "-1", "--format=%aI", tip) or None
@@ -2764,12 +2768,11 @@ def cmd_since(args):
         since_ts = ts_raw
         since_commit = ref
         since_label = f"commit {ref} ({since_ts[:10]})"
-    _range_override = locals().get("_range_override")
 
     print(f"Since {since_label}:\n")
 
     if since_commit:
-        git_range = _range_override if _range_override else f"{since_commit}..HEAD"
+        git_range = range_override or f"{since_commit}..HEAD"
         git_log = git_run("git", "log", "--oneline", git_range)
         git_stat = git_run("git", "diff", "--stat", git_range)
     elif since_ts:
@@ -2817,23 +2820,14 @@ def cmd_since(args):
         for line in event_meta_lines(ev, events):
             print(f"    {line}")
 
-    print(f"\nState transitions ({len(state_updates)}):")
-    if state_updates:
-        for ev in state_updates:
+    for heading, group in (("State transitions", state_updates), ("Handoffs in window", handoffs_in_window)):
+        print(f"\n{heading} ({len(group)}):")
+        for ev in group:
             print(f"  [{ev.get('ts','')}] {ev.get('summary','')}")
             for line in event_meta_lines(ev, events):
                 print(f"    {line}")
-    else:
-        print("  (none)")
-
-    print(f"\nHandoffs in window ({len(handoffs_in_window)}):")
-    if handoffs_in_window:
-        for ev in handoffs_in_window:
-            print(f"  [{ev.get('ts','')}] {ev.get('summary','')}")
-            for line in event_meta_lines(ev, events):
-                print(f"    {line}")
-    else:
-        print("  (none)")
+        if not group:
+            print("  (none)")
 
     notes_in_window = [ev for ev in window if ev.get("event") == "note"]
     if notes_in_window:
@@ -3318,7 +3312,6 @@ def _semantic_recall(query, limit=10):
 
 
 def cmd_recall(args):
-    global HAS_FTS5
     maybe_show_worthiness()
 
     query = args.query
@@ -4320,7 +4313,7 @@ def cmd_list(args):
             else:
                 print(f"  references/  (empty — add .md files to {REFERENCES})")
         else:
-            print(f"  references/  (not created)")
+            print("  references/  (not created)")
 
 
 def cmd_annotate(args):
@@ -4802,14 +4795,7 @@ def main():
                    help="How long-lived this decision is.")
     p.add_argument("--confidence", choices=["speculative", "proposed", "experimental", "adopted", "deprecated", "verified"],
                    help="How firm this decision is — a recall trust signal.")
-    p.add_argument("--freshness", default=None,
-                   help="Freshness label for read-time staleness hints (e.g. volatile).")
-    p.add_argument("--expires-after", dest="expires_after", default=None,
-                   help="Relative expiry such as 90d, 12h, 30m, or 10s.")
-    p.add_argument("--derived-from", action="append", dest="derived_from", default=[],
-                   help="Repeatable lineage pointer to a prior event title or event_id.")
-    p.add_argument("--stability", choices=["ephemeral", "operational", "architectural", "constitutional", "historical"],
-                   help="Retention / stability class label.")
+    add_lifecycle_args(p)
     p.add_argument("--artifacts", action="append", metavar="PATH",
                    help="File this decision is about (repeatable; makes `blame <path>` precise).")
     p.add_argument("--agent", default=None)
@@ -4898,14 +4884,7 @@ def main():
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.add_argument("--confidence", choices=["speculative", "proposed", "experimental", "adopted", "deprecated", "verified"],
                    help="How firm this note/claim is.")
-    p.add_argument("--freshness", default=None,
-                   help="Freshness label for read-time staleness hints (e.g. volatile).")
-    p.add_argument("--expires-after", dest="expires_after", default=None,
-                   help="Relative expiry such as 90d, 12h, 30m, or 10s.")
-    p.add_argument("--derived-from", action="append", dest="derived_from", default=[],
-                   help="Repeatable lineage pointer to a prior event title or event_id.")
-    p.add_argument("--stability", choices=["ephemeral", "operational", "architectural", "constitutional", "historical"],
-                   help="Retention / stability class label.")
+    add_lifecycle_args(p)
     p.set_defaults(func=cmd_note)
 
     p = sub.add_parser("since", help="Temporal delta since a date, commit, or agent's last session.")
