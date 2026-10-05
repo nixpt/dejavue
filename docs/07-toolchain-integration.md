@@ -206,7 +206,7 @@ Deja Vue: last handoff says "finish adapter tests"
 - Incident memory: operational trauma (outages, data corruption, failed migrations) is among the highest-value memory in software systems
 - Observability (OpenTelemetry, Sentry, Honeycomb): production failures that expose environment assumptions
 - Feature flags: record why a feature is flagged ("semantic recall hidden because embedding cache format may change")
-- License/compliance (cargo-deny, REUSE, license-checker): "Dependency X avoided because license conflicts with OCPL distribution goals"
+- License/compliance (cargo-deny, REUSE, license-checker): "Dependency X avoided because its license conflicts with our distribution goals"
 - Cross-repo workspace memory: the workspace-level extension of repo-scoped DCP
 
 ---

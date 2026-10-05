@@ -366,4 +366,8 @@ Rejected alternatives:
 - **Debounce/coalesce per-edit events into one per file per session**: extra state, marginal value — archive already collapses old file_changed noise
 - **Write session edits to a separate session-edits.jsonl**: a second file format splits recall/blame/explain coverage for no gain; reuse the event schema
 - **MCP server now**: capture half is served by hooks; retrieval over MCP stays a roadmap candidate until a concrete host demands it (CONTRIBUTING defers it)
+## 2026-10-05T04:59:54-05:00 — License changed from OCPL 1.0 to MIT
+
+Reason:
+The OCPL text (openko-network/ocpl) is no longer publicly accessible, so dejavue could not be adopted or audited under it. The steward is the sole copyright holder (all commits by the owner or the owner's agents; no outside PRs or forks), so relicensing future releases needs no other consent. STEWARDSHIP.md's own no-relicense-without-vote clause was amended in the same change by the steward. Earlier grants (MIT for v0.1.0-v1.3.0, OCPL 1.0 for v2.0.1-v2.1.0) stay valid for those releases.
 

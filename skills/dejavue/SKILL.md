@@ -1,5 +1,6 @@
 ---
 name: dejavue
+license: MIT (Copyright (c) 2026 nixpt and Dejavue Contributors; https://github.com/nixpt/dejavue)
 description: |
   The dejavue command surface — entry point for dejavue, the repo-local
   agent memory tool (an event log of the *why* that git can't capture:
