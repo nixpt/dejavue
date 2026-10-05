@@ -395,3 +395,23 @@ Rejected alternatives:
 - **Keep vendoring by default**: the fallback promise stays true but every repo carries a stale ~5k-line copy
 - **Remove vendoring entirely**: offline/air-gapped adopters lose the only zero-install fallback
 
+
+## 2026-10-05T18:56:58-05:00 — [STRATEGIC] [ADOPTED] Timelines become session directories of immutable event files
+
+Reason:
+A single shared timeline.jsonl conflicts on forges: forge merges run in bare repositories that read no in-tree .gitattributes, so merge=union never applies there; union also reorders lines and resurrects deleted ones. One immutable file per event, grouped by session (.dejavue/timelines/<date>.<agent>@<box>.<session-id>/<event-id>.json), cannot conflict under any merge, squash or cherry-pick, and keeps per-session/agent/machine views as directory listings. Design: docs/09-timelines-and-session-boundary.md. Ships with a DCP version bump (1.1 readers, 2.0 writers).
+
+Rejected alternatives:
+- **one append-only .jsonl per session**: add/add conflicts after squash-then-continue or cherry-pick
+- **flat month-sharded event files**: loses the session grouping as a path-level view
+- **keep merge=union**: forges ignore it
+
+
+## 2026-10-05T18:56:58-05:00 — [STRATEGIC] [ADOPTED] dejavue holds the durable why; session tools hold what happened, including handoff and state
+
+Reason:
+Test: would a fresh agent on another machine need it to avoid a mistake or a re-decision? Then it is a dejavue timeline event (decisions, traps, invariants, rules, supersessions), written only by explicit capture. Otherwise it is a session record (lifecycle, progress, next steps, handoff, current state). One home per record: events carry a session id, sessions link to event ids. dejavue stops writing state.md/handoff.md together with the DCP 2.0 base-loop change (8.1 freezes it today).
+
+Rejected alternatives:
+- **keep both tools writing decisions and handoffs**: double entry and divergent handoffs
+

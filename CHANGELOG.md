@@ -40,6 +40,11 @@ any v1.x release can be read by any later v1.x release without migration.
 
 ### Added
 
+- **Design: conflict-free timelines and the session boundary**
+  ([`docs/09-timelines-and-session-boundary.md`](docs/09-timelines-and-session-boundary.md)). Forge merges ignore
+  `merge=union`, so a shared `timeline.jsonl` conflicts on hosted PRs; the timeline moves to session directories of
+  immutable event files. dejavue keeps the durable *why*; session tools own handoff and state. Accepted, not yet
+  implemented; ships with DCP 1.1 (readers) and 2.0 (writers).
 - **`dejavue hook posttooluse`** — in-session capture: consume a coding agent's
   PostToolUse-style hook JSON from stdin (Claude Code and compatible runners) and
   record the touched file as a `file_changed` event (agent `session-hook`, tool
