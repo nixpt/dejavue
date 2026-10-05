@@ -422,6 +422,7 @@ test_post_commit_hook_fires() {
     after="$(repo_snapshot)"
     assert_eq "legacy hook: no amend, clean tree, timeline untouched" "$after" "$sha||$tl_before" || return 1
     assert_eq "commit message not rewritten" "$(git log -1 --format=%s)" "hook test commit" || return 1
+    assert_contains "check marks the old hook obsolete" "$(dv check 2>&1)" "post-commit hook  — obsolete" || return 1
 
     # A rebase replays post-commit per pick; it must not stop on a dirty timeline.
     git checkout -q -b side HEAD~1
