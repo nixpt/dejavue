@@ -1,7 +1,32 @@
 # 10: `timeline.jsonl` through GitHub PRs, and a non-linear timeline
 
 **Ticket:** DEJAVUE-REVIEW-1 (follow-up) · **Author:** architect · **Date:** 2026-10-05 · **Base:** doc 09 on the same branch
-**Status:** design proposal only. Nothing here is ratified. §6 adds captain decisions **C9–C15**, continuing doc 09's C1–C8.
+**Status:** design proposal, **partly ratified by the captain in s473** (see the box below). §6 adds captain
+decisions **C9–C15**, continuing doc 09's C1–C8.
+
+> **Captain ratification, s473 (2026-10-05). Recorded by foreman; supersedes §4.1's path layout.**
+>
+> 1. **Layout: session directories of immutable event files.**
+>    `.dejavue/timelines/<date>.<agent>@<box>.<session-id>/<hlc-id>.json`, one directory per session and one file
+>    per event. It keeps §4's properties (immutable files, so no merge, squash, salvage or cherry-pick can conflict;
+>    HLC-ULID ids per §4.2; optional `parents` per §4.3), but groups events by session in the path instead of by
+>    month (`events/<YYYY-MM>/`). `<agent>@<box>` follows deck12's fork-naming rule; `<session-id>` is the jsess
+>    session id. Events written outside a jsess session need a defined fallback session-dir name; specify it in P2.
+>    An earlier draft of the decision, one append-only `.jsonl` per session, was dropped because §1's evidence
+>    shows add/add conflicts for squash-then-continue and salvage. This resolves **C9** (yes, change the storage).
+> 2. **Boundary between `.dejavue/timelines/` and `.jagent/sessions/`.** Test: would a fresh agent on another box
+>    need it to avoid a mistake or a re-decision? Then it is a timeline event. Does it describe what someone did or
+>    will do next? Then it is a session record. Timelines hold the durable *why* only (decisions, traps,
+>    invariants, rules, supersessions), written by explicit acts (`dejavue decision|rule|trap`,
+>    `jsess decision --durable`). Sessions hold the rest, **including handoff and current state**. One home per
+>    record: an event carries `session` as provenance, and the session links to the event id. This resolves doc
+>    09's **C2**. It leaves the post-commit hook nothing to write, which implies **C1**.
+> 3. **Vendoring off by default** (doc 09 **C5**), chosen for the DEJAVUE-OPT-1 shrink.
+>
+> Still open: C3, C4, C6, C7, C8 (feature pruning was explicitly kept out of DEJAVUE-OPT-1), C10–C12, C14, C15.
+> **C13** (recording `<agent>@<box>` in public repos) is implied **yes for directory names** by the layout above,
+> but the captain should confirm it explicitly for public repos (dejavue itself is public).
+> The same decisions are recorded for deck12's meta layer in nixpt/deck12 `docs/DESIGN.md` §6.5 / DECK-24.
 
 The captain asked: *"GitHub also doesn't handle timeline.jsonl changes coming through PRs, so look into that. Maybe
 we can create a non-linear timeline, which would allow us to have multiple timelines."*
