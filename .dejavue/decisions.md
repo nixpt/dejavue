@@ -356,3 +356,9 @@ Rejected alternatives:
 Outcome:
 _install_discovery() now also copies dejavue.py to .dejavue/dejavue.py (distinct name from the .dejavue/dejavue/ skill directory), idempotent/best-effort like the skill copy. Boot stub text updated to reference the real filename. 2 new integration tests (179, 180): vendored copy is genuinely runnable, and a second init without --force preserves local edits rather than clobbering them. 191/191 tests passing.
 
+
+## 2026-10-05T04:59:54-05:00 — License changed from OCPL 1.0 to MIT
+
+Reason:
+The OCPL text (openko-network/ocpl) is no longer publicly accessible, so dejavue could not be adopted or audited under it. The steward is the sole copyright holder (all commits by the owner or the owner's agents; no outside PRs or forks), so relicensing future releases needs no other consent. STEWARDSHIP.md's own no-relicense-without-vote clause was amended in the same change by the steward. Earlier grants (MIT for v0.1.0-v1.3.0, OCPL 1.0 for v2.0.1-v2.1.0) stay valid for those releases.
+
