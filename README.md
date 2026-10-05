@@ -83,15 +83,14 @@ Five minutes: init, start, commit, decide, hand off, recall.
 ```
 $ cd myproject/
 $ dejavue init
-Installed post-commit hook at .git/hooks/post-commit
+Installed pre-push hook at .git/hooks/pre-push
 Initialized .dejavue/
 
 $ dejavue start --agent claude --goal "Add rate-limiting middleware"
 Session started. Goal: Add rate-limiting middleware
 
-# ... make changes, git commit — hook fires automatically ...
+# ... make changes, git commit — git is the file-change log, dejavue keeps the why ...
 $ git commit -m "add token-bucket rate limiter"
-Recorded 3 file_changed events for a81f2cd.
 
 $ dejavue decision "Token-bucket over leaky-bucket" \
     --reason "Allows short bursts; simpler to tune per-endpoint" \
@@ -211,8 +210,8 @@ git                — mechanical history (commits, diffs)
 | `dejavue decision TITLE --reason TEXT [--rejected "opt: why"] [--outcome TEXT]` | Append architectural decision to `decisions.md` and timeline. |
 | `dejavue note TEXT [--tag TAG]` | Lightweight timestamped note between `annotate` and `decision`. |
 | `dejavue annotate <doc> "note"` | Append a timestamped note to a doc without rewriting it. |
-| `dejavue changed PATH --summary TEXT` | Record file change event manually (post-commit hook does this automatically). |
-| `dejavue hook posttooluse` | Consume a runner's PostToolUse JSON from stdin and record the uncommitted edit. |
+| `dejavue changed PATH --summary TEXT` | Record a file change event manually. (`--auto`, the retired post-commit hook mode, is a no-op.) |
+| `dejavue hook posttooluse` | Retired runner hook: drains stdin, writes nothing, exits 0. |
 
 **Capture + conventions**
 
@@ -322,49 +321,21 @@ next agent the most to rediscover. Use `--rejected "option: reason"` on every
 `dejavue decision` call.
 
 
-## Auto-capture via git hook
+## File changes: git is the log
 
-`dejavue init` installs a `post-commit` hook that fires automatically:
+dejavue does not copy commits into the timeline. `since`, `explain` and
+`changelog` read file history from git directly; the timeline holds what git
+can't: decisions, traps, invariants and rules.
 
-```bash
-#!/usr/bin/env bash
-# dejavue auto-capture
-if [ "${DEJAVUE_SKIP_AUTO_AMEND:-}" = "1" ]; then exit 0; fi
-exec python3 /path/to/dejavue.py changed --auto --commit "$(git rev-parse HEAD)" --amend
-```
-
-After every `git commit`, dejavue records one `file_changed` event per touched
-file with the diff stat and commit message, then amends HEAD with the timeline
-update so the worktree returns clean instead of staying dirty.
-
-If a non-dejavue hook already exists, `init` will warn and refuse to overwrite
-unless `--force` is passed.
-
-## In-session capture via runner hook
-
-Git hooks only see *committed* work. To also capture edits as they happen
-(the uncommitted window, where most of a session's real reasoning happens),
-wire dejavue's hook consumer into your coding agent as a PostToolUse-style
-hook. For Claude Code, add to `.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [{"type": "command", "command": "dejavue hook posttooluse"}]
-      }
-    ]
-  }
-}
-```
-
-Every edit-tool use then records one `file_changed` event (agent
-`session-hook`, with the tool name) to the timeline — so `since`, `blame`,
-and `explain` see in-session work, not just commits. The consumer is
-best-effort by design: in a repo without `.dejavue/` it exits 0 silently,
-and malformed input exits nonzero with a message rather than failing quietly.
+Earlier versions installed a `post-commit` hook that recorded a `file_changed`
+event per touched file and amended HEAD with the timeline update. That hook is
+retired. `init` no longer installs it, and the command an installed hook runs
+(`dejavue changed --auto …`) now exits 0 without writing or amending anything,
+so existing hooks go quiet with no per-repo change. Delete
+`.git/hooks/post-commit` whenever convenient; `dejavue check` marks it obsolete.
+The runner-hook consumer `dejavue hook posttooluse` is retired the same way: it
+reads its stdin and exits 0. Record a change by hand with
+`dejavue changed PATH --summary TEXT` when it carries a reason worth keeping.
 
 ## External index freshness in the boot packet
 
@@ -503,8 +474,8 @@ concurrently in the same directory can corrupt state. `fcntl.flock` advisory
 locking is applied to FTS rebuilds and ingest (v1.0+); JSONL appends are
 POSIX-atomic. The rare true-concurrent case is still best avoided.
 
-**Git hook in worktrees:** `dejavue init` installs the post-commit hook in
-the main repo's `.git/hooks/`. Git worktrees inherit it by default (verified
+**Git hooks in worktrees:** `dejavue init` installs its pre-push and
+post-checkout hooks in the main repo's `.git/hooks/`. Git worktrees inherit it by default (verified
 on git 2.40+). You do not need to run `dejavue init` separately in each
 worktree.
 
