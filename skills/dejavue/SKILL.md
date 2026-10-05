@@ -36,8 +36,8 @@ reminder and the command quick-reference.
 | `dejavue status` | One-liner health: agent, event count, last decision, open next-steps. |
 | `dejavue start --agent <n> --goal <g>` | Mark a session start (enables `since --agent`) |
 | `dejavue decision "<title>" --reason <r> --rejected "<alt>: <why>" [--supersedes <id>] [--durability {temporary,tactical,strategic,constitutional}]` | Capture an architectural decision + rejected alternatives. `--supersedes` marks an older decision as overridden; `--durability` classifies longevity. |
-| `dejavue state --summary <s>` | Overwrite state.md — "what's true right now" |
-| `dejavue handoff --summary <s> --next <n>` | Structured next-session brief |
+| `dejavue state --summary <s>` | Retired: prints a pointer to the session record (`jsess`), writes nothing |
+| `dejavue handoff --summary <s> --next <n>` | Retired: prints a pointer to the session record (`jsess`), writes nothing |
 | `dejavue note "<text>" --tag <t>` | Lightweight timestamped note (between annotate and decision) |
 | `dejavue annotate {state,handoff,decisions} "<note>"` | Append timestamped note to a doc without rewriting it |
 | `dejavue since <date\|commit\|ref..ref\|--agent>` | Temporal delta — "what changed since…". Accepts git revision ranges: `main..HEAD`, `v1.0..v2.0`. |

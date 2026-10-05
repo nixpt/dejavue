@@ -97,13 +97,7 @@ $ dejavue decision "Token-bucket over leaky-bucket" \
     --rejected "leaky-bucket: smooths too aggressively for API traffic"
 Decision recorded: Token-bucket over leaky-bucket
 
-$ dejavue state --summary "Rate limiter merged to main. Redis not required — in-memory store for now."
-State updated.
-
-$ dejavue handoff \
-    --summary "Token-bucket middleware done, tests green." \
-    --next "Wire per-user limits; see decisions.md for the burst-allowance rationale."
-Handoff written.
+# current state and next steps go in your session record (e.g. jsess), not dejavue
 ```
 
 Next session (or next agent):
@@ -200,8 +194,8 @@ git                — mechanical history (commits, diffs)
 |---|---|
 | `dejavue init [--ingest] [--map] [--wizard] [--vendor]` | Create `.dejavue/`, install hooks + `.gitattributes` + `.gitignore`, write `CLAUDE.md` boot stub. `--vendor` also copies `dejavue.py` and the skill files into `.dejavue/` as an offline fallback (off by default). `--wizard` seeds `context.md` interactively. |
 | `dejavue start --goal TEXT` | Record session start with intent. Foundation for `since --agent`. |
-| `dejavue state --summary TEXT` | Overwrite `state.md` with current snapshot. |
-| `dejavue handoff --summary TEXT --next TEXT` | Write `handoff.md` for the next session. |
+| `dejavue state --summary TEXT` | Retired: prints a pointer to the session record, writes nothing. |
+| `dejavue handoff --summary TEXT --next TEXT` | Retired: prints a pointer to the session record, writes nothing. An existing `state.md`/`handoff.md` is still shown by `context`, labelled legacy. |
 
 **Capture**
 

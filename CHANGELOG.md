@@ -26,6 +26,16 @@ any v1.x release can be read by any later v1.x release without migration.
   offering to reinstall it. `hook posttooluse` is retired the same way (drains
   stdin, exits 0, writes nothing); `capabilities` reports
   `features.session_hooks: false`. Manual `changed PATH` is unchanged.
+- **`state.md` / `handoff.md` are no longer written.** Current state and
+  handoffs belong to the session record (`.jagent/sessions`, written by jsess);
+  dejavue keeps the durable why. `init` stops creating the two stubs and
+  `init --wizard` seeds only `context.md`. `state`, `handoff` and
+  `annotate state|handoff` keep their names and flags, print a one-line pointer
+  and exit 0. Existing files are still read: `context` shows them labelled
+  `(legacy, last written <date>; …)`, `status` labels its next steps the same
+  way, `check` marks them legacy, and the state-staleness nags are gone.
+  **This departs from DCP/1.0 §8.1–8.2** (state/handoff are required there);
+  the spec change is tracked separately.
 - **Internal refactor, no behaviour change.** Shared helpers for the writer
   metadata fields and flags, the labeled-event commands
   (trap/incident/invariant/pattern/rule) and timeline parsing; `context` parses

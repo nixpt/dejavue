@@ -69,8 +69,10 @@ Step 1, before any work. From the repo root:
 dejavue context
 ```
 
-You get: `handoff.md` + `state.md` + `decisions.md` + last 10 timeline
-events. Treat as ground truth for "what was the prior session's frame".
+You get: `decisions.md` + invariants, rules, traps + last 10 timeline
+events: the durable why. A `state.md`/`handoff.md` from older releases is
+shown labelled **legacy** with its date; don't treat it as current. Current
+state and handoffs live in the session record (`jsess brief`).
 
 If `dejavue context` is empty or the directory doesn't exist, the repo
 isn't dejavue-enabled. Don't initialize reflexively — see "When NOT to
@@ -155,46 +157,21 @@ dejavue rejected "grpc"           # only those mentioning gRPC
 dejavue rejected "database"       # why we didn't use X database approach
 ```
 
-### State snapshots
+### State and handoff live in the session record
 
-After a meaningful milestone (not every commit):
+dejavue no longer writes `state.md` or `handoff.md`. "Where are we?" and
+"what's next?" belong to the session record (`.jagent/sessions/`, written
+by `jsess checkpoint` / `jsess close`), which is box-local and per-session.
+dejavue keeps what a fresh agent on another box needs to avoid a mistake
+or a re-decision. `dejavue state`, `dejavue handoff` and
+`dejavue annotate state|handoff` still run, so scripts don't break, but
+they only print a pointer and write nothing.
 
-```bash
-dejavue state --summary "<2-4 sentences on current state>" \
-  --agent <your-name>
-```
-
-This OVERWRITES `state.md`. The state.md is "what's true right now",
-not "what happened" — the timeline tracks history. Re-write whenever
-the answer to "where are we?" changes materially.
-
-### Annotations (lightweight notes)
-
-When you want to add a timestamped note WITHOUT rewriting state/handoff:
+To add a timestamped note to the decision log without a new decision:
 
 ```bash
-dejavue annotate state "note text"          # appends to state.md
-dejavue annotate handoff "note text"        # appends to handoff.md
 dejavue annotate decisions "note text"      # appends to decisions.md
 ```
-
-Good for mid-session context drops, partial updates, or noting an
-intermediate event without losing the prior content.
-
-### Session handoff (end of task)
-
-Before you sign off:
-
-```bash
-dejavue handoff \
-  --summary "<what's done, in 1-2 sentences>" \
-  --next "<1-4 concrete next steps for the receiver>" \
-  --agent <your-name>
-```
-
-The handoff is what the NEXT agent reads first via `dejavue context`.
-Treat it as the most-important artifact of your session — the
-short-format next-steps in `--next` shape the receiver's whole plan.
 
 ## Recall pattern (looking things up)
 
@@ -401,9 +378,8 @@ Takes ~30 seconds. Pays off compounding over future sessions.
 ### Session close
 
 ```bash
-dejavue state --summary "<current-state>" --agent <you>
-dejavue handoff --summary "<what's-done>" --next "<next-steps>" --agent <you>
-git add .dejavue/
+jsess checkpoint / jsess close              # state + next steps (session record)
+git add .dejavue/                            # any decisions/traps/rules you recorded
 git commit -m "<your message>"
 ```
 

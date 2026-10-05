@@ -582,26 +582,7 @@ def _index_freshness_lines():
 
 def _staleness_warnings():
     """Return list of warning strings about stale .dejavue/ state."""
-    import time
     warnings = []
-    now_ts = time.time()
-
-    if STATE.exists():
-        age_days = (now_ts - STATE.stat().st_mtime) / 86400
-        content = STATE.read_text(encoding="utf-8")
-        if "No state recorded yet" in content:
-            warnings.append("state.md is a default stub — run: dejavue state --summary '<current state>'")
-        elif age_days > 7:
-            warnings.append(f"state.md is {int(age_days)}d old — consider: dejavue state --summary '<current state>'")
-    else:
-        warnings.append("state.md missing — run: dejavue state --summary '<current state>'")
-
-    if HANDOFF.exists():
-        content = HANDOFF.read_text(encoding="utf-8")
-        if "before making changes" in content and "## Summary\n" not in content:
-            warnings.append("handoff.md is default stub — no prior handoff on record")
-    else:
-        warnings.append("handoff.md missing")
 
     if REFERENCES.exists() and not list(REFERENCES.glob("*.md")):
         warnings.append("references/ is empty — consider: dejavue init --map to scaffold map.md")
@@ -715,9 +696,6 @@ def cmd_init(args):
     DEJAVUE_DIR.mkdir(exist_ok=True)
     REFERENCES.mkdir(exist_ok=True)
 
-    if not STATE.exists():
-        STATE.write_text("# State\n\nNo state recorded yet.\n", encoding="utf-8")
-
     if not DECISIONS.exists():
         DECISIONS.write_text("# Decisions\n\n", encoding="utf-8")
 
@@ -726,13 +704,6 @@ def cmd_init(args):
 
     if not PATTERNS.exists():
         PATTERNS.write_text("# Patterns\n\n", encoding="utf-8")
-
-    if not HANDOFF.exists():
-        HANDOFF.write_text(
-            "# Handoff\n\nRead `.dejavue/state.md`, `.dejavue/decisions.md`,"
-            " and `.dejavue/timeline.jsonl` before making changes.\n",
-            encoding="utf-8",
-        )
 
     # DCP instruction layer (optional/additive — its absence breaks nothing).
     _scaffold_context()
@@ -1033,7 +1004,7 @@ def _scaffold_context():
 
 
 def _run_wizard(agent_default):
-    """3-question seed for context.md + state.md. Skippable / non-interactive:
+    """3-question seed for context.md. Skippable / non-interactive:
     on EOF (no tty, piped /dev/null) every answer falls back to its default."""
     repo = ""
     try:
@@ -1054,18 +1025,12 @@ def _run_wizard(agent_default):
     purpose = ask("  3. Purpose (one line) []? ", "")
 
     CONTEXT.write_text(_context_template(name=ptype, purpose=purpose), encoding="utf-8")
-    STATE.write_text(
-        f"# State\n\nUpdated: {now()}\n\n"
-        f"Project: {ptype}. Primary agent: {agent}."
-        + (f" Purpose: {purpose}." if purpose else "") + "\n",
-        encoding="utf-8",
-    )
     append_event({
         "agent": agent,
         "event": "wizard",
-        "summary": f"init --wizard seeded context.md + state.md (type={ptype}, agent={agent})",
+        "summary": f"init --wizard seeded context.md (type={ptype}, agent={agent})",
     })
-    print("\nSeeded context.md + state.md from wizard answers.")
+    print("\nSeeded context.md from wizard answers.")
 
 
 def cmd_start(args):
@@ -1184,38 +1149,29 @@ def cmd_decision(args):
     print(f"{event_type.capitalize()} recorded: {args.title}")
 
 
+# Handoff and current state belong to the session record (.jagent/sessions,
+# written by jsess). dejavue keeps the durable why and no longer writes
+# state.md / handoff.md; it still reads ones that exist, labelled legacy.
+_SESSION_POINTER = {
+    "state": "dejavue state: retired, nothing written — current state lives in .jagent/sessions (jsess checkpoint).",
+    "handoff": "dejavue handoff: retired, nothing written — handoffs live in .jagent/sessions (jsess checkpoint / jsess close).",
+}
+
+
 def cmd_state(args):
-    maybe_show_worthiness()
-    ts = now()
-    STATE.write_text(f"# State\n\nUpdated: {ts}\n\n{args.summary}\n", encoding="utf-8")
-    append_event({
-        "agent": resolve_agent(args.agent),
-        "event": "state_update",
-        "summary": args.summary,
-        **meta_fields(args),
-    })
-    print("State updated.")
+    print(_SESSION_POINTER["state"])
 
 
 def cmd_handoff(args):
-    maybe_show_worthiness()
-    ts = now()
-    next_section = args.next[0] if len(args.next) == 1 else "\n".join(f"- {item}" for item in args.next)
-    HANDOFF.write_text(
-        f"# Handoff\n\nUpdated: {ts}\n\n## Summary\n{args.summary}\n\n"
-        f"## Next Steps\n{next_section}\n\n## Boot Instructions\n"
-        "Read `.dejavue/handoff.md`, `.dejavue/state.md`, `.dejavue/decisions.md`,"
-        " and `.dejavue/timeline.jsonl` before making changes.\n",
-        encoding="utf-8",
-    )
-    append_event({
-        "agent": resolve_agent(args.agent),
-        "event": "handoff",
-        "summary": args.summary,
-        "next": args.next,
-        **meta_fields(args),
-    })
-    print("Handoff written.")
+    print(_SESSION_POINTER["handoff"])
+
+
+def _legacy_label(path):
+    """Boot-packet label for a state.md/handoff.md that dejavue no longer writes."""
+    m = re.search(r"^Updated:\s*(\S+)", path.read_text(encoding="utf-8"), re.M)
+    written = f"last written {m.group(1)[:10]}" if m else "undated"
+    return (f"{path.name} (legacy, {written}; current state and handoffs live in "
+            ".jagent/sessions — `jsess brief`)")
 
 
 def cmd_context(args):
@@ -1245,6 +1201,8 @@ def cmd_context(args):
     # doesn't read the project's rules on arrival will violate them by accident.
     for path, label in [(HANDOFF, "handoff.md"), (STATE, "state.md"), (DECISIONS, "decisions.md"), (INVARIANTS, "invariants.md"), (RULES, "rules.md"), (PATTERNS, "patterns.md")]:
         if path.exists():
+            if path in (HANDOFF, STATE):
+                label = _legacy_label(path)
             print(f"--- {label} ---\n")
             print(path.read_text(encoding="utf-8"))
 
@@ -1369,7 +1327,7 @@ def cmd_status(args):
     if last_dec:
         print(f"Last decision: {dec_str}")
     if next_steps:
-        print("Next steps   :")
+        print(f"Next steps   : from {_legacy_label(HANDOFF)}")
         for s in next_steps[:3]:
             print(f"  • {s}")
 
@@ -1434,10 +1392,11 @@ def cmd_check(args):
 
     # Core docs
     for path, label in [(STATE, "state.md"), (DECISIONS, "decisions.md"), (HANDOFF, "handoff.md")]:
-        if not path.exists():
+        if path in (STATE, HANDOFF):
+            if path.exists():
+                _report("PASS", label, "legacy — no longer written (sessions own it)")
+        elif not path.exists():
             _report("WARN", label, "missing")
-        elif label == "state.md" and "No state recorded yet" in path.read_text(encoding="utf-8"):
-            _report("WARN", label, "default stub — update with: dejavue state --summary '...'")
         else:
             _report("PASS", label)
 
@@ -4315,6 +4274,9 @@ def cmd_list(args):
 
 
 def cmd_annotate(args):
+    if args.doc in _SESSION_POINTER:
+        print(_SESSION_POINTER[args.doc])
+        return
     path = _resolve_doc(args.doc)
     if path is None:
         print(f"Unknown doc '{args.doc}'. Valid: state, handoff, decisions, references/<name>")
@@ -4751,7 +4713,7 @@ def main():
                    help="Also copy dejavue.py and the skills into .dejavue/ (offline fallback; off by default).")
     p.add_argument("--wizard", action="store_true",
                    help="Run a 3-question prompt (project type / agent / purpose) to seed "
-                        "context.md + state.md. Non-interactive (piped/EOF) uses defaults.")
+                        "context.md. Non-interactive (piped/EOF) uses defaults.")
     p.set_defaults(func=cmd_init)
 
     p = sub.add_parser("start", help="Record session start.")
@@ -4801,13 +4763,13 @@ def main():
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_decision)
 
-    p = sub.add_parser("state", help="Overwrite state.md with current snapshot.")
+    p = sub.add_parser("state", help="Retired: points at the session record; writes nothing.")
     p.add_argument("--summary", required=True)
     p.add_argument("--agent", default=None)
     add_meta_args(p)
     p.set_defaults(func=cmd_state)
 
-    p = sub.add_parser("handoff", help="Write handoff.md.")
+    p = sub.add_parser("handoff", help="Retired: points at the session record; writes nothing.")
     p.add_argument("--summary", required=True)
     p.add_argument("--next", action="append", required=True,
                    help="Repeatable; each occurrence becomes a bullet in handoff.md.")

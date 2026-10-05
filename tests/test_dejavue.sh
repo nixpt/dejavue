@@ -31,6 +31,12 @@ repo_snapshot() {
         "$(cksum < .dejavue/timeline.jsonl 2>/dev/null || echo none)"
 }
 
+seed_legacy() {
+    # state.md / handoff.md exactly as releases before the session split wrote them.
+    printf '# State\n\nUpdated: 2026-06-01T10:00:00-05:00\n\n%s\n' "$1" > .dejavue/state.md
+    printf '# Handoff\n\nUpdated: 2026-06-01T10:00:00-05:00\n\n## Summary\n%s\n\n## Next Steps\n%s\n\n## Boot Instructions\nRead `.dejavue/handoff.md`.\n' "$2" "$3" > .dejavue/handoff.md
+}
+
 dv() {
     # Run dejavue with given args from the test repo dir ($TEST_DIR must be set)
     "$PYTHON" "$DEJAVUE" "$@"
@@ -134,11 +140,11 @@ test_init_creates_structure() {
 
     dv init >/dev/null 2>&1
 
-    assert_file_exists "timeline.jsonl" ".dejavue/timeline.jsonl"
-    assert_file_exists "state.md" ".dejavue/state.md"
-    assert_file_exists "decisions.md" ".dejavue/decisions.md"
-    assert_file_exists "handoff.md" ".dejavue/handoff.md"
+    assert_file_exists "timeline.jsonl" ".dejavue/timeline.jsonl" || return 1
+    assert_file_exists "decisions.md" ".dejavue/decisions.md" || return 1
     [[ -d ".dejavue/references" ]] || { echo "  ASSERT FAIL: references/ dir missing" >&2; return 1; }
+    [[ ! -e .dejavue/state.md && ! -e .dejavue/handoff.md ]] \
+        || { echo "  ASSERT FAIL: init wrote state.md/handoff.md" >&2; return 1; }
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT
@@ -503,14 +509,13 @@ test_state_overwrites_state_md() {
     cd "$TEST_DIR"
 
     dv init >/dev/null 2>&1
-    dv state --summary "Phase 1 complete, tests green" >/dev/null 2>&1
-
-    local scontent
-    scontent="$(cat .dejavue/state.md)"
-    assert_contains "summary in state.md" "$scontent" "Phase 1 complete, tests green"
-    assert_contains "Updated timestamp" "$scontent" "Updated:"
-
-    assert_event_recorded "state_update event" ".dejavue/timeline.jsonl" "event" "state_update"
+    git add -A && git commit -q -m "init dejavue"
+    local before out rc
+    before="$(repo_snapshot)"
+    out="$(dv state --summary "Phase 1 complete, tests green" 2>&1)"; rc=$?
+    assert_eq "state exits 0" "$rc" "0" || return 1
+    assert_contains "state points at the session record" "$out" ".jagent/sessions" || return 1
+    assert_eq "state writes nothing" "$(repo_snapshot)" "$before" || return 1
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT
@@ -523,14 +528,13 @@ test_handoff_writes_handoff_md() {
     cd "$TEST_DIR"
 
     dv init >/dev/null 2>&1
-    dv handoff --summary "Shipped recall command" --next "Write README" >/dev/null 2>&1
-
-    local hcontent
-    hcontent="$(cat .dejavue/handoff.md)"
-    assert_contains "summary in handoff.md" "$hcontent" "Shipped recall command"
-    assert_contains "next in handoff.md" "$hcontent" "Write README"
-
-    assert_event_recorded "handoff event" ".dejavue/timeline.jsonl" "event" "handoff"
+    git add -A && git commit -q -m "init dejavue"
+    local before out rc
+    before="$(repo_snapshot)"
+    out="$(dv handoff --summary "Shipped recall command" --next "Write README" 2>&1)"; rc=$?
+    assert_eq "handoff exits 0" "$rc" "0" || return 1
+    assert_contains "handoff points at the session record" "$out" "jsess" || return 1
+    assert_eq "handoff writes nothing" "$(repo_snapshot)" "$before" || return 1
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT
@@ -542,20 +546,23 @@ test_handoff_multiple_next_renders_bullets() {
     trap cleanup EXIT
     cd "$TEST_DIR"
 
-    dv init >/dev/null 2>&1
-    dv handoff --summary "Multi-next test" \
-        --next "First step" \
-        --next "Second step" \
-        --next "Third step" >/dev/null 2>&1
-
-    local hcontent
-    hcontent="$(cat .dejavue/handoff.md)"
-    assert_contains "first next preserved" "$hcontent" "First step"
-    assert_contains "second next preserved" "$hcontent" "Second step"
-    assert_contains "third next preserved" "$hcontent" "Third step"
-    assert_contains "first rendered as bullet" "$hcontent" "- First step"
-    assert_contains "second rendered as bullet" "$hcontent" "- Second step"
-    assert_contains "third rendered as bullet" "$hcontent" "- Third step"
+    # No command writes state.md/handoff.md, including annotate and init --wizard,
+    # and an existing legacy file is left byte-for-byte alone.
+    dv init --wizard </dev/null >/dev/null 2>&1
+    dv state --summary s >/dev/null 2>&1
+    dv handoff --summary h --next a --next b >/dev/null 2>&1
+    dv annotate state "note" >/dev/null 2>&1
+    dv annotate handoff "note" >/dev/null 2>&1
+    [[ ! -e .dejavue/state.md && ! -e .dejavue/handoff.md ]] \
+        || { echo "  ASSERT FAIL: a command created state.md/handoff.md" >&2; return 1; }
+    seed_legacy "old state" "old handoff" "- old next"
+    local sum_before
+    sum_before="$(cat .dejavue/state.md .dejavue/handoff.md | cksum)"
+    dv state --summary s >/dev/null 2>&1
+    dv handoff --summary h --next a >/dev/null 2>&1
+    dv annotate handoff "note" >/dev/null 2>&1
+    dv init --force >/dev/null 2>&1
+    assert_eq "legacy files untouched" "$(cat .dejavue/state.md .dejavue/handoff.md | cksum)" "$sum_before" || return 1
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT
@@ -569,15 +576,15 @@ test_context_prints_all_sections() {
 
     dv init >/dev/null 2>&1
     dv start --goal "Test context command" >/dev/null 2>&1
-    dv state --summary "context test state" >/dev/null 2>&1
-    dv handoff --summary "context handoff" --next "nothing" >/dev/null 2>&1
+    seed_legacy "context test state" "context handoff" "nothing"
 
     local out
     out="$(dv context 2>&1)"
-    assert_contains "handoff section" "$out" "handoff.md"
-    assert_contains "state section" "$out" "state.md"
-    assert_contains "decisions section" "$out" "decisions.md"
-    assert_contains "timeline section" "$out" "recent timeline"
+    assert_contains "legacy handoff labelled" "$out" "--- handoff.md (legacy, last written 2026-06-01; current state and handoffs live in .jagent/sessions" || return 1
+    assert_contains "legacy state labelled" "$out" "--- state.md (legacy, last written 2026-06-01;" || return 1
+    assert_contains "legacy content still shown" "$out" "context test state" || return 1
+    assert_contains "decisions section" "$out" "decisions.md" || return 1
+    assert_contains "timeline section" "$out" "recent timeline" || return 1
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT
@@ -829,17 +836,16 @@ test_get_known_docs() {
     cd "$TEST_DIR"
 
     dv init >/dev/null 2>&1
-    dv state --summary "current state for get test" >/dev/null 2>&1
-    dv handoff --summary "handoff for get test" --next "nothing" >/dev/null 2>&1
+    seed_legacy "current state for get test" "handoff for get test" "nothing"
 
     local sout hout dout
     sout="$(dv get state 2>&1)"
     hout="$(dv get handoff 2>&1)"
     dout="$(dv get decisions 2>&1)"
 
-    assert_contains "get state content" "$sout" "current state for get test"
-    assert_contains "get handoff content" "$hout" "handoff for get test"
-    assert_contains "get decisions has header" "$dout" "Decisions"
+    assert_contains "get state content" "$sout" "current state for get test" || return 1
+    assert_contains "get handoff content" "$hout" "handoff for get test" || return 1
+    assert_contains "get decisions has header" "$dout" "Decisions" || return 1
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT
@@ -884,10 +890,13 @@ test_list_shows_artifacts() {
     dv init >/dev/null 2>&1
     local out
     out="$(dv list 2>&1)"
-    assert_contains "events listed" "$out" "events:"
-    assert_contains "decisions listed" "$out" "decisions:"
-    assert_contains "state listed" "$out" "state:"
-    assert_contains "handoff listed" "$out" "handoff:"
+    assert_contains "events listed" "$out" "events:" || return 1
+    assert_contains "decisions listed" "$out" "decisions:" || return 1
+    assert_not_contains "no state.md after init" "$out" "state:" || return 1
+    seed_legacy "s" "h" "n"
+    out="$(dv list 2>&1)"
+    assert_contains "legacy state listed" "$out" "state:" || return 1
+    assert_contains "legacy handoff listed" "$out" "handoff:" || return 1
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT
@@ -916,12 +925,14 @@ test_annotate_handoff() {
     cd "$TEST_DIR"
 
     dv init >/dev/null 2>&1
-    dv annotate handoff "this is my test annotation note" >/dev/null 2>&1
-
-    local hcontent
-    hcontent="$(cat .dejavue/handoff.md)"
-    assert_contains "note in handoff.md" "$hcontent" "this is my test annotation note"
-    assert_contains "annotation section header" "$hcontent" "annotation"
+    dv decision "x" --reason "y" >/dev/null 2>&1
+    dv annotate decisions "this is my test annotation note" >/dev/null 2>&1
+    local content out
+    content="$(cat .dejavue/decisions.md)"
+    assert_contains "note in decisions.md" "$content" "this is my test annotation note" || return 1
+    assert_contains "annotation section header" "$content" "annotation" || return 1
+    out="$(dv annotate handoff "n" 2>&1)"
+    assert_contains "annotate handoff points at sessions" "$out" ".jagent/sessions" || return 1
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT
@@ -1022,9 +1033,11 @@ test_context_shows_staleness_warnings() {
     trap cleanup EXIT
     cd "$TEST_DIR"
     dv init >/dev/null 2>&1
-    # state.md is a stub after init
+    seed_legacy "s" "h" "n"
     out="$(dv context 2>&1)"
-    assert_contains "stub warning" "$out" "stub"
+    # The retired state/handoff nags are gone; the references/ nag still fires.
+    assert_not_contains "no state nag" "$out" "dejavue state --summary" || return 1
+    assert_contains "references warning" "$out" "references/ is empty" || return 1
 }
 
 test_context_check_stale_prints_to_stderr() {
@@ -1033,7 +1046,7 @@ test_context_check_stale_prints_to_stderr() {
     cd "$TEST_DIR"
     dv init >/dev/null 2>&1
     stderr_out="$(dv context --check-stale 2>&1 >/dev/null)"
-    assert_contains "check-stale warning" "$stderr_out" "state"
+    assert_contains "check-stale warning" "$stderr_out" "references/ is empty" || return 1
 }
 
 test_context_lists_references_when_present() {
@@ -1362,12 +1375,12 @@ test_export_md_has_sections() {
     trap cleanup EXIT
     cd "$TEST_DIR"
     dv init >/dev/null 2>&1
-    dv state --summary "test state content" >/dev/null 2>&1
+    seed_legacy "test state content" "h" "n"
     dv decision "arch" --reason "test" >/dev/null 2>&1
     out="$(dv export --format md 2>&1)"
-    assert_contains "md has export header" "$out" "Dejavue Memory Export"
-    assert_contains "md has state" "$out" "test state content"
-    assert_contains "md has timeline" "$out" "Timeline"
+    assert_contains "md has export header" "$out" "Dejavue Memory Export" || return 1
+    assert_contains "md has legacy state" "$out" "test state content" || return 1
+    assert_contains "md has timeline" "$out" "Timeline" || return 1
 }
 
 test_reference_create() {
@@ -1882,9 +1895,7 @@ test_dcp_wizard_noninteractive() {
     cd "$TEST_DIR"
     dv init --wizard </dev/null >/dev/null 2>&1
     assert_file_exists "context.md seeded" ".dejavue/context.md" || return 1
-    local state
-    state="$(cat .dejavue/state.md)"
-    assert_contains "state seeded by wizard" "$state" "Primary agent" || return 1
+    [[ ! -e .dejavue/state.md ]] || { echo "  ASSERT FAIL: wizard wrote state.md" >&2; return 1; }
     assert_event_recorded "wizard event" ".dejavue/timeline.jsonl" "event" "wizard" || return 1
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
@@ -3089,9 +3100,9 @@ main() {
     run_test "10 legacy post-commit hook is a no-op"        test_post_commit_hook_fires
     run_test "11 decision records event + decisions.md"     test_decision_records_event_and_doc
     run_test "12 decision --rejected captures alternatives" test_decision_rejected_alternatives
-    run_test "13 state overwrites state.md + event"         test_state_overwrites_state_md
-    run_test "14 handoff writes handoff.md + event"         test_handoff_writes_handoff_md
-    run_test "14a handoff multiple --next renders bullets"  test_handoff_multiple_next_renders_bullets
+    run_test "13 state is a pointer, writes nothing"        test_state_overwrites_state_md
+    run_test "14 handoff is a pointer, writes nothing"      test_handoff_writes_handoff_md
+    run_test "14a no command writes state.md/handoff.md"   test_handoff_multiple_next_renders_bullets
     run_test "15 context prints all sections"               test_context_prints_all_sections
     run_test "16 since DATE form"                           test_since_date_form
     run_test "17 since COMMIT form"                         test_since_commit_form
@@ -3112,7 +3123,7 @@ main() {
     run_test "29 get unknownword prints Unknown doc"         test_get_unknown_doc
     run_test "30 list shows all artifact paths"             test_list_shows_artifacts
     run_test "31 list --type events shows only events"      test_list_type_events
-    run_test "32 annotate handoff appends note"             test_annotate_handoff
+    run_test "32 annotate decisions; handoff is a pointer"  test_annotate_handoff
     run_test "33 annotate unknown doc prints Unknown doc"   test_annotate_unknown_doc
     run_test "34 version prints 2.x"                        test_version_prints_version
     run_test "35 init creates pre-push hook"                test_init_creates_prepush_hook
@@ -3121,7 +3132,7 @@ main() {
     run_test "38 init --ingest auto-ingests on init"        test_init_ingest_auto_ingests
     run_test "39 agent identity from AGENT_NAME env"        test_agent_identity_from_env
     run_test "40 explicit --agent overrides env"            test_agent_identity_explicit_overrides_env
-    run_test "41 context shows staleness warning for stub"  test_context_shows_staleness_warnings
+    run_test "41 context: no state nag, others remain"   test_context_shows_staleness_warnings
     run_test "42 context --check-stale warns on stderr"     test_context_check_stale_prints_to_stderr
     run_test "43 context lists references/ when populated"  test_context_lists_references_when_present
     run_test "44 status shows agent and event count"        test_status_basic_output
