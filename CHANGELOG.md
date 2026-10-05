@@ -22,6 +22,16 @@ any v1.x release can be read by any later v1.x release without migration.
   MIT, along with every earlier copy, including vendored `.dejavue/dejavue.py` and skill copies.
 - `dejavue.py` carries an SPDX MIT header, and the shipped skills carry a `license:` frontmatter field, so vendored
   copies keep their notice.
+- **The post-commit hook is retired.** It copied `git log` into the timeline as
+  `file_changed` events (most of what a busy repo's timeline held), amended
+  every commit, recorded the pre-amend SHA that the amend orphaned, and stopped
+  `git rebase` on a dirty `timeline.jsonl`. `init` no longer installs it. The
+  command installed hooks run, `changed --auto [--commit SHA] [--amend]`, now
+  exits 0 and writes and amends nothing, so hooks already installed go quiet
+  without a per-repo change. `check` reports an old hook as obsolete instead of
+  offering to reinstall it. `hook posttooluse` is retired the same way (drains
+  stdin, exits 0, writes nothing); `capabilities` reports
+  `features.session_hooks: false`. Manual `changed PATH` is unchanged.
 
 ### Added
 
