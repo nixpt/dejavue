@@ -191,44 +191,34 @@ def git_run(*cmd):
         return ""
 
 
-def normalize_entities(args):
-    """Normalize the optional repeatable --entity flag into a sorted-unique list of
-    kebab-case subject strings ("Auth System" -> "auth-system"). Returns [] if none.
-    Deliberately just strings — NOT a graph or registry (Axiom 0)."""
-    raw = getattr(args, "entity", None) or []
+def _unique(raw, kebab):
+    """Strip (and with kebab=True lower-case and hyphen-join) each item; drop
+    empties and repeats, keeping first-seen order."""
     seen, out = set(), []
-    for e in raw:
-        norm = "-".join(str(e).strip().lower().split())
+    for item in raw or []:
+        norm = "-".join(str(item).strip().lower().split()) if kebab else str(item).strip()
         if norm and norm not in seen:
             seen.add(norm)
             out.append(norm)
     return out
+
+
+def normalize_entities(args):
+    """Repeatable --entity → unique kebab-case subject strings ("Auth System" ->
+    "auth-system"). Deliberately just strings — NOT a graph or registry (Axiom 0)."""
+    return _unique(getattr(args, "entity", None), kebab=True)
 
 
 def normalize_tensions(args):
-    """Normalize repeatable --tension labels into sorted-unique kebab-case strings.
-    Tensions are unresolved tradeoff axes, not discarded alternatives."""
-    raw = getattr(args, "tension", None) or []
-    seen, out = set(), []
-    for item in raw:
-        norm = "-".join(str(item).strip().lower().split())
-        if norm and norm not in seen:
-            seen.add(norm)
-            out.append(norm)
-    return out
+    """Repeatable --tension → unique kebab-case labels. Tensions are unresolved
+    tradeoff axes, not discarded alternatives."""
+    return _unique(getattr(args, "tension", None), kebab=True)
 
 
 def normalize_values(args):
-    """Normalize repeatable --value labels into sorted-unique kebab-case strings.
-    Values are soft philosophy signals, not hard invariants or policy."""
-    raw = getattr(args, "value", None) or []
-    seen, out = set(), []
-    for item in raw:
-        norm = "-".join(str(item).strip().lower().split())
-        if norm and norm not in seen:
-            seen.add(norm)
-            out.append(norm)
-    return out
+    """Repeatable --value → unique kebab-case labels. Values are soft philosophy
+    signals, not hard invariants or policy."""
+    return _unique(getattr(args, "value", None), kebab=True)
 
 
 def normalize_domain_owner(args):
@@ -238,28 +228,14 @@ def normalize_domain_owner(args):
 
 
 def normalize_artifacts(args):
-    """Normalize the optional repeatable --artifacts flag into a deduped list of stripped
-    file paths (kept verbatim — unlike entities, paths are not kebab-cased)."""
-    raw = getattr(args, "artifacts", None) or []
-    seen, out = set(), []
-    for a in raw:
-        p = str(a).strip()
-        if p and p not in seen:
-            seen.add(p)
-            out.append(p)
-    return out
+    """Repeatable --artifacts → unique stripped file paths (kept verbatim — unlike
+    entities, paths are not kebab-cased)."""
+    return _unique(getattr(args, "artifacts", None), kebab=False)
 
 
 def normalize_derived_from(args):
-    """Normalize the optional repeatable --derived-from flag into a deduped list."""
-    raw = getattr(args, "derived_from", None) or []
-    seen, out = set(), []
-    for ref in raw:
-        item = str(ref).strip()
-        if item and item not in seen:
-            seen.add(item)
-            out.append(item)
-    return out
+    """Repeatable --derived-from → unique stripped references."""
+    return _unique(getattr(args, "derived_from", None), kebab=False)
 
 
 def normalize_stability(args):
@@ -273,16 +249,25 @@ def author_type_fields(args):
     return {"author_type": value} if value else {}
 
 
-def add_author_type_arg(parser):
+def meta_fields(args):
+    """The shared writer metadata every recording command attaches."""
+    out = author_type_fields(args)
+    for key, value in (("tension", normalize_tensions(args)),
+                       ("values", normalize_values(args)),
+                       ("domain_owner", normalize_domain_owner(args))):
+        if value:
+            out[key] = value
+    return out
+
+
+def add_meta_args(parser):
+    """--author-type / --tension / --value / --domain-owner, for every recording command."""
     parser.add_argument(
         "--author-type",
         choices=sorted(AUTHOR_TYPES),
         default=None,
         help="Writer class for trust typing: human, agent, orchestrator, ci, or bot.",
     )
-
-
-def add_tension_arg(parser):
     parser.add_argument(
         "--tension",
         action="append",
@@ -290,14 +275,6 @@ def add_tension_arg(parser):
         metavar="LABEL",
         help="Unresolved tradeoff axis (repeatable), e.g. security or performance.",
     )
-
-
-def tension_fields(args):
-    values = normalize_tensions(args)
-    return {"tension": values} if values else {}
-
-
-def add_value_arg(parser):
     parser.add_argument(
         "--value",
         action="append",
@@ -305,25 +282,12 @@ def add_value_arg(parser):
         metavar="LABEL",
         help="Project value / philosophy label (repeatable), e.g. local-first.",
     )
-
-
-def value_fields(args):
-    values = normalize_values(args)
-    return {"values": values} if values else {}
-
-
-def add_domain_owner_arg(parser):
     parser.add_argument(
         "--domain-owner",
         default=None,
         metavar="NAME",
         help="Domain owner for recall/filtering, normalized to kebab-case.",
     )
-
-
-def domain_owner_fields(args):
-    owner = normalize_domain_owner(args)
-    return {"domain_owner": owner} if owner else {}
 
 
 def normalize_freshness(args):
@@ -575,15 +539,7 @@ def _last_index_events():
     last_full = None
     last_inc = None
     inc_count = 0
-    if not TIMELINE.exists():
-        return None, None, 0
-    for line in TIMELINE.read_text(encoding="utf-8").splitlines():
-        try:
-            ev = json.loads(line)
-        except (json.JSONDecodeError, ValueError):
-            continue
-        if not isinstance(ev, dict):
-            continue
+    for ev in _load_events():
         kind = ev.get("event")
         if kind == "symbol_index":
             last_full = ev
@@ -706,37 +662,22 @@ def rebuild_fts():
 
         rows = []
 
-        if TIMELINE.exists():
-            for line in TIMELINE.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    ev = json.loads(line)
-                    parts = [
-                        ev.get("summary", ""),
-                        ev.get("goal", ""),
-                        ev.get("decision_title", ev.get("decision", "")),
-                        ev.get("decision_reason", ev.get("reason", "")),
-                        ev.get("tag", ""),
-                        ev.get("content", ""),
-                        ev.get("event_type", ""),  # enables recall "blocker"/"question"/etc.
-                        " ".join(ev.get("entities") or []),  # enables recall by entity
-                        ev.get("confidence", ""),  # enables recall "speculative"/"verified"/etc.
-                        " ".join(ev.get("artifacts") or []),  # enables recall by artifact path
-                        ev.get("freshness", ""),
-                        ev.get("expires_after", ""),
-                        " ".join(ev.get("derived_from") or []),
-                        " ".join(ev.get("tension") or []),
-                        " ".join(ev.get("values") or []),
-                        ev.get("domain_owner", ""),
-                        event_stability(ev),
-                        ev.get("author_type", ""),
-                    ]
-                    text = " ".join(p for p in parts if p)
-                    rows.append((ev.get("ts", ""), ev.get("event", ""), text, "timeline.jsonl"))
-                except json.JSONDecodeError:
-                    pass
+        for ev in _load_events():
+            parts = [
+                ev.get("summary", ""),
+                ev.get("goal", ""),
+                ev.get("decision_title", ev.get("decision", "")),
+                ev.get("decision_reason", ev.get("reason", "")),
+                ev.get("tag", ""),
+                ev.get("content", ""),
+                ev.get("event_type", ""),  # enables recall "blocker"/"question"/etc.
+                " ".join(ev.get("entities") or []),  # enables recall by entity
+                ev.get("confidence", ""),  # enables recall "speculative"/"verified"/etc.
+                " ".join(ev.get("artifacts") or []),  # enables recall by artifact path
+                event_search_text(ev),
+            ]
+            text = " ".join(p for p in parts if p)
+            rows.append((ev.get("ts", ""), ev.get("event", ""), text, "timeline.jsonl"))
 
         for path, label in [(STATE, "state.md"), (DECISIONS, "decisions.md"), (HANDOFF, "handoff.md"), (INVARIANTS, "invariants.md"), (PATTERNS, "patterns.md")]:
             if path.exists():
@@ -1121,10 +1062,7 @@ def cmd_start(args):
         "event": "session_start",
         "goal": args.goal,
         "summary": f"Session start: {args.goal}",
-        **author_type_fields(args),
-        **tension_fields(args),
-        **value_fields(args),
-        **domain_owner_fields(args),
+        **meta_fields(args),
     })
     print(f"Session started. Goal: {args.goal}")
 
@@ -1141,10 +1079,7 @@ def cmd_changed(args):
         "event": "file_changed",
         "path": args.path,
         "summary": summary,
-        **author_type_fields(args),
-        **tension_fields(args),
-        **value_fields(args),
-        **domain_owner_fields(args),
+        **meta_fields(args),
     })
     print("Change recorded.")
 
@@ -1254,10 +1189,7 @@ def cmd_state(args):
         "agent": resolve_agent(args.agent),
         "event": "state_update",
         "summary": args.summary,
-        **author_type_fields(args),
-        **tension_fields(args),
-        **value_fields(args),
-        **domain_owner_fields(args),
+        **meta_fields(args),
     })
     print("State updated.")
 
@@ -1278,10 +1210,7 @@ def cmd_handoff(args):
         "event": "handoff",
         "summary": args.summary,
         "next": args.next,
-        **author_type_fields(args),
-        **tension_fields(args),
-        **value_fields(args),
-        **domain_owner_fields(args),
+        **meta_fields(args),
     })
     print("Handoff written.")
 
@@ -1319,15 +1248,9 @@ def cmd_context(args):
     # Traps & incidents surface prominently — not just in the last-N timeline tail — because
     # they are the highest-value memory the feature exists to preserve (a trap/incident must
     # not scroll out of view once a handful of newer events accrue).
+    events = _load_events()
     if TIMELINE.exists():
-        hazards = []
-        for line in TIMELINE.read_text(encoding="utf-8").splitlines():
-            try:
-                ev = json.loads(line)
-            except (json.JSONDecodeError, ValueError):
-                continue
-            if isinstance(ev, dict) and ev.get("event") in ("trap", "incident"):
-                hazards.append(ev)
+        hazards = [ev for ev in events if ev.get("event") in ("trap", "incident")]
         if hazards:
             print("--- traps & incidents ---\n")
             for ev in hazards:
@@ -1335,8 +1258,7 @@ def cmd_context(args):
             print()
 
     if TIMELINE.exists():
-        epoch_events = _load_events()
-        epochs, milestones = _epoch_records(epoch_events)
+        epochs, milestones = _epoch_records(events)
         open_epochs = [rec for rec in epochs if rec.get("begin") and not rec.get("end")]
         if open_epochs or milestones:
             print("--- epochs & milestones ---\n")
@@ -1350,10 +1272,9 @@ def cmd_context(args):
     # Superseded-decision warnings — the reverse of --supersedes (previously write-only),
     # so a stale decision in decisions.md no longer looks authoritative at boot.
     if TIMELINE.exists():
-        sup_events = _load_events()
-        overridden_by = supersession_lookup(sup_events)
+        overridden_by = supersession_lookup(events)
         superseded = []
-        for ev in sup_events:
+        for ev in events:
             if ev.get("event") == "decision":
                 hits = overridden_by(ev)
                 if hits:
@@ -1387,7 +1308,6 @@ def cmd_context(args):
         n = getattr(args, "n", 10) or 10
         print(f"--- recent timeline (last {n}) ---\n")
         lines = TIMELINE.read_text(encoding="utf-8").splitlines()[-n:]
-        events = _load_events()
         for line in lines:
             try:
                 ev = json.loads(line)
@@ -2058,10 +1978,7 @@ def cmd_conflict(args):
             "summary": summary,
             "reason": args.reason,
             "resolution": getattr(args, "resolution", None) or "",
-            **author_type_fields(args),
-            **tension_fields(args),
-            **value_fields(args),
-            **domain_owner_fields(args),
+            **meta_fields(args),
         })
         print("Conflict resolution recorded.")
         return
@@ -2096,10 +2013,7 @@ def cmd_note(args):
         "expires_after": getattr(args, "expires_after", None) or "",
         "derived_from": normalize_derived_from(args),
         "stability": normalize_stability(args),
-        **author_type_fields(args),
-        **tension_fields(args),
-        **value_fields(args),
-        **domain_owner_fields(args),
+        **meta_fields(args),
     })
     print(f"{event_type.capitalize()} recorded.")
 
@@ -2143,81 +2057,52 @@ def cmd_rejected(args):
         print()
 
 
-def cmd_trap(args):
-    """Record a known lie / trap — misleading name, fake abstraction, dangerous assumption."""
+def _record_labeled(args, event, **extra):
+    """Append a text event (trap/incident/invariant/pattern/rule) with its tag,
+    entities and writer metadata; `extra` fields sit between summary and tag."""
     append_event({
         "agent": resolve_agent(args.agent),
-        "event": "trap",
+        "event": event,
         "summary": args.text,
+        **extra,
         "tag": args.tag or "",
         "entities": normalize_entities(args),
-        **author_type_fields(args),
-        **tension_fields(args),
-        **value_fields(args),
-        **domain_owner_fields(args),
+        **meta_fields(args),
     })
+
+
+def _append_md(path, header, entry):
+    """Append `entry` to an append-only .dejavue/*.md doc, creating it with `header`."""
+    DEJAVUE_DIR.mkdir(exist_ok=True)
+    if not path.exists():
+        path.write_text(header, encoding="utf-8")
+    with path.open("a", encoding="utf-8") as f:
+        f.write(entry)
+
+
+def cmd_trap(args):
+    """Record a known lie / trap — misleading name, fake abstraction, dangerous assumption."""
+    _record_labeled(args, "trap")
     print("Trap recorded.")
 
 
 def cmd_incident(args):
     """Record an operational incident — outage, data corruption, failed migration."""
-    append_event({
-        "agent": resolve_agent(args.agent),
-        "event": "incident",
-        "summary": args.text,
-        "tag": args.tag or "",
-        "entities": normalize_entities(args),
-        **author_type_fields(args),
-        **tension_fields(args),
-        **value_fields(args),
-        **domain_owner_fields(args),
-    })
+    _record_labeled(args, "incident")
     print("Incident recorded.")
 
 
 def cmd_invariant(args):
     """Record an architectural invariant and append to invariants.md."""
-    DEJAVUE_DIR.mkdir(exist_ok=True)
-    if not INVARIANTS.exists():
-        INVARIANTS.write_text("# Invariants\n\n", encoding="utf-8")
-    ts = now()
-    entry = f"\n## {ts}\n\n{args.text}\n"
-    with INVARIANTS.open("a", encoding="utf-8") as f:
-        f.write(entry)
-    append_event({
-        "agent": resolve_agent(args.agent),
-        "event": "invariant",
-        "summary": args.text,
-        "tag": args.tag or "",
-        "entities": normalize_entities(args),
-        **author_type_fields(args),
-        **tension_fields(args),
-        **value_fields(args),
-        **domain_owner_fields(args),
-    })
+    _append_md(INVARIANTS, "# Invariants\n\n", f"\n## {now()}\n\n{args.text}\n")
+    _record_labeled(args, "invariant")
     print("Invariant recorded.")
 
 
 def cmd_pattern(args):
     """Record a discovered convention/pattern and append to patterns.md."""
-    DEJAVUE_DIR.mkdir(exist_ok=True)
-    if not PATTERNS.exists():
-        PATTERNS.write_text("# Patterns\n\n", encoding="utf-8")
-    ts = now()
-    entry = f"\n## {ts}\n\n{args.text}\n"
-    with PATTERNS.open("a", encoding="utf-8") as f:
-        f.write(entry)
-    append_event({
-        "agent": resolve_agent(args.agent),
-        "event": "pattern",
-        "summary": args.text,
-        "tag": args.tag or "",
-        "entities": normalize_entities(args),
-        **author_type_fields(args),
-        **tension_fields(args),
-        **value_fields(args),
-        **domain_owner_fields(args),
-    })
+    _append_md(PATTERNS, "# Patterns\n\n", f"\n## {now()}\n\n{args.text}\n")
+    _record_labeled(args, "pattern")
     print("Pattern recorded.")
 
 
@@ -2233,31 +2118,15 @@ def cmd_rule(args):
     Rules surface in `dejavue context`, so every agent reads the project's
     conventions on arrival rather than rediscovering (or violating) them.
     """
-    DEJAVUE_DIR.mkdir(exist_ok=True)
-    if not RULES.exists():
-        RULES.write_text(
-            "# Rules\n\n"
-            "Soft project rules and conventions — advisory, not invariants.\n"
-            "Depart from one knowingly and say why; don't violate one by accident.\n\n",
-            encoding="utf-8",
-        )
-    ts = now()
     scope = f" _({args.scope})_" if getattr(args, "scope", None) else ""
-    entry = f"\n## {ts}{scope}\n\n{args.text}\n"
-    with RULES.open("a", encoding="utf-8") as f:
-        f.write(entry)
-    append_event({
-        "agent": resolve_agent(args.agent),
-        "event": "rule",
-        "summary": args.text,
-        "scope": getattr(args, "scope", None) or "",
-        "tag": args.tag or "",
-        "entities": normalize_entities(args),
-        **author_type_fields(args),
-        **tension_fields(args),
-        **value_fields(args),
-        **domain_owner_fields(args),
-    })
+    _append_md(
+        RULES,
+        "# Rules\n\n"
+        "Soft project rules and conventions — advisory, not invariants.\n"
+        "Depart from one knowingly and say why; don't violate one by accident.\n\n",
+        f"\n## {now()}{scope}\n\n{args.text}\n",
+    )
+    _record_labeled(args, "rule", scope=getattr(args, "scope", None) or "")
     print(f"Rule recorded → {RULES}")
 
 
@@ -2349,10 +2218,7 @@ def cmd_plan(args):
         "target": str(target),
         "tag": args.tag or "",
         "entities": normalize_entities(args),
-        **author_type_fields(args),
-        **tension_fields(args),
-        **value_fields(args),
-        **domain_owner_fields(args),
+        **meta_fields(args),
     })
     print(f"Captured [{kind}] → {target}  ({how})")
 
@@ -2503,10 +2369,7 @@ def cmd_branch(args):
             "base_ref": base,
             "goal": args.goal,
             "summary": f"Branch {branch} started: {args.goal}",
-            **author_type_fields(args),
-            **tension_fields(args),
-            **value_fields(args),
-            **domain_owner_fields(args),
+            **meta_fields(args),
         })
         print(f"Branch intent recorded for {branch}.")
         return
@@ -2519,10 +2382,7 @@ def cmd_branch(args):
             "target_branch": branch,
             "summary": args.summary,
             "next": next_steps,
-            **author_type_fields(args),
-            **tension_fields(args),
-            **value_fields(args),
-            **domain_owner_fields(args),
+            **meta_fields(args),
         })
         print(f"Branch closeout recorded for {branch}.")
         return
@@ -2696,10 +2556,7 @@ def cmd_epoch(args):
             "event": "epoch_begin",
             "epoch": args.name,
             "summary": summary,
-            **author_type_fields(args),
-            **tension_fields(args),
-            **value_fields(args),
-            **domain_owner_fields(args),
+            **meta_fields(args),
         })
         print(f"Epoch began: {args.name}")
         return
@@ -2710,10 +2567,7 @@ def cmd_epoch(args):
             "event": "epoch_end",
             "epoch": args.name,
             "summary": summary,
-            **author_type_fields(args),
-            **tension_fields(args),
-            **value_fields(args),
-            **domain_owner_fields(args),
+            **meta_fields(args),
         })
         print(f"Epoch ended: {args.name}")
         return
@@ -2730,10 +2584,7 @@ def cmd_milestone(args):
         "event": "milestone",
         "milestone": args.name,
         "summary": summary,
-        **author_type_fields(args),
-        **tension_fields(args),
-        **value_fields(args),
-        **domain_owner_fields(args),
+        **meta_fields(args),
     })
     print(f"Milestone recorded: {args.name}")
 
@@ -4912,10 +4763,7 @@ def main():
 
     p = sub.add_parser("start", help="Record session start.")
     p.add_argument("--agent", default=None)
-    add_author_type_arg(p)
-    add_tension_arg(p)
-    add_value_arg(p)
-    add_domain_owner_arg(p)
+    add_meta_args(p)
     p.add_argument("--goal", required=True)
     p.set_defaults(func=cmd_start)
 
@@ -4923,10 +4771,7 @@ def main():
     p.add_argument("path", nargs="?", default=None)
     p.add_argument("--summary", default=None)
     p.add_argument("--agent", default=None)
-    add_author_type_arg(p)
-    add_tension_arg(p)
-    add_value_arg(p)
-    add_domain_owner_arg(p)
+    add_meta_args(p)
     p.add_argument("--auto", action="store_true",
                    help="Retired post-commit hook mode: a no-op that writes nothing.")
     p.add_argument("--commit", default=None, help="Ignored (retired hook mode).")
@@ -4966,20 +4811,14 @@ def main():
     p.add_argument("--artifacts", action="append", metavar="PATH",
                    help="File this decision is about (repeatable; makes `blame <path>` precise).")
     p.add_argument("--agent", default=None)
-    add_author_type_arg(p)
-    add_tension_arg(p)
-    add_value_arg(p)
-    add_domain_owner_arg(p)
+    add_meta_args(p)
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_decision)
 
     p = sub.add_parser("state", help="Overwrite state.md with current snapshot.")
     p.add_argument("--summary", required=True)
     p.add_argument("--agent", default=None)
-    add_author_type_arg(p)
-    add_tension_arg(p)
-    add_value_arg(p)
-    add_domain_owner_arg(p)
+    add_meta_args(p)
     p.set_defaults(func=cmd_state)
 
     p = sub.add_parser("handoff", help="Write handoff.md.")
@@ -4987,10 +4826,7 @@ def main():
     p.add_argument("--next", action="append", required=True,
                    help="Repeatable; each occurrence becomes a bullet in handoff.md.")
     p.add_argument("--agent", default=None)
-    add_author_type_arg(p)
-    add_tension_arg(p)
-    add_value_arg(p)
-    add_domain_owner_arg(p)
+    add_meta_args(p)
     p.set_defaults(func=cmd_handoff)
 
     p = sub.add_parser("context", help="Print all .md files + last N timeline entries.")
@@ -5056,10 +4892,7 @@ def main():
                    choices=sorted(NOTE_TYPES),
                    help="Event sub-type (default: note).")
     p.add_argument("--agent", default=None)
-    add_author_type_arg(p)
-    add_tension_arg(p)
-    add_value_arg(p)
-    add_domain_owner_arg(p)
+    add_meta_args(p)
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.add_argument("--confidence", choices=["speculative", "proposed", "experimental", "adopted", "deprecated", "verified"],
                    help="How firm this note/claim is.")
@@ -5094,10 +4927,7 @@ def main():
     bs.add_argument("--goal", required=True, help="What this branch is meant to accomplish.")
     bs.add_argument("--base", default=None, help="Base ref this branch starts from.")
     bs.add_argument("--agent", default=None)
-    add_author_type_arg(bs)
-    add_tension_arg(bs)
-    add_value_arg(bs)
-    add_domain_owner_arg(bs)
+    add_meta_args(bs)
     bs = branch_sub.add_parser("summary", help="Replay branch-scoped memory and commits.")
     bs.add_argument("name", nargs="?", help="Branch name/ref (default: current branch).")
     bs.add_argument("--base", default=None, help="Base ref for commit and event window.")
@@ -5106,10 +4936,7 @@ def main():
     bs.add_argument("--summary", required=True, help="What is ready, blocked, or left over.")
     bs.add_argument("--next", action="append", default=[], help="Repeatable next step.")
     bs.add_argument("--agent", default=None)
-    add_author_type_arg(bs)
-    add_tension_arg(bs)
-    add_value_arg(bs)
-    add_domain_owner_arg(bs)
+    add_meta_args(bs)
     p.set_defaults(func=cmd_branch)
 
     p = sub.add_parser("merge-summary", help="Summarize what a branch brings into a base ref.")
@@ -5128,18 +4955,12 @@ def main():
     es.add_argument("name", help="Epoch name.")
     es.add_argument("--summary", default=None, help="Why this epoch begins.")
     es.add_argument("--agent", default=None)
-    add_author_type_arg(es)
-    add_tension_arg(es)
-    add_value_arg(es)
-    add_domain_owner_arg(es)
+    add_meta_args(es)
     es = epoch_sub.add_parser("end", help="Close a named project epoch.")
     es.add_argument("name", help="Epoch name.")
     es.add_argument("--summary", default=None, help="What changed by the end of this epoch.")
     es.add_argument("--agent", default=None)
-    add_author_type_arg(es)
-    add_tension_arg(es)
-    add_value_arg(es)
-    add_domain_owner_arg(es)
+    add_meta_args(es)
     epoch_sub.add_parser("list", help="List epochs and milestones.")
     p.set_defaults(func=cmd_epoch)
 
@@ -5147,10 +4968,7 @@ def main():
     p.add_argument("name", help="Milestone name.")
     p.add_argument("--summary", default=None, help="What this milestone means.")
     p.add_argument("--agent", default=None)
-    add_author_type_arg(p)
-    add_tension_arg(p)
-    add_value_arg(p)
-    add_domain_owner_arg(p)
+    add_meta_args(p)
     p.set_defaults(func=cmd_milestone)
 
     p = sub.add_parser("explain", help="Explain why a file or commit exists.")
@@ -5164,10 +4982,7 @@ def main():
     cs.add_argument("--reason", required=True, help="Why this resolution was chosen.")
     cs.add_argument("--resolution", default=None, help="What was done.")
     cs.add_argument("--agent", default=None)
-    add_author_type_arg(cs)
-    add_tension_arg(cs)
-    add_value_arg(cs)
-    add_domain_owner_arg(cs)
+    add_meta_args(cs)
     conflict_sub.add_parser("list", help="List conflict records.")
     p.set_defaults(func=cmd_conflict)
 
@@ -5309,61 +5124,28 @@ def main():
     p.add_argument("query", nargs="?", help="Topic to filter on (case-insensitive substring).")
     p.set_defaults(func=cmd_rejected)
 
-    p = sub.add_parser("trap", help="Record a known lie / trap: misleading name, fake abstraction, dangerous assumption.")
-    p.add_argument("text", help="What the trap is.")
-    p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
-    add_author_type_arg(p)
-    add_tension_arg(p)
-    add_value_arg(p)
-    add_domain_owner_arg(p)
-    p.add_argument("--tag", metavar="TAG", help="Tag.")
-    p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
-    p.set_defaults(func=cmd_trap)
-
-    p = sub.add_parser("incident", help="Record an operational incident: outage, data corruption, failed migration.")
-    p.add_argument("text", help="Incident description.")
-    p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
-    add_author_type_arg(p)
-    add_tension_arg(p)
-    add_value_arg(p)
-    add_domain_owner_arg(p)
-    p.add_argument("--tag", metavar="TAG", help="Tag.")
-    p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
-    p.set_defaults(func=cmd_incident)
-
-    p = sub.add_parser("invariant", help="Record an architectural invariant that must always hold.")
-    p.add_argument("text", help="The invariant statement.")
-    p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
-    add_author_type_arg(p)
-    add_tension_arg(p)
-    add_value_arg(p)
-    add_domain_owner_arg(p)
-    p.add_argument("--tag", metavar="TAG", help="Tag.")
-    p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
-    p.set_defaults(func=cmd_invariant)
-
-    p = sub.add_parser("pattern", help="Record a discovered convention/pattern: naming, idiom, structure.")
-    p.add_argument("text", help="The convention or pattern.")
-    p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
-    add_author_type_arg(p)
-    add_tension_arg(p)
-    add_value_arg(p)
-    add_domain_owner_arg(p)
-    p.add_argument("--tag", metavar="TAG", help="Tag.")
-    p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
-    p.set_defaults(func=cmd_pattern)
-
-    p = sub.add_parser("rule", help="Record a soft project rule/convention (advisory; weaker than an invariant).")
-    p.add_argument("text", help="The rule or convention.")
-    p.add_argument("--scope", metavar="SCOPE", help="Where it applies, e.g. a subsystem or path.")
-    p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
-    add_author_type_arg(p)
-    add_tension_arg(p)
-    add_value_arg(p)
-    add_domain_owner_arg(p)
-    p.add_argument("--tag", metavar="TAG", help="Tag.")
-    p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
-    p.set_defaults(func=cmd_rule)
+    for name, help_text, text_help, func in (
+        ("trap", "Record a known lie / trap: misleading name, fake abstraction, dangerous assumption.",
+         "What the trap is.", cmd_trap),
+        ("incident", "Record an operational incident: outage, data corruption, failed migration.",
+         "Incident description.", cmd_incident),
+        ("invariant", "Record an architectural invariant that must always hold.",
+         "The invariant statement.", cmd_invariant),
+        ("pattern", "Record a discovered convention/pattern: naming, idiom, structure.",
+         "The convention or pattern.", cmd_pattern),
+        ("rule", "Record a soft project rule/convention (advisory; weaker than an invariant).",
+         "The rule or convention.", cmd_rule),
+    ):
+        p = sub.add_parser(name, help=help_text)
+        p.add_argument("text", help=text_help)
+        if name == "rule":
+            p.add_argument("--scope", metavar="SCOPE", help="Where it applies, e.g. a subsystem or path.")
+        p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
+        add_meta_args(p)
+        p.add_argument("--tag", metavar="TAG", help="Tag.")
+        p.add_argument("--entity", action="append", metavar="NAME",
+                       help="Subject this event is about (repeatable; links events for recall/blame).")
+        p.set_defaults(func=func)
 
     p = sub.add_parser("plan", help="Capture an actionable item into the repo's planner (.jagent/, TODO.md, …).")
     p.add_argument("text", nargs="?", help="The issue, gap, or opportunity to capture.")
@@ -5371,10 +5153,7 @@ def main():
     p.add_argument("--target", metavar="PATH", help="Write to this file instead of the auto-detected planner.")
     p.add_argument("--list", action="store_true", help="List open items instead of capturing one.")
     p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
-    add_author_type_arg(p)
-    add_tension_arg(p)
-    add_value_arg(p)
-    add_domain_owner_arg(p)
+    add_meta_args(p)
     p.add_argument("--tag", metavar="TAG", help="Tag.")
     p.add_argument("--entity", action="append", metavar="NAME", help="Subject this event is about (repeatable; links events for recall/blame).")
     p.set_defaults(func=cmd_plan)
