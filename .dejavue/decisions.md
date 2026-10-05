@@ -371,3 +371,27 @@ Rejected alternatives:
 Reason:
 The OCPL text (openko-network/ocpl) is no longer publicly accessible, so dejavue could not be adopted or audited under it. The steward is the sole copyright holder (all commits by the owner or the owner's agents; no outside PRs or forks), so relicensing future releases needs no other consent. STEWARDSHIP.md's own no-relicense-without-vote clause was amended in the same change by the steward. Earlier grants (MIT for v0.1.0-v1.3.0, OCPL 1.0 for v2.0.1-v2.1.0) stay valid for those releases.
 
+
+## 2026-10-05T05:17:23-05:00 — [STRATEGIC] [ADOPTED] Retire the post-commit hook as a no-op command, not a removal
+
+Reason:
+git is the file-change log; the hook's file_changed events were most of every busy timeline, amended each commit, recorded the pre-amend SHA it orphaned, and stopped git rebase. Hooks already installed in adopter repos call 'changed --auto' on whatever dejavue is on PATH, so making that entry point exit 0 without writing silences them all with no per-repo change.
+
+Artifacts: dejavue.py
+
+Rejected alternatives:
+- **Delete changed --auto / hook posttooluse outright**: installed hooks would then print usage errors (to /dev/null) and runner configs would see a nonzero hook exit
+- **Keep a fixed, non-amending hook**: still copies git log into the timeline for no reader that git can't serve
+
+
+## 2026-10-05T05:17:24-05:00 — [STRATEGIC] [ADOPTED] Vendoring is opt-in: init --vendor
+
+Reason:
+A committed copy of dejavue.py (and the skills) in every repo drifts from the installed tool; fleet-wide it was tens of copies at mixed versions. Without a copy the CLAUDE.md boot stub points at dejavue on PATH or a resolver, so the fallback it names always exists.
+
+Artifacts: dejavue.py
+
+Rejected alternatives:
+- **Keep vendoring by default**: the fallback promise stays true but every repo carries a stale ~5k-line copy
+- **Remove vendoring entirely**: offline/air-gapped adopters lose the only zero-install fallback
+

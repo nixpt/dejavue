@@ -25,6 +25,12 @@ setup_repo() {
     echo "$dir"
 }
 
+repo_snapshot() {
+    # HEAD + porcelain status + timeline checksum: anything a hook might touch.
+    printf '%s|%s|%s' "$(git rev-parse HEAD)" "$(git status --porcelain)" \
+        "$(cksum < .dejavue/timeline.jsonl 2>/dev/null || echo none)"
+}
+
 dv() {
     # Run dejavue with given args from the test repo dir ($TEST_DIR must be set)
     "$PYTHON" "$DEJAVUE" "$@"
@@ -138,7 +144,7 @@ test_init_creates_structure() {
     rm -rf "$TEST_DIR"; trap - EXIT
 }
 
-# 2. init installs post-commit hook with dejavue marker
+# 2. init no longer installs a post-commit hook (git is the file-change log)
 test_init_installs_hook() {
     TEST_DIR="$(setup_repo)"
     trap cleanup EXIT
@@ -146,12 +152,10 @@ test_init_installs_hook() {
 
     dv init >/dev/null 2>&1
 
-    assert_file_exists "hook" ".git/hooks/post-commit"
-    local content
-    content="$(cat .git/hooks/post-commit)"
-    assert_contains "hook has dejavue marker" "$content" "dejavue auto-capture"
-    assert_contains "hook keeps tree clean" "$content" "changed --auto --commit"
-    assert_contains "hook requests amend" "$content" "--amend"
+    if [[ -e .git/hooks/post-commit ]]; then
+        echo "  ASSERT FAIL: init installed a post-commit hook" >&2; return 1
+    fi
+    assert_file_exists "pre-push hook still installed" ".git/hooks/pre-push" || return 1
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT
@@ -180,7 +184,7 @@ test_init_idempotent() {
     rm -rf "$TEST_DIR"; trap - EXIT
 }
 
-# 4. init --force overwrites an existing non-dejavue post-commit hook
+# 4. init --force overwrites an existing non-dejavue pre-push hook
 test_init_force_overwrites_hook() {
     TEST_DIR="$(setup_repo)"
     trap cleanup EXIT
@@ -188,22 +192,22 @@ test_init_force_overwrites_hook() {
 
     # Write a foreign hook
     mkdir -p .git/hooks
-    printf '#!/usr/bin/env bash\necho "foreign hook"\n' > .git/hooks/post-commit
-    chmod +x .git/hooks/post-commit
+    printf '#!/usr/bin/env bash\necho "foreign hook"\n' > .git/hooks/pre-push
+    chmod +x .git/hooks/pre-push
 
     local out
     out="$(dv init --force 2>&1)"
-    assert_contains "force replaces hook" "$out" "Replaced existing post-commit hook"
+    assert_contains "force replaces hook" "$out" "Replaced existing pre-push hook" || return 1
 
     local content
-    content="$(cat .git/hooks/post-commit)"
-    assert_contains "hook now has dejavue marker" "$content" "dejavue auto-capture"
+    content="$(cat .git/hooks/pre-push)"
+    assert_contains "hook now has dejavue marker" "$content" "dejavue pre-push" || return 1
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT
 }
 
-# 5. init without --force refuses to clobber non-dejavue hook (prints WARNING, exits 0)
+# 5. init (even with --force) leaves a foreign post-commit hook untouched
 test_init_no_force_warns_on_existing_hook() {
     TEST_DIR="$(setup_repo)"
     trap cleanup EXIT
@@ -214,15 +218,13 @@ test_init_no_force_warns_on_existing_hook() {
     chmod +x .git/hooks/post-commit
 
     local out rc
-    out="$(dv init 2>&1)"; rc=$?
-    assert_eq "exit code is 0" "$rc" "0"
-    assert_contains "WARNING present" "$out" "WARNING"
-    assert_contains "suggests --force" "$out" "force"
+    out="$(dv init --force 2>&1)"; rc=$?
+    assert_eq "exit code is 0" "$rc" "0" || return 1
 
-    # Hook must NOT be overwritten
+    # A foreign post-commit hook is never touched, even with --force
     local content
     content="$(cat .git/hooks/post-commit)"
-    assert_not_contains "hook not overwritten" "$content" "dejavue auto-capture"
+    assert_eq "hook not overwritten" "$content" $'#!/usr/bin/env bash\necho "other hook"' || return 1
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT
@@ -374,96 +376,59 @@ test_changed_manual_records_event() {
     rm -rf "$TEST_DIR"; trap - EXIT
 }
 
-# 9. changed --auto --commit <sha> records one file_changed per touched file
+# 9. changed --auto (the old hook entry point) exits 0 and writes/amends nothing
 test_changed_auto_commit() {
     TEST_DIR="$(setup_repo)"
     trap cleanup EXIT
     cd "$TEST_DIR"
 
     dv init >/dev/null 2>&1
-    git config core.hooksPath /dev/null
+    git add -A && git commit -q -m "init dejavue"
 
-    # Create a real commit with two files
-    mkdir -p src
-    printf 'hello\n' > src/a.txt
-    printf 'world\n' > src/b.txt
-    git -C "$TEST_DIR" add src/a.txt src/b.txt
-    git -C "$TEST_DIR" commit -q -m "add two files"
-    sha="$(git -C "$TEST_DIR" rev-parse HEAD)"
-
-    local out
-    out="$(dv changed --auto --commit "$sha" --amend 2>&1)"
-    assert_contains "reports 2 events" "$out" "2 file_changed events"
-
-    # Both files should be recorded
-    assert_event_recorded "src/a.txt recorded" ".dejavue/timeline.jsonl" "path" "src/a.txt"
-    assert_event_recorded "src/b.txt recorded" ".dejavue/timeline.jsonl" "path" "src/b.txt"
-
-    local status
-    status="$(git -C "$TEST_DIR" status --short)"
-    assert_eq "worktree stays clean after amend" "$status" ""
+    printf 'hello\n' > a.txt
+    git add a.txt
+    git commit -q -m "add a"
+    local before after out rc
+    before="$(repo_snapshot)"
+    out="$(dv changed --auto --commit "$(git rev-parse HEAD)" --amend 2>&1)"; rc=$?
+    after="$(repo_snapshot)"
+    assert_eq "changed --auto exits 0" "$rc" "0" || return 1
+    assert_eq "changed --auto prints nothing" "$out" "" || return 1
+    assert_eq "HEAD, status and timeline untouched" "$after" "$before" || return 1
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT
 }
 
-# 9a. changed --auto --commit <merge-sha> captures files from a merge commit.
-#     Regression for: `git show --name-only --format=` silently emits NOTHING for
-#     merge commits (default --diff-merges=off), so dejavue's post-commit hook
-#     dropped every merge entirely — quantified at ~70% capture loss in
-#     multi-agent projects where design lead lands work via merge commits.
-test_changed_auto_commit_merge() {
-    TEST_DIR="$(setup_repo)"
-    trap cleanup EXIT
-    cd "$TEST_DIR"
-
-    dv init >/dev/null 2>&1
-
-    # Build a merge: master with x.txt, branch adds y.txt, merge back.
-    printf 'x\n' > x.txt
-    git -C "$TEST_DIR" add x.txt
-    git -C "$TEST_DIR" commit -q -m "base"
-    git -C "$TEST_DIR" checkout -q -b feature
-    printf 'y\n' > y.txt
-    git -C "$TEST_DIR" add y.txt
-    git -C "$TEST_DIR" commit -q -m "add y on feature"
-    git -C "$TEST_DIR" checkout -q master 2>/dev/null || git -C "$TEST_DIR" checkout -q main
-    git -C "$TEST_DIR" merge --no-ff -q -m "merge feature" feature
-    sha="$(git -C "$TEST_DIR" rev-parse HEAD)"
-
-    local out
-    out="$(dv changed --auto --commit "$sha" 2>&1)"
-    # Pre-fix: this said "0 file_changed events". Post-fix: 1 (y.txt via first parent).
-    assert_contains "captures merge files" "$out" "1 file_changed events"
-    assert_event_recorded "y.txt recorded from merge" ".dejavue/timeline.jsonl" "path" "y.txt"
-
-    cd /
-    rm -rf "$TEST_DIR"; trap - EXIT
-}
-
-# 10. post-commit hook fires after git commit: timeline grows by N file_changed events
+# 10. a hook installed by an older init is a no-op: no amend, no timeline write,
+#     and a rebase under it no longer stops on a dirty timeline.jsonl
 test_post_commit_hook_fires() {
     TEST_DIR="$(setup_repo)"
     trap cleanup EXIT
     cd "$TEST_DIR"
 
     dv init >/dev/null 2>&1
+    git add -A && git commit -q -m "init dejavue"
+    # The exact hook older versions installed (still present in adopter repos).
+    printf '#!/usr/bin/env bash\n# dejavue auto-capture\nif [ "${DEJAVUE_SKIP_AUTO_AMEND:-}" = "1" ]; then exit 0; fi\nexec python3 "%s" changed --auto --commit "$(git rev-parse HEAD)" --amend 2>/dev/null || true\n' "$DEJAVUE" > .git/hooks/post-commit
+    chmod +x .git/hooks/post-commit
 
-    # Count events before
-    local before after
-    before="$(grep -c '"event"' .dejavue/timeline.jsonl 2>/dev/null || echo 0)"
-
-    # Make a real commit — hook should fire
+    local tl_before sha after
+    tl_before="$(cksum < .dejavue/timeline.jsonl)"
     printf 'content\n' > hooktest.txt
-    git -C "$TEST_DIR" add hooktest.txt
-    git -C "$TEST_DIR" commit -q -m "hook test commit"
+    git add hooktest.txt
+    git commit -q -m "hook test commit"
+    sha="$(git rev-parse HEAD)"
+    after="$(repo_snapshot)"
+    assert_eq "legacy hook: no amend, clean tree, timeline untouched" "$after" "$sha||$tl_before" || return 1
+    assert_eq "commit message not rewritten" "$(git log -1 --format=%s)" "hook test commit" || return 1
+    assert_contains "check marks the old hook obsolete" "$(dv check 2>&1)" "post-commit hook  — obsolete" || return 1
 
-    after="$(grep -c '"file_changed"' .dejavue/timeline.jsonl 2>/dev/null || echo 0)"
-    [[ "$after" -ge 1 ]] || { echo "  ASSERT FAIL: no file_changed events after commit (hook didn't fire)" >&2; return 1; }
-
-    local status
-    status="$(git -C "$TEST_DIR" status --short)"
-    assert_eq "worktree clean after hook amend" "$status" ""
+    # A rebase replays post-commit per pick; it must not stop on a dirty timeline.
+    git checkout -q -b side HEAD~1
+    printf 'x\n' > side.txt && git add side.txt && git commit -q -m "side"
+    git rebase -q master >/dev/null 2>&1 || git rebase -q main >/dev/null 2>&1 \
+        || { echo "  ASSERT FAIL: rebase stopped under the legacy hook" >&2; return 1; }
 
     cd /
     rm -rf "$TEST_DIR"; trap - EXIT
@@ -1206,7 +1171,7 @@ test_check_passes_healthy() {
     dv state --summary "test state" >/dev/null 2>&1
     out="$(dv check 2>&1)"
     assert_contains "check shows timeline" "$out" "timeline.jsonl"
-    assert_contains "check shows hooks" "$out" "post-commit hook"
+    assert_contains "check shows hooks" "$out" "pre-push hook" || return 1
     assert_contains "check shows gitattributes" "$out" ".gitattributes"
 }
 
@@ -1220,7 +1185,8 @@ test_check_warns_no_hooks() {
     echo '{"ts":"2026-01-01","event":"init","summary":"test"}' > .dejavue/timeline.jsonl
     echo "# State" > .dejavue/state.md
     out="$(dv check 2>&1)"
-    assert_contains "check warns missing hook" "$out" "post-commit"
+    assert_contains "check warns missing hook" "$out" "pre-push hook  — not installed" || return 1
+    assert_not_contains "post-commit no longer expected" "$out" "post-commit" || return 1
 }
 
 test_archive_dryrun() {
@@ -3030,48 +2996,21 @@ test_init_no_vendor_by_default() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
-# 181. hook posttooluse consumes PostToolUse JSON from stdin and records an
-#      uncommitted file_changed event — silent on success, no worthiness banner
+# 181. hook posttooluse (retired) drains stdin, exits 0 and writes nothing,
+#      whatever the payload — runner configs that still call it stay quiet
 test_hook_posttooluse_records_edit() {
     TEST_DIR="$(setup_repo)"
     trap 'cd /; rm -rf "$TEST_DIR"' EXIT
     cd "$TEST_DIR"
     dv init >/dev/null 2>&1
-    local out rc
-    out="$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/auth.py"}}' | dv hook posttooluse 2>&1)"
-    rc=$?
-    assert_eq "hook posttooluse exits 0" "0" "$rc" || return 1
-    assert_eq "hook posttooluse is silent on success" "" "$out" || return 1
-    local timeline
-    timeline="$(cat .dejavue/timeline.jsonl)"
-    assert_contains "file_changed event recorded" "$timeline" '"event": "file_changed"' || return 1
-    assert_contains "touched path recorded" "$timeline" "src/auth.py" || return 1
-    assert_contains "tool name recorded" "$timeline" '"tool": "Edit"' || return 1
-    assert_contains "session-hook agent identity" "$timeline" '"agent": "session-hook"' || return 1
-    cd /; rm -rf "$TEST_DIR"; trap - EXIT
-}
-
-# 182. hook posttooluse with no editable file path (e.g. Bash tool use) is a
-#      silent no-op; malformed JSON exits nonzero with a message
-test_hook_posttooluse_edge_cases() {
-    TEST_DIR="$(setup_repo)"
-    trap 'cd /; rm -rf "$TEST_DIR"' EXIT
-    cd "$TEST_DIR"
-    dv init >/dev/null 2>&1
-    local out rc
-    out="$(echo '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | dv hook posttooluse 2>&1)"
-    rc=$?
-    assert_eq "no file path exits 0 silently" "0|$out" "0|" || return 1
-    out="$(echo 'not json' | dv hook posttooluse 2>&1)"
-    rc=$?
-    if [[ "$rc" -eq 0 ]]; then
-        echo "  ASSERT FAIL: malformed JSON must exit nonzero" >&2
-        return 1
-    fi
-    assert_contains "malformed JSON explains itself" "$out" "malformed JSON" || return 1
-    local count
-    count="$(grep -c file_changed .dejavue/timeline.jsonl || true)"
-    assert_eq "no events written for either case" "0" "$count" || return 1
+    local out rc before payload
+    before="$(repo_snapshot)"
+    for payload in '{"tool_name":"Edit","tool_input":{"file_path":"src/auth.py"}}' \
+                   '{"tool_name":"Bash","tool_input":{"command":"ls"}}' 'not json'; do
+        out="$(echo "$payload" | dv hook posttooluse 2>&1)"; rc=$?
+        assert_eq "hook posttooluse exits 0 silently ($payload)" "$rc|$out" "0|" || return 1
+    done
+    assert_eq "hook posttooluse writes nothing" "$(repo_snapshot)" "$before" || return 1
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
@@ -3135,10 +3074,10 @@ main() {
     fi
 
     run_test "01 init creates .dejavue/ structure"          test_init_creates_structure
-    run_test "02 init installs post-commit hook"            test_init_installs_hook
+    run_test "02 init installs no post-commit hook"         test_init_installs_hook
     run_test "03 init is idempotent"                        test_init_idempotent
-    run_test "04 init --force overwrites existing hook"     test_init_force_overwrites_hook
-    run_test "05 init warns without --force on alien hook"  test_init_no_force_warns_on_existing_hook
+    run_test "04 init --force overwrites pre-push hook"     test_init_force_overwrites_hook
+    run_test "05 init leaves a foreign post-commit hook"    test_init_no_force_warns_on_existing_hook
     run_test "06 init outside git repo still creates dir"   test_init_outside_git_repo
     run_test "06a init writes .gitattributes merge=union"    test_init_writes_gitattributes
     run_test "06b init .gitattributes is idempotent"         test_init_gitattributes_idempotent
@@ -3146,9 +3085,8 @@ main() {
     run_test "06d branch-merge clean with merge=union"       test_init_gitattributes_branch_merge_no_conflict
     run_test "07 start records session_start with goal"     test_start_records_session_start
     run_test "08 changed PATH --summary records event"      test_changed_manual_records_event
-    run_test "09 changed --auto --commit per-file events"   test_changed_auto_commit
-    run_test "09a changed --auto --commit captures merge files" test_changed_auto_commit_merge
-    run_test "10 post-commit hook fires on git commit"      test_post_commit_hook_fires
+    run_test "09 changed --auto (hook mode) is a no-op"     test_changed_auto_commit
+    run_test "10 legacy post-commit hook is a no-op"        test_post_commit_hook_fires
     run_test "11 decision records event + decisions.md"     test_decision_records_event_and_doc
     run_test "12 decision --rejected captures alternatives" test_decision_rejected_alternatives
     run_test "13 state overwrites state.md + event"         test_state_overwrites_state_md
@@ -3197,7 +3135,7 @@ main() {
     run_test "52 ingest --generate-map creates map.md"      test_ingest_generate_map
     run_test "53 decision --outcome stored in doc+timeline" test_decision_outcome_flag
     run_test "54 check passes on healthy repo"             test_check_passes_healthy
-    run_test "55 check warns when hooks missing"           test_check_warns_no_hooks
+    run_test "55 check warns when pre-push hook missing"   test_check_warns_no_hooks
     run_test "56 archive dry-run shows plan"               test_archive_dryrun
     run_test "57 archive --yes compacts timeline"          test_archive_applies
     run_test "58 roster shows agent activity"              test_roster_shows_agents
@@ -3326,8 +3264,7 @@ main() {
     run_test "179 init vendors runnable dejavue.py"           test_init_vendors_runnable_script
     run_test "180 vendored script re-init preserves edits"    test_init_vendor_idempotent_no_force
     run_test "185 init does not vendor by default"            test_init_no_vendor_by_default
-    run_test "181 hook posttooluse records session edit"      test_hook_posttooluse_records_edit
-    run_test "182 hook posttooluse edge cases"                test_hook_posttooluse_edge_cases
+    run_test "181 hook posttooluse is a no-op"                test_hook_posttooluse_records_edit
     run_test "183 hook posttooluse no .dejavue silent no-op"  test_hook_posttooluse_no_dejavue_silent
     run_test "184 context shows index freshness"              test_context_shows_index_freshness
 
