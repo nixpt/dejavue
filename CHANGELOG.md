@@ -11,7 +11,10 @@ any v1.x release can be read by any later v1.x release without migration.
 
 - **License: MIT** (was OCPL 1.0 since v2.0.1). The OCPL text is no longer publicly accessible. `LICENSE`,
   `STEWARDSHIP.md` (with a new License History section), `foundry.toml`, the DCP spec header and the README now say
-  MIT. Releases v2.0.1–v2.1.0 remain available under OCPL 1.0 as released.
+  MIT. Releases v2.0.1–v2.1.0 remain available under OCPL 1.0 as released, and are **also** made available under
+  MIT, along with every earlier copy, including vendored `.dejavue/dejavue.py` and skill copies.
+- `dejavue.py` carries an SPDX MIT header, and the shipped skills carry a `license:` frontmatter field, so vendored
+  copies keep their notice.
 
 ### Added
 
