@@ -289,6 +289,10 @@ alongside it. That fixes §2.6 without touching the log format.
 Migration in every option follows SQ-213's rule: **on touch, never a sweep.** "Touch" means a repo an agent is
 already working in for another reason.
 
+> **Follow-up:** GitHub ignores `merge=union`, so the timeline conflicts on PRs. For that, and for a merge-free
+> per-event storage layout for D's durable core (captain decisions C9–C15), see
+> [`10-nonlinear-timeline.md`](10-nonlinear-timeline.md).
+
 ### Rank 1: (D) Shrink dejavue to the durable-why core, with a single write path from jsess
 
 **What changes**
