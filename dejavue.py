@@ -847,7 +847,7 @@ def cmd_init(args):
         "summary": "Initialized .dejavue/ memory scaffold.",
     })
 
-    _install_discovery(force=getattr(args, "force", False))
+    _install_discovery(force=getattr(args, "force", False), vendor=getattr(args, "vendor", False))
 
     if getattr(args, "map", False):
         _scaffold_map()
@@ -962,20 +962,46 @@ _CLAUDE_MD_BOOT = """\
 
 This repo uses [dejavue](https://github.com/nixpt/dejavue) for persistent architectural context.
 Run `dejavue context` before making changes.
-Fallback if not on PATH: `python3 .dejavue/dejavue.py context`
+{fallback}
 
 {marker}
-""".format(marker=_CLAUDE_MD_MARKER)
+"""
+# The fallback line names the vendored copy only when `init --vendor` made one.
+_FALLBACK_VENDORED = "Fallback if not on PATH: `python3 .dejavue/dejavue.py context`"
+_FALLBACK_PATH = ("Not on PATH? Use a resolver such as `jagent-dejavue context`, or install it:"
+                  " `pipx install git+https://github.com/nixpt/dejavue`")
 
 
-def _install_discovery(force=False):
-    """Install in-repo agent discovery: skill fallback + script vendor + CLAUDE.md boot stub.
+def _install_discovery(force=False, vendor=False):
+    """Install in-repo agent discovery: the CLAUDE.md boot stub, and with
+    vendor=True (`init --vendor`) a copy of the skills and of dejavue.py itself.
 
     Called automatically by init. Idempotent — safe to call multiple times.
-    Skill install and script vendor are both best-effort (silently skipped if
+    Vendoring is opt-in: a committed copy of this script in every repo drifts
+    from the installed one. Both copies are best-effort (silently skipped if
     their source can't be found — e.g. running from a zipapp/frozen build
     with no sibling skills/ dir or no readable own-source file).
     """
+    if vendor:
+        _vendor_into_repo(force)
+    fallback = _FALLBACK_VENDORED if (DEJAVUE_DIR / "dejavue.py").is_file() else _FALLBACK_PATH
+    boot = _CLAUDE_MD_BOOT.format(fallback=fallback, marker=_CLAUDE_MD_MARKER)
+
+    claude_md = Path("CLAUDE.md")
+    if claude_md.exists():
+        content = claude_md.read_text(encoding="utf-8")
+        if _CLAUDE_MD_MARKER in content or "dejavue context" in content:
+            return  # already wired, skip
+        with claude_md.open("a", encoding="utf-8") as fh:
+            fh.write(boot)
+        print("  ✓  Appended dejavue boot stub to CLAUDE.md")
+    else:
+        claude_md.write_text("# Project\n" + boot, encoding="utf-8")
+        print("  ✓  Created CLAUDE.md with dejavue boot stub")
+
+
+def _vendor_into_repo(force=False):
+    """Copy the shipped skills and this script into .dejavue/ (init --vendor)."""
     import shutil as _shutil
 
     # --- in-repo skill fallback (copy so they travel with the repo) ---
@@ -1015,19 +1041,6 @@ def _install_discovery(force=False):
         except OSError as e:
             # Best-effort — a read/copy failure here shouldn't abort init.
             print(f"  !  Could not vendor dejavue.py into .dejavue/: {e}")
-
-    # --- CLAUDE.md boot stub ---
-    claude_md = Path("CLAUDE.md")
-    if claude_md.exists():
-        content = claude_md.read_text(encoding="utf-8")
-        if _CLAUDE_MD_MARKER in content or "dejavue context" in content:
-            return  # already wired, skip
-        with claude_md.open("a", encoding="utf-8") as fh:
-            fh.write(_CLAUDE_MD_BOOT)
-        print("  ✓  Appended dejavue boot stub to CLAUDE.md")
-    else:
-        claude_md.write_text("# Project\n" + _CLAUDE_MD_BOOT, encoding="utf-8")
-        print("  ✓  Created CLAUDE.md with dejavue boot stub")
 
 
 def _scaffold_map():
@@ -4734,7 +4747,7 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
         ingest)   COMPREPLY=($(compgen -W "--since --agent --dry-run" -- "$cur")) ;;
         completion) COMPREPLY=($(compgen -W "bash zsh fish" -- "$cur")) ;;
         install-skill) COMPREPLY=($(compgen -W "--dir --force" -- "$cur")) ;;
-        init)     COMPREPLY=($(compgen -W "--wizard --force --map --no-hook" -- "$cur")) ;;
+        init)     COMPREPLY=($(compgen -W "--wizard --force --map --vendor --ingest" -- "$cur")) ;;
     esac
 }
 complete -F _dejavue dejavue
@@ -5015,6 +5028,8 @@ def main():
     p.add_argument("--force", action="store_true", help="Overwrite existing non-dejavue hooks.")
     p.add_argument("--ingest", action="store_true", help="Run ingest after init.")
     p.add_argument("--map", action="store_true", help="Scaffold references/map.md.")
+    p.add_argument("--vendor", action="store_true",
+                   help="Also copy dejavue.py and the skills into .dejavue/ (offline fallback; off by default).")
     p.add_argument("--wizard", action="store_true",
                    help="Run a 3-question prompt (project type / agent / purpose) to seed "
                         "context.md + state.md. Non-interactive (piped/EOF) uses defaults.")
