@@ -33,7 +33,7 @@ reminder and the command quick-reference.
 
 | Command | What |
 |---|---|
-| `dejavue context` | Boot packet — handoff + state + decisions + references + last 10 events + staleness warnings. Run on arrival. |
+| `dejavue context` | Boot packet — handoff + state + decisions + references + index freshness + last 10 events + staleness warnings. Run on arrival. |
 | `dejavue status` | One-liner health: agent, event count, last decision, open next-steps. |
 | `dejavue start --agent <n> --goal <g>` | Mark a session start (enables `since --agent`) |
 | `dejavue decision "<title>" --reason <r> --rejected "<alt>: <why>" [--supersedes <id>] [--durability {temporary,tactical,strategic,constitutional}]` | Capture an architectural decision + rejected alternatives. `--supersedes` marks an older decision as overridden; `--durability` classifies longevity. |
@@ -49,6 +49,7 @@ reminder and the command quick-reference.
 | `dejavue worthiness` | The capture/skip gate — print when unsure what to record |
 | `dejavue check` | Health check — JSONL validity, hooks, .gitattributes, FTS freshness |
 | `dejavue archive --before <date>` | Compact timeline (drops old file_changed, keeps decisions) |
+| `dejavue hook posttooluse` | Consume a runner's PostToolUse JSON from stdin; records the uncommitted edit as a `file_changed` event |
 | `dejavue roster` | Agent activity summary — who worked here and when |
 | `dejavue config {list,get,set,unset}` | Manage per-repo `.dejavue/config` values |
 | `dejavue install-skill [--dir]` | Install SKILL.md to `~/.claude/skills/` (or custom dir) |

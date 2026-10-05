@@ -7,7 +7,7 @@ _dejavue() {
     local cmds="version init start changed decision state handoff context status \
 check archive roster config install-skill log blame note since changelog ingest recall \
 worthiness get list annotate stats promote import export reference link search \
-diff timeline tag note-commit completion rejected trap incident invariant pattern rule plan entities owners capabilities branch merge-summary squash-summary epoch milestone explain conflict"
+diff timeline tag note-commit completion rejected trap incident invariant pattern rule plan entities owners capabilities branch merge-summary squash-summary epoch milestone explain conflict hook"
     if [[ $COMP_CWORD -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$cmds" -- "$cur"))
         return
@@ -29,7 +29,7 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
             elif [[ "$prev" == "--stability" ]]; then
                 COMPREPLY=($(compgen -W "ephemeral operational architectural constitutional historical" -- "$cur"))
             fi ;;
-        trap|incident|invariant|pattern) COMPREPLY=($(compgen -W "--agent --author-type --tension --value --domain-owner --tag --entity" -- "$cur")) ;;
+        trap|incident|invariant|pattern|rule) COMPREPLY=($(compgen -W "--agent --author-type --tension --value --domain-owner --tag --entity" -- "$cur")) ;;
         note)
             COMPREPLY=($(compgen -W "--agent --author-type --tension --value --domain-owner --tag --type --entity --confidence --freshness --expires-after --derived-from --stability" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
@@ -91,7 +91,7 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
         ingest)   COMPREPLY=($(compgen -W "--since --agent --dry-run" -- "$cur")) ;;
         completion) COMPREPLY=($(compgen -W "bash zsh fish" -- "$cur")) ;;
         install-skill) COMPREPLY=($(compgen -W "--dir --force" -- "$cur")) ;;
-        init)     COMPREPLY=($(compgen -W "--wizard --force --map --no-hook" -- "$cur")) ;;
+        init)     COMPREPLY=($(compgen -W "--wizard --force --map --vendor --ingest" -- "$cur")) ;;
     esac
 }
 complete -F _dejavue dejavue
