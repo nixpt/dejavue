@@ -7,6 +7,16 @@ any v1.x release can be read by any later v1.x release without migration.
 
 ## [Unreleased]
 
+### Changed
+
+- **`init` no longer vendors by default.** Copying `dejavue.py` (and the skill
+  files) into `.dejavue/` is now opt-in with `init --vendor`. A committed copy of
+  the script in every repo drifts from the installed tool. Without a copy, the
+  generated `CLAUDE.md` boot stub points at `dejavue` on PATH or a resolver
+  instead of a fallback file that doesn't exist. Existing vendored copies are
+  left alone. The bash completion's stale `--no-hook` init flag (never
+  implemented) is replaced with `--vendor --ingest`.
+
 ### Added
 
 - **`dejavue hook posttooluse`** — in-session capture: consume a coding agent's
