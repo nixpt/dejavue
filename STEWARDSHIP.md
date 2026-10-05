@@ -36,6 +36,11 @@ changed the license back to MIT. The OCPL text was no longer publicly accessible
 adopted or audited under it. This document's references to OCPL-1.1 were updated to MIT in the same change.
 Grants made under earlier licenses are irrevocable and remain valid for the releases that carried them.
 
+**Earlier versions are also available under MIT.** The steward additionally makes every earlier release, commit and
+copy of dejavue and its documentation (including the OCPL-era v2.0.1–v2.1.0 and copies vendored into other
+repositories as `.dejavue/dejavue.py` or `.dejavue/*/SKILL.md`) available under the MIT License. This adds a
+license and revokes none: a recipient of an OCPL-era copy may use it under either license.
+
 ---
 
 ## Primary Steward

@@ -1,5 +1,6 @@
 ---
 name: dejavue-workflow
+license: MIT (Copyright (c) 2026 nixpt and Dejavue Contributors; https://github.com/nixpt/dejavue)
 description: |
   How to use dejavue (repo-local agent memory) as a working agent.
   Boot packet on arrival, capture architectural decisions during work,
