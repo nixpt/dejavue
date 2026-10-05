@@ -289,36 +289,12 @@ Canonical `.gitignore` entries:
 .dejavue/.locks/
 ```
 
-The post-commit hook (installed by `dejavue init`) auto-records every
-commit's file changes as `file_changed` events. The hook is one line
-calling `dejavue changed --auto`; no manual `changed` calls needed for
-committed work.
-
-### In-session capture (runner hooks)
-
-Git hooks only see *committed* work; the post-commit hook is blind to
-everything a session did before committing. `dejavue hook posttooluse`
-closes that window: wire it into your coding agent as a PostToolUse-style
-hook (Claude Code `.claude/settings.json`):
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [{"type": "command", "command": "dejavue hook posttooluse"}]
-      }
-    ]
-  }
-}
-```
-
-Every edit-tool use then records a `file_changed` event (agent
-`session-hook`, tool name attached) — so `since`, `blame`, and `explain`
-see in-session work too. It is best-effort: silent no-op without
-`.dejavue/`, nonzero exit with a message on malformed input (a hook error
-that swallows itself stays dead for months).
+File changes are git's record, not dejavue's: `since`, `explain` and
+`changelog` read them from git. The post-commit hook older versions
+installed is retired. The command it runs (`dejavue changed --auto`) is
+now a no-op that writes and amends nothing, and `init` no longer
+installs it. `dejavue hook posttooluse` is likewise a no-op; drop it
+from runner configs when convenient.
 
 ### External index freshness in the boot packet
 
@@ -328,37 +304,12 @@ exist, `dejavue context` shows an `index freshness` section — last full
 index, age, incremental count — and warns past 30 days. An arriving agent
 reads this before deciding whether to trust or rebuild a structural index.
 
-### The hook's dirty diff is self-perpetuating — don't chase it to zero
+### Old hooks no longer dirty the tree
 
-Because the hook fires **after** the commit completes, the `file_changed`
-event it appends describes a commit that has *already happened* — it
-physically cannot be included in that same commit. The result: right
-after every commit, `.dejavue/timeline.jsonl` shows one new dirty line
-(a record of the commit you just made). If you commit that line too,
-the hook fires again and appends a record of *that* commit — forever.
-This is expected behavior by construction, not a bug to fix or a sign
-something is broken.
-
-What this means in practice (verified live, session 2026-07-29, on
-`maintainer-notes`):
-
-- **A single dangling `file_changed` line for the most recent commit is
-  normal.** Don't loop trying to reach a permanently clean tree — one
-  will always regenerate.
-- **Multiple pending lines, or lines several commits old, ARE worth
-  sweeping** — that's a sign the hook's records piled up uncommitted
-  across a stretch of work (seen this session in a-downstream-project: BUCKETS-11's
-  merge-decision + timeline records sat uncommitted since session, three
-  sessions earlier). A single `git add .dejavue/ && git commit` closes
-  the gap; don't hand-edit the JSONL.
-- **At session-start or session-close, when checking `git status` for a
-  clean tree** ([[coordinator-session-start]], [[coordinator-session-close]]):
-  a lone trailing `.dejavue/timeline.jsonl` diff recording the
-  just-made commit is not a "dirty tree" finding worth flagging or
-  blocking on — distinguish it from real uncommitted work by checking
-  *what* the diff contains (one `file_changed`/`commit` line referencing
-  a commit hash you recognize as your own last one) before treating the
-  repo as unclean.
+Older hooks appended a `file_changed` line after every commit and amended
+it in, which left a dangling timeline diff and stopped `git rebase`. Those
+hooks are now no-ops. A dirty `.dejavue/timeline.jsonl` is real uncommitted
+memory again, so commit it like any other change.
 
 ## `merge=union` for parallel branches
 
@@ -453,7 +404,7 @@ Takes ~30 seconds. Pays off compounding over future sessions.
 dejavue state --summary "<current-state>" --agent <you>
 dejavue handoff --summary "<what's-done>" --next "<next-steps>" --agent <you>
 git add .dejavue/
-git commit -m "<your message — post-commit hook also records the diff>"
+git commit -m "<your message>"
 ```
 
 ### DCP multi-target export
@@ -505,14 +456,13 @@ For context: `dejavue init` does more than create `.dejavue/`. It also:
    if the marker (`<!-- dejavue:discovery -->`) or any `dejavue context`
    reference already exists, the stub is skipped.
 
-2. **Copies skills to `.dejavue/`** — copies `dejavue/` and
-   `dejavue-workflow/` from the adjacent `skills/` directory into the
-   repo's `.dejavue/` as an in-repo fallback. Agents without the skills
-   in their global `~/.claude/skills/` can still load them from
-   `python3 .dejavue/dejavue install-skill`.
+2. **Vendors only on request** — `init --vendor` copies `dejavue.py`,
+   `dejavue/` and `dejavue-workflow/` into the repo's `.dejavue/` as an
+   offline fallback. Without it nothing is copied, and the boot stub
+   points at `dejavue` on PATH or a resolver. Don't vendor by default:
+   a committed copy drifts from the installed tool.
 
-3. **Installs git hooks** — post-commit (auto `file_changed` recording),
-   pre-push (staleness check), post-checkout (prints `dejavue status` on
+3. **Installs git hooks** — pre-push (staleness check), post-checkout (prints `dejavue status` on
    branch switch — guards on `$3==1`, never fires on file checkout);
    `.gitattributes` `merge=union` entries for timeline/decisions/invariants.
 

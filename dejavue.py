@@ -792,24 +792,8 @@ def cmd_init(args):
         hooks_dir = git_dir / "hooks"
         hooks_dir.mkdir(exist_ok=True)
 
-        # post-commit hook
-        hook_path = hooks_dir / "post-commit"
-        marker = "#!/usr/bin/env bash\n# dejavue auto-capture"
-        if hook_path.exists():
-            content = hook_path.read_text(encoding="utf-8")
-            if content.startswith(marker):
-                pass
-            elif args.force:
-                _write_hook(hook_path, marker)
-                print("Replaced existing post-commit hook with dejavue hook.")
-            else:
-                print(
-                    f"WARNING: {hook_path} exists with non-dejavue content. "
-                    "Use --force to overwrite."
-                )
-        else:
-            _write_hook(hook_path, marker)
-            print(f"Installed post-commit hook at {hook_path}")
+        # No post-commit hook: git already is the file-change log. Hooks that
+        # older versions installed call `changed --auto`, which is now a no-op.
 
         # pre-push hook
         prepush_path = hooks_dir / "pre-push"
@@ -860,17 +844,6 @@ def cmd_init(args):
 
     maybe_show_worthiness()
     print("Initialized .dejavue/")
-
-
-def _write_hook(hook_path, marker):
-    script_path = Path(sys.argv[0]).resolve()
-    script = (
-        marker + "\n"
-        'if [ "${DEJAVUE_SKIP_AUTO_AMEND:-}" = "1" ]; then exit 0; fi\n'
-        f'exec python3 "{script_path}" changed --auto --commit "$(git rev-parse HEAD)" --amend 2>/dev/null || true\n'
-    )
-    hook_path.write_text(script, encoding="utf-8")
-    hook_path.chmod(0o755)
 
 
 def _write_checkout_hook(hook_path, marker):
@@ -1157,128 +1130,29 @@ def cmd_start(args):
 
 
 def cmd_changed(args):
-    if args.auto and args.commit:
-        sha = args.commit
-        diff_stat = git_run("git", "show", "--stat", sha).splitlines()
-        stat_summary = diff_stat[-1] if diff_stat else ""
-        commit_msg = git_run("git", "log", "-1", "--format=%s", sha)
-        # Use diff-tree with -m --first-parent --root to handle merges + root commits;
-        # plain git show --name-only silently emits nothing for merge commits.
-        touched = [
-            l for l in git_run(
-                "git", "diff-tree", "--no-commit-id", "-r", "--name-only",
-                "-m", "--first-parent", "--root", sha,
-            ).splitlines() if l
-        ]
-        branch = git_run("git", "rev-parse", "--abbrev-ref", "HEAD")
-        short = sha[:7]
-        for path in touched or [args.path or "unknown"]:
-            ev = {
-                "agent": resolve_agent(args.agent) if args.agent else "git-hook",
-                "event": "file_changed",
-                "path": path,
-                "branch": branch,
-                "commit": short,
-                "diff_stat": stat_summary,
-                "summary": commit_msg or f"commit {short}",
-            }
-            base = {"ts": now(), **ev}
-            DEJAVUE_DIR.mkdir(exist_ok=True)
-            with TIMELINE.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(base, ensure_ascii=False) + "\n")
-        print(f"Recorded {len(touched)} file_changed events for {sha[:7]}.")
-        if getattr(args, "amend", False):
-            _amend_auto_capture_commit(sha)
-    else:
-        maybe_show_worthiness()
-        summary = args.summary or f"Changed {args.path}"
-        append_event({
-            "agent": resolve_agent(args.agent),
-            "event": "file_changed",
-            "path": args.path,
-            "summary": summary,
-            **author_type_fields(args),
-            **tension_fields(args),
-            **value_fields(args),
-            **domain_owner_fields(args),
-        })
-        print("Change recorded.")
-
-
-def _amend_auto_capture_commit(sha):
-    """Fold auto-captured timeline changes back into the current HEAD commit."""
-    head_sha = git_run("git", "rev-parse", "--verify", "HEAD")
-    if not head_sha:
+    if args.auto:
+        # Entry point of the post-commit hook older versions installed. File
+        # changes are git's record, so the hook now writes and amends nothing.
         return
-
-    normalized_sha = git_run("git", "rev-parse", "--verify", sha)
-    if not normalized_sha or normalized_sha != head_sha:
-        return
-
-    env = os.environ.copy()
-    env["DEJAVUE_SKIP_AUTO_AMEND"] = "1"
-    try:
-        subprocess.check_call(
-            ["git", "add", "--", str(TIMELINE)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        subprocess.check_call(
-            ["git", "commit", "--amend", "--no-edit", "--no-verify"],
-            env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return
-
-
-# ── session hook capture ───────────────────────────────────────────────────────
-
-def _posttooluse_paths(payload):
-    """Extract the file path(s) an edit-tool use touched, from hook stdin JSON."""
-    ti = payload.get("tool_input") or {}
-    if not isinstance(ti, dict):
-        return []
-    for key in ("file_path", "notebook_path", "path"):
-        val = ti.get(key)
-        if isinstance(val, str) and val:
-            return [val]
-    return []
+    maybe_show_worthiness()
+    summary = args.summary or f"Changed {args.path}"
+    append_event({
+        "agent": resolve_agent(args.agent),
+        "event": "file_changed",
+        "path": args.path,
+        "summary": summary,
+        **author_type_fields(args),
+        **tension_fields(args),
+        **value_fields(args),
+        **domain_owner_fields(args),
+    })
+    print("Change recorded.")
 
 
 def cmd_hook(args):
-    """Consume a runner's PostToolUse JSON from stdin, record the uncommitted edit.
-
-    Best-effort by design: a repo without .dejavue/ is a silent no-op (the hook
-    rides along in repos that never opted in), but malformed input exits nonzero —
-    a silently swallowed error is indistinguishable from success and stays dead.
-    """
-    raw = sys.stdin.read()
-    try:
-        payload = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError as exc:
-        print(f"dejavue hook: malformed JSON on stdin: {exc}", file=sys.stderr)
-        sys.exit(2)
-    if not isinstance(payload, dict):
-        print("dejavue hook: stdin JSON must be an object", file=sys.stderr)
-        sys.exit(2)
-
-    if not DEJAVUE_DIR.is_dir():
-        return
-
-    paths = _posttooluse_paths(payload)
-    if not paths:
-        return
-    tool = payload.get("tool_name") or "unknown-tool"
-    for path in paths:
-        append_event({
-            "agent": resolve_agent(args.agent) if args.agent else "session-hook",
-            "event": "file_changed",
-            "path": path,
-            "tool": tool,
-            "summary": f"Session edit: {tool} touched {path} (uncommitted)",
-        })
+    """Runner hook entry point (`hook posttooluse`). Retired: drains stdin and
+    exits 0 without writing, so runner configs that still call it stay quiet."""
+    sys.stdin.read()
 
 
 def cmd_decision(args):
@@ -1650,8 +1524,10 @@ def cmd_check(args):
         git_dir = Path(git_dir_raw)
         script_path = str(Path(sys.argv[0]).resolve())
 
+        old_hook = git_dir / "hooks" / "post-commit"
+        if old_hook.exists() and "dejavue auto-capture" in old_hook.read_text(encoding="utf-8"):
+            _report("PASS", "post-commit hook", "obsolete — a no-op now, safe to delete")
         for hook_name, hmarker, write_fn in [
-            ("post-commit",  "dejavue auto-capture", lambda p: _write_hook(p, "#!/usr/bin/env bash\n# dejavue auto-capture")),
             ("pre-push",     "dejavue pre-push",     lambda p: _write_prepush_hook(p, "#!/usr/bin/env bash\n# dejavue pre-push")),
             ("post-checkout", "dejavue post-checkout", lambda p: _write_checkout_hook(p, "#!/usr/bin/env bash\n# dejavue post-checkout")),
         ]:
@@ -2937,7 +2813,7 @@ def _capabilities_data():
             "semantic_recall": True,
             "managed_adapters": True,
             "git_hooks": True,
-            "session_hooks": True,
+            "session_hooks": False,
             "git_notes": True,
             "git_workflow_memory": True,
             "project_epochs": True,
@@ -4172,7 +4048,6 @@ def cmd_link(args):
 
     if not related and not dejavue_notes:
         print(f"No dejavue events recorded for commit {short}.")
-        print("(Events are captured by the post-commit hook — run `dejavue init` to install it.)")
         print("(Manually link with: dejavue note-commit <sha>)")
         return
 
@@ -5052,17 +4927,16 @@ def main():
     add_tension_arg(p)
     add_value_arg(p)
     add_domain_owner_arg(p)
-    p.add_argument("--auto", action="store_true", help="Auto mode (from git hook).")
-    p.add_argument("--commit", default=None, help="Commit SHA (used with --auto).")
-    p.add_argument("--amend", action="store_true",
-                   help="Fold auto-capture back into HEAD so the worktree stays clean.")
+    p.add_argument("--auto", action="store_true",
+                   help="Retired post-commit hook mode: a no-op that writes nothing.")
+    p.add_argument("--commit", default=None, help="Ignored (retired hook mode).")
+    p.add_argument("--amend", action="store_true", help="Ignored (retired hook mode).")
     p.set_defaults(func=cmd_changed)
 
-    p = sub.add_parser("hook", help="Consume a runner hook's stdin JSON (posttooluse) and record the edit.")
+    p = sub.add_parser("hook", help="Retired runner hook: drains stdin, writes nothing, exits 0.")
     p.add_argument("kind", choices=["posttooluse"],
-                   help="Hook kind: posttooluse — Claude Code-style PostToolUse JSON on stdin.")
-    p.add_argument("--agent", default=None,
-                   help="Agent identity for recorded events (default: session-hook).")
+                   help="Hook kind: posttooluse (accepted for existing runner configs).")
+    p.add_argument("--agent", default=None, help="Ignored.")
     p.set_defaults(func=cmd_hook)
 
     p = sub.add_parser("decision", help="Record architectural decision (or blocker/claim/question/experiment).")
