@@ -17,7 +17,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 
 DEJAVUE_DIR = Path(".dejavue")
 TIMELINE = DEJAVUE_DIR / "timeline.jsonl"
@@ -566,6 +566,53 @@ the code + git log, don't write it.
 """)
 
 
+def _last_index_events():
+    """Scan the timeline for external index events (symbol_index family).
+
+    External indexers append `symbol_index` / `symbol_index_incremental` events
+    with the same JSONL schema; their presence is the freshness signal for
+    "is the structural index current?" without this repo knowing the indexer.
+    Returns (last_full, last_incremental, incremental_count).
+    """
+    last_full = None
+    last_inc = None
+    inc_count = 0
+    if not TIMELINE.exists():
+        return None, None, 0
+    for line in TIMELINE.read_text(encoding="utf-8").splitlines():
+        try:
+            ev = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(ev, dict):
+            continue
+        kind = ev.get("event")
+        if kind == "symbol_index":
+            last_full = ev
+        elif kind == "symbol_index_incremental":
+            last_inc = ev
+            inc_count += 1
+    return last_full, last_inc, inc_count
+
+
+def _index_freshness_lines():
+    """Return boot-packet lines describing external index freshness, or []."""
+    last_full, last_inc, inc_count = _last_index_events()
+    if not last_full and not last_inc:
+        return []
+    now_dt = datetime.now(timezone.utc)
+    lines = []
+    if last_full:
+        dt = _parse_iso_ts(last_full.get("ts", ""))
+        age = f" ({(now_dt - dt).days}d ago)" if dt else ""
+        lines.append(f"  last full index: {last_full.get('ts','')}{age} — {last_full.get('summary','')}")
+    if last_inc:
+        dt = _parse_iso_ts(last_inc.get("ts", ""))
+        age = f" ({(now_dt - dt).days}d ago)" if dt else ""
+        lines.append(f"  incremental updates since: {inc_count} (last {last_inc.get('ts','')}{age})")
+    return lines
+
+
 def _staleness_warnings():
     """Return list of warning strings about stale .dejavue/ state."""
     import time
@@ -591,6 +638,14 @@ def _staleness_warnings():
 
     if REFERENCES.exists() and not list(REFERENCES.glob("*.md")):
         warnings.append("references/ is empty — consider: dejavue init --map to scaffold map.md")
+
+    last_full, _, _ = _last_index_events()
+    if last_full:
+        dt = _parse_iso_ts(last_full.get("ts", ""))
+        if dt:
+            age_days = (datetime.now(timezone.utc) - dt).days
+            if age_days > 30:
+                warnings.append(f"symbol index is {age_days}d old — consider reindexing")
 
     expired = []
     for ev in reversed(_load_events()):
@@ -794,7 +849,7 @@ def cmd_init(args):
         "summary": "Initialized .dejavue/ memory scaffold.",
     })
 
-    _install_discovery(force=getattr(args, "force", False))
+    _install_discovery(force=getattr(args, "force", False), vendor=getattr(args, "vendor", False))
 
     if getattr(args, "map", False):
         _scaffold_map()
@@ -909,20 +964,46 @@ _CLAUDE_MD_BOOT = """\
 
 This repo uses [dejavue](https://github.com/nixpt/dejavue) for persistent architectural context.
 Run `dejavue context` before making changes.
-Fallback if not on PATH: `python3 .dejavue/dejavue.py context`
+{fallback}
 
 {marker}
-""".format(marker=_CLAUDE_MD_MARKER)
+"""
+# The fallback line names the vendored copy only when `init --vendor` made one.
+_FALLBACK_VENDORED = "Fallback if not on PATH: `python3 .dejavue/dejavue.py context`"
+_FALLBACK_PATH = ("Not on PATH? Use a resolver such as `jagent-dejavue context`, or install it:"
+                  " `pipx install git+https://github.com/nixpt/dejavue`")
 
 
-def _install_discovery(force=False):
-    """Install in-repo agent discovery: skill fallback + script vendor + CLAUDE.md boot stub.
+def _install_discovery(force=False, vendor=False):
+    """Install in-repo agent discovery: the CLAUDE.md boot stub, and with
+    vendor=True (`init --vendor`) a copy of the skills and of dejavue.py itself.
 
     Called automatically by init. Idempotent — safe to call multiple times.
-    Skill install and script vendor are both best-effort (silently skipped if
+    Vendoring is opt-in: a committed copy of this script in every repo drifts
+    from the installed one. Both copies are best-effort (silently skipped if
     their source can't be found — e.g. running from a zipapp/frozen build
     with no sibling skills/ dir or no readable own-source file).
     """
+    if vendor:
+        _vendor_into_repo(force)
+    fallback = _FALLBACK_VENDORED if (DEJAVUE_DIR / "dejavue.py").is_file() else _FALLBACK_PATH
+    boot = _CLAUDE_MD_BOOT.format(fallback=fallback, marker=_CLAUDE_MD_MARKER)
+
+    claude_md = Path("CLAUDE.md")
+    if claude_md.exists():
+        content = claude_md.read_text(encoding="utf-8")
+        if _CLAUDE_MD_MARKER in content or "dejavue context" in content:
+            return  # already wired, skip
+        with claude_md.open("a", encoding="utf-8") as fh:
+            fh.write(boot)
+        print("  ✓  Appended dejavue boot stub to CLAUDE.md")
+    else:
+        claude_md.write_text("# Project\n" + boot, encoding="utf-8")
+        print("  ✓  Created CLAUDE.md with dejavue boot stub")
+
+
+def _vendor_into_repo(force=False):
+    """Copy the shipped skills and this script into .dejavue/ (init --vendor)."""
     import shutil as _shutil
 
     # --- in-repo skill fallback (copy so they travel with the repo) ---
@@ -962,19 +1043,6 @@ def _install_discovery(force=False):
         except OSError as e:
             # Best-effort — a read/copy failure here shouldn't abort init.
             print(f"  !  Could not vendor dejavue.py into .dejavue/: {e}")
-
-    # --- CLAUDE.md boot stub ---
-    claude_md = Path("CLAUDE.md")
-    if claude_md.exists():
-        content = claude_md.read_text(encoding="utf-8")
-        if _CLAUDE_MD_MARKER in content or "dejavue context" in content:
-            return  # already wired, skip
-        with claude_md.open("a", encoding="utf-8") as fh:
-            fh.write(_CLAUDE_MD_BOOT)
-        print("  ✓  Appended dejavue boot stub to CLAUDE.md")
-    else:
-        claude_md.write_text("# Project\n" + _CLAUDE_MD_BOOT, encoding="utf-8")
-        print("  ✓  Created CLAUDE.md with dejavue boot stub")
 
 
 def _scaffold_map():
@@ -1165,6 +1233,54 @@ def _amend_auto_capture_commit(sha):
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
         return
+
+
+# ── session hook capture ───────────────────────────────────────────────────────
+
+def _posttooluse_paths(payload):
+    """Extract the file path(s) an edit-tool use touched, from hook stdin JSON."""
+    ti = payload.get("tool_input") or {}
+    if not isinstance(ti, dict):
+        return []
+    for key in ("file_path", "notebook_path", "path"):
+        val = ti.get(key)
+        if isinstance(val, str) and val:
+            return [val]
+    return []
+
+
+def cmd_hook(args):
+    """Consume a runner's PostToolUse JSON from stdin, record the uncommitted edit.
+
+    Best-effort by design: a repo without .dejavue/ is a silent no-op (the hook
+    rides along in repos that never opted in), but malformed input exits nonzero —
+    a silently swallowed error is indistinguishable from success and stays dead.
+    """
+    raw = sys.stdin.read()
+    try:
+        payload = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError as exc:
+        print(f"dejavue hook: malformed JSON on stdin: {exc}", file=sys.stderr)
+        sys.exit(2)
+    if not isinstance(payload, dict):
+        print("dejavue hook: stdin JSON must be an object", file=sys.stderr)
+        sys.exit(2)
+
+    if not DEJAVUE_DIR.is_dir():
+        return
+
+    paths = _posttooluse_paths(payload)
+    if not paths:
+        return
+    tool = payload.get("tool_name") or "unknown-tool"
+    for path in paths:
+        append_event({
+            "agent": resolve_agent(args.agent) if args.agent else "session-hook",
+            "event": "file_changed",
+            "path": path,
+            "tool": tool,
+            "summary": f"Session edit: {tool} touched {path} (uncommitted)",
+        })
 
 
 def cmd_decision(args):
@@ -1375,6 +1491,16 @@ def cmd_context(args):
             for title, (sup_title, sup_ts) in superseded:
                 print(f"  '{title}' → superseded by '{sup_title}' ({sup_ts})")
             print()
+
+    # External index freshness — if an indexer (e.g. a tree-sitter symbol index)
+    # has been appending events, an arriving agent can skip reindexing or trust
+    # structural answers knowing how current the index is.
+    index_lines = _index_freshness_lines()
+    if index_lines:
+        print("--- index freshness ---\n")
+        for line in index_lines:
+            print(line)
+        print()
 
     if REFERENCES.exists():
         refs = sorted(REFERENCES.glob("*.md"))
@@ -2796,7 +2922,7 @@ def _capabilities_data():
         "timeline", "tag", "note-commit", "completion", "rejected", "trap",
         "incident", "invariant", "pattern", "entities", "owners", "capabilities",
         "branch", "merge-summary", "squash-summary", "epoch", "milestone", "explain",
-        "conflict",
+        "conflict", "hook",
     ]
     return {
         "dejavue_version": VERSION,
@@ -2813,6 +2939,7 @@ def _capabilities_data():
             "semantic_recall": True,
             "managed_adapters": True,
             "git_hooks": True,
+            "session_hooks": True,
             "git_notes": True,
             "git_workflow_memory": True,
             "project_epochs": True,
@@ -4538,7 +4665,7 @@ _dejavue() {
     local cmds="version init start changed decision state handoff context status \\
 check archive roster config install-skill log blame note since changelog ingest recall \\
 worthiness get list annotate stats promote import export reference link search \\
-diff timeline tag note-commit completion rejected trap incident invariant pattern entities owners capabilities branch merge-summary squash-summary epoch milestone explain conflict"
+diff timeline tag note-commit completion rejected trap incident invariant pattern rule plan entities owners capabilities branch merge-summary squash-summary epoch milestone explain conflict hook"
     if [[ $COMP_CWORD -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$cmds" -- "$cur"))
         return
@@ -4560,7 +4687,7 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
             elif [[ "$prev" == "--stability" ]]; then
                 COMPREPLY=($(compgen -W "ephemeral operational architectural constitutional historical" -- "$cur"))
             fi ;;
-        trap|incident|invariant|pattern) COMPREPLY=($(compgen -W "--agent --author-type --tension --value --domain-owner --tag --entity" -- "$cur")) ;;
+        trap|incident|invariant|pattern|rule) COMPREPLY=($(compgen -W "--agent --author-type --tension --value --domain-owner --tag --entity" -- "$cur")) ;;
         note)
             COMPREPLY=($(compgen -W "--agent --author-type --tension --value --domain-owner --tag --type --entity --confidence --freshness --expires-after --derived-from --stability" -- "$cur"))
             if [[ "$prev" == "--type" ]]; then
@@ -4622,7 +4749,7 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
         ingest)   COMPREPLY=($(compgen -W "--since --agent --dry-run" -- "$cur")) ;;
         completion) COMPREPLY=($(compgen -W "bash zsh fish" -- "$cur")) ;;
         install-skill) COMPREPLY=($(compgen -W "--dir --force" -- "$cur")) ;;
-        init)     COMPREPLY=($(compgen -W "--wizard --force --map --no-hook" -- "$cur")) ;;
+        init)     COMPREPLY=($(compgen -W "--wizard --force --map --vendor --ingest" -- "$cur")) ;;
     esac
 }
 complete -F _dejavue dejavue
@@ -4684,6 +4811,8 @@ _dejavue() {
                 'incident:Record an operational incident (outage, corruption, migration)'
                 'invariant:Record an architectural invariant that must always hold'
                 'pattern:Record a discovered convention/pattern (naming, idiom, structure)'
+                'rule:Record a soft project rule/convention (advisory, weaker than invariant)'
+                'plan:Capture an actionable item into the repo planner (.jagent/, TODO.md)'
                 'entities:List entities, or show events referencing one entity'
                 'owners:List domain owners, or show events owned by one domain'
                 'capabilities:Report implementation and repo-local DCP capabilities'
@@ -4694,6 +4823,7 @@ _dejavue() {
                 'milestone:Record a named project milestone'
                 'explain:Explain why a file or commit exists'
                 'conflict:Record or list conflict-resolution rationale'
+                'hook:Consume a runner hook stdin JSON (posttooluse) and record the edit'
             )
             _describe 'subcommand' subcommands ;;
         args)
@@ -4718,7 +4848,7 @@ _dejavue() {
                         '*--artifacts[File this decision is about, repeatable]:file:_files' \\
                         '*--entity[Subject this event is about, repeatable]:entity' \\
                         '--tag[Tag]:tag' ;;
-                trap|incident|invariant|pattern)
+                trap|incident|invariant|pattern|rule)
                     _arguments \\
                         '--agent[Agent name]:agent' \\
                         '--author-type[Writer class]:author type:(human agent orchestrator ci bot)' \\
@@ -4799,16 +4929,16 @@ _FISH_COMPLETION = """\
 set -l cmds version init start changed decision state handoff context status \\
     check archive roster config install-skill log blame note since changelog ingest recall \\
     worthiness get list annotate stats promote import export reference link search \\
-    diff timeline tag note-commit completion rejected trap incident invariant pattern entities owners capabilities branch merge-summary squash-summary epoch milestone explain conflict
+    diff timeline tag note-commit completion rejected trap incident invariant pattern rule plan entities owners capabilities branch merge-summary squash-summary epoch milestone explain conflict hook
 complete -c dejavue -f -n "not __fish_seen_subcommand_from $cmds" -a "$cmds"
 # decision / note types
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l type -a "decision blocker claim question experiment checkpoint"
 complete -c dejavue -n "__fish_seen_subcommand_from decision" -l durability -a "temporary tactical strategic constitutional"
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l confidence -a "speculative proposed experimental adopted deprecated verified"
-complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l author-type -a "human agent orchestrator ci bot"
-complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l tension
-complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l value
-complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern branch epoch milestone conflict" -l domain-owner
+complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern rule plan branch epoch milestone conflict" -l author-type -a "human agent orchestrator ci bot"
+complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern rule plan branch epoch milestone conflict" -l tension
+complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern rule plan branch epoch milestone conflict" -l value
+complete -c dejavue -n "__fish_seen_subcommand_from start changed decision state handoff note trap incident invariant pattern rule plan branch epoch milestone conflict" -l domain-owner
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l freshness
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l expires-after
 complete -c dejavue -n "__fish_seen_subcommand_from decision note" -l derived-from
@@ -4819,6 +4949,11 @@ complete -c dejavue -n "__fish_seen_subcommand_from note" -l type -a "note block
 # export
 complete -c dejavue -n "__fish_seen_subcommand_from export" -l format -a "json md"
 complete -c dejavue -n "__fish_seen_subcommand_from export" -l target -a "claude codex gemini copilot cursor all"
+
+complete -c dejavue -n "__fish_seen_subcommand_from plan" -l kind -a "issue gap opportunity idea cleanup"
+complete -c dejavue -n "__fish_seen_subcommand_from plan" -l list
+complete -c dejavue -n "__fish_seen_subcommand_from plan" -l target -r
+complete -c dejavue -n "__fish_seen_subcommand_from rule" -l scope -r
 # capabilities
 complete -c dejavue -n "__fish_seen_subcommand_from capabilities" -l format -a "json text"
 # branch / merge-summary
@@ -4895,6 +5030,8 @@ def main():
     p.add_argument("--force", action="store_true", help="Overwrite existing non-dejavue hooks.")
     p.add_argument("--ingest", action="store_true", help="Run ingest after init.")
     p.add_argument("--map", action="store_true", help="Scaffold references/map.md.")
+    p.add_argument("--vendor", action="store_true",
+                   help="Also copy dejavue.py and the skills into .dejavue/ (offline fallback; off by default).")
     p.add_argument("--wizard", action="store_true",
                    help="Run a 3-question prompt (project type / agent / purpose) to seed "
                         "context.md + state.md. Non-interactive (piped/EOF) uses defaults.")
@@ -4922,6 +5059,13 @@ def main():
     p.add_argument("--amend", action="store_true",
                    help="Fold auto-capture back into HEAD so the worktree stays clean.")
     p.set_defaults(func=cmd_changed)
+
+    p = sub.add_parser("hook", help="Consume a runner hook's stdin JSON (posttooluse) and record the edit.")
+    p.add_argument("kind", choices=["posttooluse"],
+                   help="Hook kind: posttooluse — Claude Code-style PostToolUse JSON on stdin.")
+    p.add_argument("--agent", default=None,
+                   help="Agent identity for recorded events (default: session-hook).")
+    p.set_defaults(func=cmd_hook)
 
     p = sub.add_parser("decision", help="Record architectural decision (or blocker/claim/question/experiment).")
     p.add_argument("title")

@@ -2006,7 +2006,7 @@ test_init_discovery_without_skills_dir() {
     # Copy dejavue.py to a temp dir that has no skills/ sibling
     cp "$DEJAVUE" "$SCRIPT_DIR/dejavue.py"
     cd "$TEST_DIR"
-    "$PYTHON" "$SCRIPT_DIR/dejavue.py" init >/dev/null 2>&1
+    "$PYTHON" "$SCRIPT_DIR/dejavue.py" init --vendor >/dev/null 2>&1
     assert_file_exists "CLAUDE.md created even without skills/" "CLAUDE.md" || return 1
     local content
     content="$(cat CLAUDE.md)"
@@ -2969,7 +2969,7 @@ test_repo_flag_bad_path_exits_nonzero() {
     assert_eq "bad --repo exits 2" "2" "$rc" || return 1
 }
 
-# 179. init vendors dejavue.py into .dejavue/ AND the vendored copy is
+# 179. init --vendor copies dejavue.py into .dejavue/ AND the vendored copy is
 #      genuinely runnable — makes the CLAUDE.md "Fallback if not on PATH:
 #      python3 .dejavue/dejavue.py <command>" promise actually true instead
 #      of just present as text (github.com/nixpt/dejavue/issues/9).
@@ -2977,7 +2977,7 @@ test_init_vendors_runnable_script() {
     TEST_DIR="$(setup_repo)"
     trap 'cd /; rm -rf "$TEST_DIR"' EXIT
     cd "$TEST_DIR"
-    dv init >/dev/null 2>&1
+    dv init --vendor >/dev/null 2>&1
     assert_file_exists "dejavue.py vendored into .dejavue/" ".dejavue/dejavue.py" || return 1
 
     local content
@@ -3001,13 +3001,119 @@ test_init_vendor_idempotent_no_force() {
     TEST_DIR="$(setup_repo)"
     trap 'cd /; rm -rf "$TEST_DIR"' EXIT
     cd "$TEST_DIR"
-    dv init >/dev/null 2>&1
+    dv init --vendor >/dev/null 2>&1
     echo "# local marker" >> .dejavue/dejavue.py
-    dv init >/dev/null 2>&1  # second run, no --force
+    dv init --vendor >/dev/null 2>&1  # second run, no --force
     local content
     content="$(cat .dejavue/dejavue.py)"
     assert_contains "second init without --force preserves local edit" "$content" "# local marker" || return 1
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 185. init without --vendor copies neither the script nor the skills, and the
+#      CLAUDE.md fallback line points at PATH/a resolver, not a missing copy.
+test_init_no_vendor_by_default() {
+    TEST_DIR="$(setup_repo)"
+    trap 'cd /; rm -rf "$TEST_DIR"' EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    if [[ -e .dejavue/dejavue.py ]]; then
+        echo "  .dejavue/dejavue.py exists without --vendor" >&2; return 1
+    fi
+    if [[ -e .dejavue/dejavue-workflow || -e .dejavue/dejavue ]]; then
+        echo "  skills copied without --vendor" >&2; return 1
+    fi
+    local content
+    content="$(cat CLAUDE.md)"
+    assert_not_contains "no fallback to a missing vendored copy" "$content" ".dejavue/dejavue.py" || return 1
+    assert_contains "fallback names a resolver" "$content" "jagent-dejavue context" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 181. hook posttooluse consumes PostToolUse JSON from stdin and records an
+#      uncommitted file_changed event — silent on success, no worthiness banner
+test_hook_posttooluse_records_edit() {
+    TEST_DIR="$(setup_repo)"
+    trap 'cd /; rm -rf "$TEST_DIR"' EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    local out rc
+    out="$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/auth.py"}}' | dv hook posttooluse 2>&1)"
+    rc=$?
+    assert_eq "hook posttooluse exits 0" "0" "$rc" || return 1
+    assert_eq "hook posttooluse is silent on success" "" "$out" || return 1
+    local timeline
+    timeline="$(cat .dejavue/timeline.jsonl)"
+    assert_contains "file_changed event recorded" "$timeline" '"event": "file_changed"' || return 1
+    assert_contains "touched path recorded" "$timeline" "src/auth.py" || return 1
+    assert_contains "tool name recorded" "$timeline" '"tool": "Edit"' || return 1
+    assert_contains "session-hook agent identity" "$timeline" '"agent": "session-hook"' || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 182. hook posttooluse with no editable file path (e.g. Bash tool use) is a
+#      silent no-op; malformed JSON exits nonzero with a message
+test_hook_posttooluse_edge_cases() {
+    TEST_DIR="$(setup_repo)"
+    trap 'cd /; rm -rf "$TEST_DIR"' EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    local out rc
+    out="$(echo '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | dv hook posttooluse 2>&1)"
+    rc=$?
+    assert_eq "no file path exits 0 silently" "0|$out" "0|" || return 1
+    out="$(echo 'not json' | dv hook posttooluse 2>&1)"
+    rc=$?
+    if [[ "$rc" -eq 0 ]]; then
+        echo "  ASSERT FAIL: malformed JSON must exit nonzero" >&2
+        return 1
+    fi
+    assert_contains "malformed JSON explains itself" "$out" "malformed JSON" || return 1
+    local count
+    count="$(grep -c file_changed .dejavue/timeline.jsonl || true)"
+    assert_eq "no events written for either case" "0" "$count" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 183. hook posttooluse in a repo without .dejavue/ rides along silently —
+#      hooks installed machine-wide must not error in non-dejavue repos
+test_hook_posttooluse_no_dejavue_silent() {
+    TEST_DIR="$(setup_repo)"
+    trap 'cd /; rm -rf "$TEST_DIR"' EXIT
+    cd "$TEST_DIR"
+    local out rc
+    out="$(echo '{"tool_name":"Edit","tool_input":{"file_path":"a.py"}}' | dv hook posttooluse 2>&1)"
+    rc=$?
+    assert_eq "no .dejavue/ exits 0" "0" "$rc" || return 1
+    assert_eq "no .dejavue/ prints nothing" "" "$out" || return 1
+    if [[ -d .dejavue ]]; then
+        echo "  ASSERT FAIL: .dejavue/ was created as a side effect" >&2
+        return 1
+    fi
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 184. context surfaces index freshness from external indexer events
+#      (symbol_index family appended by tools like a tree-sitter symbol index)
+test_context_shows_index_freshness() {
+    TEST_DIR="$(setup_repo)"
+    trap 'cd /; rm -rf "$TEST_DIR"' EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    printf '%s\n' '{"ts":"2026-08-13T03:20:39-05:00","agent":"symbol-indexer","event":"symbol_index","summary":"Symbol index rebuilt: 100 symbol(s) across 10 file(s)","symbol_count":100,"file_count":10}' >> .dejavue/timeline.jsonl
+    printf '%s\n' '{"ts":"2026-08-14T03:20:39-05:00","agent":"symbol-indexer","event":"symbol_index_incremental","summary":"Incremental reindex: 2 file(s) updated","artifacts":["src/a.py"]}' >> .dejavue/timeline.jsonl
+    local out
+    out="$(dv context)"
+    assert_contains "index freshness section present" "$out" "--- index freshness ---" || return 1
+    assert_contains "full index event surfaced with age" "$out" "last full index: 2026-08-13T03:20:39-05:00" || return 1
+    assert_contains "incremental count surfaced" "$out" "incremental updates since: 1" || return 1
+    # repos with no index events must not show the section
+    TEST_DIR2="$(setup_repo)"
+    cd "$TEST_DIR2"
+    dv init >/dev/null 2>&1
+    out="$(dv context)"
+    assert_not_contains "no index events, no freshness section" "$out" "index freshness" || return 1
+    cd /; rm -rf "$TEST_DIR" "$TEST_DIR2"; trap - EXIT
 }
 
 # ── main ───────────────────────────────────────────────────────────────────────
@@ -3219,6 +3325,11 @@ main() {
     run_test "178 bad --repo exits nonzero"                   test_repo_flag_bad_path_exits_nonzero
     run_test "179 init vendors runnable dejavue.py"           test_init_vendors_runnable_script
     run_test "180 vendored script re-init preserves edits"    test_init_vendor_idempotent_no_force
+    run_test "185 init does not vendor by default"            test_init_no_vendor_by_default
+    run_test "181 hook posttooluse records session edit"      test_hook_posttooluse_records_edit
+    run_test "182 hook posttooluse edge cases"                test_hook_posttooluse_edge_cases
+    run_test "183 hook posttooluse no .dejavue silent no-op"  test_hook_posttooluse_no_dejavue_silent
+    run_test "184 context shows index freshness"              test_context_shows_index_freshness
 
     echo ""
     echo "========================================"
