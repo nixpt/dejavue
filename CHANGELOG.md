@@ -32,6 +32,11 @@ any v1.x release can be read by any later v1.x release without migration.
   offering to reinstall it. `hook posttooluse` is retired the same way (drains
   stdin, exits 0, writes nothing); `capabilities` reports
   `features.session_hooks: false`. Manual `changed PATH` is unchanged.
+- **Internal refactor, no behaviour change.** Shared helpers for the writer
+  metadata fields and flags, the labeled-event commands
+  (trap/incident/invariant/pattern/rule) and timeline parsing; `context` parses
+  the timeline once instead of four times. Output and on-disk writes are
+  byte-identical (golden-checked on real repos' memory).
 
 ### Added
 
