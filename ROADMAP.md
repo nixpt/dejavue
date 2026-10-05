@@ -113,7 +113,7 @@ The maturation step (maintainer-directed internal session) evolves dejavue from 
 agent memory* into **DCP — a portable context interchange standard**: `.dejavue/`
 becomes the single source of truth; `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` /
 Copilot rules become **generated, non-destructive adapter targets**. dejavue is
-the reference implementation; the protocol has a citable spec (Foundry / OCPL).
+the reference implementation; the protocol has a citable spec (Foundry).
 
 Shipped internal session across parallel horses (spec/positioning + code), **119/119 tests**,
 zero new deps. Release line **v2.0.0**; format backward-compatible (additive, DCP §7).

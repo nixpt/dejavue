@@ -170,7 +170,7 @@ markers (absent→create, marked→replace region, unmarked→append+warn,
 clobbered. The whole protocol holds to **Axiom 0**: zero ceremony, no mandated
 dependency, every layer above the base memory log optional.
 
-DCP is stewarded for the OpenKO Foundry under OCPL-1.1; see
+DCP and dejavue are released under the MIT License (see [`LICENSE`](LICENSE)); stewardship is described in
 [`STEWARDSHIP.md`](STEWARDSHIP.md).
 
 
