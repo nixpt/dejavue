@@ -91,7 +91,7 @@ diff timeline tag note-commit completion rejected trap incident invariant patter
         ingest)   COMPREPLY=($(compgen -W "--since --agent --dry-run" -- "$cur")) ;;
         completion) COMPREPLY=($(compgen -W "bash zsh fish" -- "$cur")) ;;
         install-skill) COMPREPLY=($(compgen -W "--dir --force" -- "$cur")) ;;
-        init)     COMPREPLY=($(compgen -W "--wizard --force --map --no-hook" -- "$cur")) ;;
+        init)     COMPREPLY=($(compgen -W "--wizard --force --map --vendor --ingest" -- "$cur")) ;;
     esac
 }
 complete -F _dejavue dejavue

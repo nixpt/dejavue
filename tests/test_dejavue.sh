@@ -2006,7 +2006,7 @@ test_init_discovery_without_skills_dir() {
     # Copy dejavue.py to a temp dir that has no skills/ sibling
     cp "$DEJAVUE" "$SCRIPT_DIR/dejavue.py"
     cd "$TEST_DIR"
-    "$PYTHON" "$SCRIPT_DIR/dejavue.py" init >/dev/null 2>&1
+    "$PYTHON" "$SCRIPT_DIR/dejavue.py" init --vendor >/dev/null 2>&1
     assert_file_exists "CLAUDE.md created even without skills/" "CLAUDE.md" || return 1
     local content
     content="$(cat CLAUDE.md)"
@@ -2969,7 +2969,7 @@ test_repo_flag_bad_path_exits_nonzero() {
     assert_eq "bad --repo exits 2" "2" "$rc" || return 1
 }
 
-# 179. init vendors dejavue.py into .dejavue/ AND the vendored copy is
+# 179. init --vendor copies dejavue.py into .dejavue/ AND the vendored copy is
 #      genuinely runnable — makes the CLAUDE.md "Fallback if not on PATH:
 #      python3 .dejavue/dejavue.py <command>" promise actually true instead
 #      of just present as text (github.com/nixpt/dejavue/issues/9).
@@ -2977,7 +2977,7 @@ test_init_vendors_runnable_script() {
     TEST_DIR="$(setup_repo)"
     trap 'cd /; rm -rf "$TEST_DIR"' EXIT
     cd "$TEST_DIR"
-    dv init >/dev/null 2>&1
+    dv init --vendor >/dev/null 2>&1
     assert_file_exists "dejavue.py vendored into .dejavue/" ".dejavue/dejavue.py" || return 1
 
     local content
@@ -3001,12 +3001,32 @@ test_init_vendor_idempotent_no_force() {
     TEST_DIR="$(setup_repo)"
     trap 'cd /; rm -rf "$TEST_DIR"' EXIT
     cd "$TEST_DIR"
-    dv init >/dev/null 2>&1
+    dv init --vendor >/dev/null 2>&1
     echo "# local marker" >> .dejavue/dejavue.py
-    dv init >/dev/null 2>&1  # second run, no --force
+    dv init --vendor >/dev/null 2>&1  # second run, no --force
     local content
     content="$(cat .dejavue/dejavue.py)"
     assert_contains "second init without --force preserves local edit" "$content" "# local marker" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
+# 185. init without --vendor copies neither the script nor the skills, and the
+#      CLAUDE.md fallback line points at PATH/a resolver, not a missing copy.
+test_init_no_vendor_by_default() {
+    TEST_DIR="$(setup_repo)"
+    trap 'cd /; rm -rf "$TEST_DIR"' EXIT
+    cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    if [[ -e .dejavue/dejavue.py ]]; then
+        echo "  .dejavue/dejavue.py exists without --vendor" >&2; return 1
+    fi
+    if [[ -e .dejavue/dejavue-workflow || -e .dejavue/dejavue ]]; then
+        echo "  skills copied without --vendor" >&2; return 1
+    fi
+    local content
+    content="$(cat CLAUDE.md)"
+    assert_not_contains "no fallback to a missing vendored copy" "$content" ".dejavue/dejavue.py" || return 1
+    assert_contains "fallback names a resolver" "$content" "jagent-dejavue context" || return 1
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
@@ -3305,6 +3325,7 @@ main() {
     run_test "178 bad --repo exits nonzero"                   test_repo_flag_bad_path_exits_nonzero
     run_test "179 init vendors runnable dejavue.py"           test_init_vendors_runnable_script
     run_test "180 vendored script re-init preserves edits"    test_init_vendor_idempotent_no_force
+    run_test "185 init does not vendor by default"            test_init_no_vendor_by_default
     run_test "181 hook posttooluse records session edit"      test_hook_posttooluse_records_edit
     run_test "182 hook posttooluse edge cases"                test_hook_posttooluse_edge_cases
     run_test "183 hook posttooluse no .dejavue silent no-op"  test_hook_posttooluse_no_dejavue_silent

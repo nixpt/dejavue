@@ -199,7 +199,7 @@ git                — mechanical history (commits, diffs)
 
 | Command | Description |
 |---|---|
-| `dejavue init [--ingest] [--map] [--wizard]` | Create `.dejavue/`, install hooks + `.gitattributes` + `.gitignore`, write `CLAUDE.md` boot stub, copy skill files to `.dejavue/`. `--wizard` seeds `context.md` interactively. |
+| `dejavue init [--ingest] [--map] [--wizard] [--vendor]` | Create `.dejavue/`, install hooks + `.gitattributes` + `.gitignore`, write `CLAUDE.md` boot stub. `--vendor` also copies `dejavue.py` and the skill files into `.dejavue/` as an offline fallback (off by default). `--wizard` seeds `context.md` interactively. |
 | `dejavue start --goal TEXT` | Record session start with intent. Foundation for `since --agent`. |
 | `dejavue state --summary TEXT` | Overwrite `state.md` with current snapshot. |
 | `dejavue handoff --summary TEXT --next TEXT` | Write `handoff.md` for the next session. |
