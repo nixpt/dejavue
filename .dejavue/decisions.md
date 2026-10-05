@@ -367,3 +367,16 @@ Rejected alternatives:
 - **Write session edits to a separate session-edits.jsonl**: a second file format splits recall/blame/explain coverage for no gain; reuse the event schema
 - **MCP server now**: capture half is served by hooks; retrieval over MCP stays a roadmap candidate until a concrete host demands it (CONTRIBUTING defers it)
 
+
+## 2026-10-05T04:22:27-05:00 — [STRATEGIC] [PROPOSED] PROPOSED: shrink dejavue to the durable-why core (decisions/traps/invariants/rules/patterns, context.md adapters, recall/explain) and give agents one write path to it from jsess (--durable bridge); stop logging file changes via the post-commit hook; formats unchanged (JSONL+MD for .dejavue, caison for jsess)
+
+Reason:
+DEJAVUE-REVIEW-1 (docs/09): 86% of 38,372 fleet timeline events are hook file_changed copies of git log whose shas are mostly orphaned by the amend (57/60 in crush-ast); the hook halts git rebase; decisions are double-entered with jsess; state/handoff median 49/60 days stale. The unique value is committed decisions with reasons (99%) and rejected alternatives (47%), which jsess (gitignored, single-writer caison) cannot carry. NOT RATIFIED — captain decisions C1–C8 in docs/09 §5.
+
+Artifacts: docs/09-review-2026-10-post-jsess-jagent-caison.md
+
+Rejected alternatives:
+- **fold dejavue into jsess/.jagent**: jsess stores are gitignored and private, caison rejects union-merged duplicate keys, breaks the public DCP standard
+- **move .dejavue records to caison**: breaks multi-writer union merge, Axiom 0 (non-stdlib parser), greppability
+- **keep and fix only (option A)**: right first PR, leaves 86% noise + double entry + two handoffs
+
