@@ -7,6 +7,19 @@ any v1.x release can be read by any later v1.x release without migration.
 
 ## [Unreleased]
 
+### Added
+
+- **`plan` respects a rendered planner.** When the detected planner (e.g.
+  `.jagent/planning/TASKS.md`) is ignored by git, it is a view rendered by
+  `jagent-ticket render` from ticket files plus open captures. `plan` then records
+  only the timeline event and leaves the file alone, so parallel branches never
+  append to the same file (forges ignore `merge=union`). `plan --list` on such a
+  planner lists the open captures from the timeline.
+- **`plan --close EVENT_ID [--reason TEXT]`** closes a capture once it is
+  ticketed or rejected: a `plan` event with `kind: close` that `supersedes` it.
+  Unknown ids exit 2.
+- **`plan --kind proposal`.**
+
 ### Changed
 
 - **`init` no longer vendors by default.** Copying `dejavue.py` (and the skill
