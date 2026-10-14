@@ -2169,6 +2169,64 @@ def _resolve_plan_target(explicit=None):
     return PLAN_FALLBACK, "fallback (no planner found)"
 
 
+def _is_rendered_view(path):
+    """A git-ignored planner is a rendered view (jagent-ticket render): never append to it —
+    the capture lives in the timeline and the view shows it as an open Inbox item.
+    Design: workspace-meta plans/2026-10-14-conflict-free-meta-layer-design.md §2."""
+    try:
+        r = subprocess.run(["git", "check-ignore", "-q", str(path)], capture_output=True)
+    except OSError:
+        return False
+    return r.returncode == 0
+
+
+def _plan_events():
+    events = []
+    if TIMELINE.exists():
+        for ln in TIMELINE.read_text(encoding="utf-8").splitlines():
+            ln = ln.strip()
+            if ln:
+                try:
+                    events.append(json.loads(ln))
+                except json.JSONDecodeError:
+                    continue
+    return events
+
+
+def _open_captures(events):
+    sups = [(e.get("supersedes") or "").lower() for e in events if e.get("supersedes")]
+    out = []
+    for e in events:
+        if e.get("event") != "plan" or e.get("kind") == "close":
+            continue
+        eid = (e.get("event_id") or "").lower()
+        if eid and any(eid in s for s in sups):
+            continue
+        out.append(e)
+    return out
+
+
+def _plan_close(args):
+    target_id = args.close.strip().lower()
+    events = _plan_events()
+    hits = [e for e in events if e.get("event") == "plan" and e.get("kind") != "close"
+            and (e.get("event_id") or "").lower() == target_id]
+    if not hits:
+        print(f"dejavue plan --close: no capture with event_id {args.close!r}.", file=sys.stderr)
+        sys.exit(2)
+    agent = resolve_agent(args.agent)
+    reason = args.reason or "closed"
+    append_event({
+        "agent": agent,
+        "event": "plan",
+        "kind": "close",
+        "summary": reason,
+        "supersedes": hits[0]["event_id"],
+        **meta_fields(args),
+    })
+    print(f"Closed capture {hits[0]['event_id']} ({hits[0].get('summary', '')}) — {reason}")
+
+
 def cmd_plan(args):
     """Capture an actionable item into the repo's planning convention.
 
@@ -2178,7 +2236,21 @@ def cmd_plan(args):
     to know where the project keeps its plans — dejavue finds the planner
     (.jagent/, TODO.md, …) or falls back to .dejavue/plan.md.
     """
+    if getattr(args, "close", None):
+        return _plan_close(args)
+
     target, how = _resolve_plan_target(getattr(args, "target", None))
+    view = target.exists() and _is_rendered_view(target)
+
+    if getattr(args, "list", False) and view:
+        caps = _open_captures(_plan_events())
+        print(f"# open captures in the timeline  ({target} is a rendered view)\n")
+        if not caps:
+            print("  (none)")
+        for e in caps:
+            print(f"  - [ ] **{e.get('kind', 'item')}** — {e.get('summary', '')}  "
+                  f"_({e.get('agent', '?')}, {(e.get('ts') or '')[:10]}, {e.get('event_id', '')})_")
+        return
 
     if getattr(args, "list", False):
         if not target.exists():
@@ -2199,8 +2271,9 @@ def cmd_plan(args):
         print("dejavue plan: nothing to capture (pass TEXT, or --list).", file=sys.stderr)
         sys.exit(2)
 
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if not target.exists():
+    if not view:
+        target.parent.mkdir(parents=True, exist_ok=True)
+    if not view and not target.exists():
         target.write_text(
             f"# {target.stem.title()}\n\n"
             "Captured by agents as they work. An unchecked box is an open item;\n"
@@ -2212,8 +2285,9 @@ def cmd_plan(args):
     kind = args.kind
     stamp = now().split("T")[0]
     line = f"- [ ] **{kind}** — {args.text}  _({agent}, {stamp})_\n"
-    with target.open("a", encoding="utf-8") as f:
-        f.write(line)
+    if not view:
+        with target.open("a", encoding="utf-8") as f:
+            f.write(line)
 
     append_event({
         "agent": agent,
@@ -2225,7 +2299,10 @@ def cmd_plan(args):
         "entities": normalize_entities(args),
         **meta_fields(args),
     })
-    print(f"Captured [{kind}] → {target}  ({how})")
+    if view:
+        print(f"Captured [{kind}] → timeline ({target} is a rendered view)")
+    else:
+        print(f"Captured [{kind}] → {target}  ({how})")
 
 
 def _resolve_range(ref):
@@ -5130,7 +5207,9 @@ def main():
 
     p = sub.add_parser("plan", help="Capture an actionable item into the repo's planner (.jagent/, TODO.md, …).")
     p.add_argument("text", nargs="?", help="The issue, gap, or opportunity to capture.")
-    p.add_argument("--kind", default="issue", choices=["issue", "gap", "opportunity", "idea", "cleanup"], help="What kind of item this is (default: issue).")
+    p.add_argument("--kind", default="issue", choices=["issue", "gap", "opportunity", "idea", "cleanup", "proposal"], help="What kind of item this is (default: issue).")
+    p.add_argument("--close", metavar="EVENT_ID", help="Close an open capture (it was ticketed or rejected): records a plan event that supersedes it.")
+    p.add_argument("--reason", metavar="TEXT", help="Why the capture was closed (with --close).")
     p.add_argument("--target", metavar="PATH", help="Write to this file instead of the auto-detected planner.")
     p.add_argument("--list", action="store_true", help="List open items instead of capturing one.")
     p.add_argument("--agent", metavar="NAME", help="Agent name (default: auto-detected).")
