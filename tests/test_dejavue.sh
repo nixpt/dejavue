@@ -3106,6 +3106,22 @@ test_plan_close_rejects_unknown() {
     cd /; rm -rf "$TEST_DIR"; trap - EXIT
 }
 
+# 191. a fresh clone has no rendered TASKS.md yet (it is git-ignored): plan must still treat it as
+#      the view and record only the event — never fall back to the tracked .dejavue/plan.md,
+#      which two branches would then both append to (found by squadron's forge-merge test).
+test_plan_ignored_absent_view_does_not_fall_back() {
+    TEST_DIR="$(setup_repo)"; trap 'cd /; rm -rf "$TEST_DIR"' EXIT; cd "$TEST_DIR"
+    dv init >/dev/null 2>&1
+    mkdir -p .jagent/planning/tickets
+    printf '.jagent/planning/TASKS.md\n' > .gitignore
+    local out; out="$(dv plan "found in a fresh clone" --kind gap 2>&1)"
+    [[ ! -e .dejavue/plan.md ]] || { echo "  plan.md fallback was written"; return 1; }
+    [[ ! -e .jagent/planning/TASKS.md ]] || { echo "  view was created by plan"; return 1; }
+    assert_contains "says why" "$out" "rendered view" || return 1
+    assert_contains "event recorded" "$(cat .dejavue/timeline.jsonl)" "found in a fresh clone" || return 1
+    cd /; rm -rf "$TEST_DIR"; trap - EXIT
+}
+
 main() {
     echo "========================================"
     echo "  dejavue v1.0.0 integration test suite"
@@ -3319,6 +3335,7 @@ main() {
     run_test "188 plan: rendered view gets the event only"    test_plan_rendered_view_is_not_appended
     run_test "189 plan --close hides a capture from --list"   test_plan_close_hides_from_list
     run_test "190 plan --close rejects a non-capture id"      test_plan_close_rejects_unknown
+    run_test "191 plan: ignored, absent view → no fallback"   test_plan_ignored_absent_view_does_not_fall_back
 
     echo ""
     echo "========================================"

@@ -2162,6 +2162,13 @@ def _resolve_plan_target(explicit=None):
     if configured:
         return Path(configured), "config plan.target"
 
+    # A git-ignored .jagent/planning/TASKS.md is a rendered view even before it has been
+    # rendered (a fresh clone): pick it, so cmd_plan records only the event instead of
+    # falling back to a tracked file that parallel branches would all append to.
+    jagent = PLAN_CONVENTIONS[0]
+    if jagent.parent.is_dir() and _is_rendered_view(jagent):
+        return jagent, "rendered view"
+
     for candidate in PLAN_CONVENTIONS:
         if candidate.exists():
             return candidate, "detected convention"
@@ -2240,7 +2247,7 @@ def cmd_plan(args):
         return _plan_close(args)
 
     target, how = _resolve_plan_target(getattr(args, "target", None))
-    view = target.exists() and _is_rendered_view(target)
+    view = _is_rendered_view(target)
 
     if getattr(args, "list", False) and view:
         caps = _open_captures(_plan_events())
