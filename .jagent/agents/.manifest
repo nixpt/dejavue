@@ -1,0 +1,13 @@
+# .jagent/agents/.manifest — per-file commit opt-in. DEFAULT IS LOCAL.
+# A file is committed only if listed under [commit]. Keep it free of absolute
+# paths, secrets, and session state; `jagent doctor` flags violations.
+
+[commit]
+"README.md"
+
+[local]
+"*/settings.local.json"
+"*/config.local.toml"
+"*/auth.json"
+"cursor/mcp.json"
+"*.lock"

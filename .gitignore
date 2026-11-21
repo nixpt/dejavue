@@ -37,7 +37,7 @@ seahorse-server.toml
 # worktree-setup SEEDS a per-agent .mcp.json into every dispatched worktree,
 # carrying the live joker-mcp JWT_SECRET so each horse posts under its own
 # AGENT_NAME. That file must never be committed. It is exactly how a live
-# secret reached nixpt/nerve-mcp (729f370) and water-spider before it.
+# a live secret has leaked this way before.
 #
 # Note the glob is *mcp*.json, NOT *.mcp.json — the narrow form does not match
 # `mcp_servers.json`, which is the filename that actually leaked. Do not narrow.
@@ -70,3 +70,27 @@ id_ecdsa*
 credentials*.json
 .netrc
 secrets.json
+
+# ── .jagent/ — repo-local agent surface (workspace-meta plan 2026-09-18) ─────
+# Runner-native dirs are LOCAL runtime; committed config lives in .jagent/agents/.
+.claude/
+.codex/
+.cursor/
+.opencode/
+
+# .jagent local surfaces — never travel
+.jagent/sessions/
+.jagent/local/
+.jagent/tmp/
+.jagent/sync/
+.jagent/worktrees/
+.jagent/knowledge/
+.jagent/*.db*
+.jagent/*.lock
+.jagent/*.sock
+.jagent/cache/
+.jagent/mcp/
+
+# jagent rendered views — never tracked (jagent-ticket render)
+.jagent/planning/TASKS.md
+.jagent/planning/STATE.md
